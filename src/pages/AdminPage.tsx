@@ -1,0 +1,670 @@
+import { useEffect, useState } from "react";
+import { Ban, Camera, PackagePlus, Pencil, RefreshCw, RotateCcw, Trash2, Users, X } from "lucide-react";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../lib/auth";
+
+interface Collection {
+  id: string;
+  name: string;
+  description: string;
+  image_url: string;
+  total_stickers: number;
+  created_at: string;
+}
+
+interface RegisteredUser {
+  id: string;
+  username: string;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  is_admin: boolean;
+  is_blocked: boolean;
+  created_at: string;
+}
+
+interface UserDraft {
+  username: string;
+  phone: string;
+  city: string;
+  is_admin: boolean;
+  is_blocked: boolean;
+}
+
+const emptyCollection = {
+  name: "",
+  description: "",
+  image_url: "",
+  total_stickers: "24",
+};
+
+const defaultStickerImage =
+  "https://images.pexels.com/photos/46798/the-ball-stadion-football-the-pitch.jpg?auto=compress&cs=tinysrgb&w=400";
+
+function buildGeneratedStickers(collectionId: string, collectionName: string, total: number, imageUrl: string) {
+  return Array.from({ length: total }, (_, index) => {
+    const number = index + 1;
+    return {
+      collection_id: collectionId,
+      number,
+      name: `${collectionName} #${String(number).padStart(3, "0")}`,
+      image_url: imageUrl || defaultStickerImage,
+      rarity: "common",
+    };
+  });
+}
+
+function buildMissingGeneratedStickers(
+  collectionId: string,
+  collectionName: string,
+  fromNumber: number,
+  toNumber: number,
+  imageUrl: string
+) {
+  return Array.from({ length: toNumber - fromNumber + 1 }, (_, index) => {
+    const number = fromNumber + index;
+    return {
+      collection_id: collectionId,
+      number,
+      name: `${collectionName} #${String(number).padStart(3, "0")}`,
+      image_url: imageUrl || defaultStickerImage,
+      rarity: "common",
+    };
+  });
+}
+
+export default function AdminPage() {
+  const { user, profile } = useAuth();
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [users, setUsers] = useState<RegisteredUser[]>([]);
+  const [draft, setDraft] = useState(emptyCollection);
+  const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [userDraft, setUserDraft] = useState<UserDraft>({
+    username: "",
+    phone: "",
+    city: "",
+    is_admin: false,
+    is_blocked: false,
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadAdminData();
+  }, []);
+
+  const loadAdminData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [collectionsRes, usersRes] = await Promise.all([
+        supabase.from("collections").select("*").order("created_at", { ascending: false }),
+        supabase
+          .from("user_profiles")
+          .select("id, username, email, phone, city, is_admin, is_blocked, created_at")
+          .order("created_at", { ascending: false }),
+      ]);
+
+      if (collectionsRes.error) throw collectionsRes.error;
+      if (usersRes.error) throw usersRes.error;
+
+      setCollections((collectionsRes.data || []) as Collection[]);
+      setUsers((usersRes.data || []) as RegisteredUser[]);
+    } catch (err: any) {
+      setError(err.message || "Erro ao carregar area de admin.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createCollection = async () => {
+    setError(null);
+    setSuccess(null);
+
+    const name = draft.name.trim();
+    const totalStickers = Number(draft.total_stickers) || 0;
+    if (!name) {
+      setError("Indica o nome da colecao.");
+      return;
+    }
+    if (totalStickers <= 0) {
+      setError("Indica um numero de cromos maior que zero.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const imageUrl = draft.image_url.trim();
+      const { data: collection, error } = await supabase.from("collections").insert({
+        name,
+        description: draft.description.trim(),
+        image_url: imageUrl,
+        total_stickers: totalStickers,
+      }).select("id").single();
+      if (error) throw error;
+
+      const stickers = buildGeneratedStickers(collection.id, name, totalStickers, imageUrl);
+      const { error: stickersError } = await supabase.from("stickers").insert(stickers);
+      if (stickersError) throw stickersError;
+
+      setDraft(emptyCollection);
+      setSuccess(`Colecao adicionada com ${totalStickers} cromos.`);
+      await loadAdminData();
+    } catch (err: any) {
+      setError(err.message || "Erro ao adicionar colecao.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEditingCollection = (collection: Collection) => {
+    setError(null);
+    setSuccess(null);
+    setEditingCollectionId(collection.id);
+    setDraft({
+      name: collection.name || "",
+      description: collection.description || "",
+      image_url: collection.image_url || "",
+      total_stickers: String(collection.total_stickers || 0),
+    });
+  };
+
+  const cancelEditingCollection = () => {
+    setEditingCollectionId(null);
+    setDraft(emptyCollection);
+    setError(null);
+    setSuccess(null);
+  };
+
+  const saveCollection = async () => {
+    if (!editingCollectionId) {
+      await createCollection();
+      return;
+    }
+
+    setError(null);
+    setSuccess(null);
+
+    const name = draft.name.trim();
+    const totalStickers = Number(draft.total_stickers) || 0;
+    if (!name) {
+      setError("Indica o nome da colecao.");
+      return;
+    }
+    if (totalStickers <= 0) {
+      setError("Indica um numero de cromos maior que zero.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const imageUrl = draft.image_url.trim();
+      const { error: updateError } = await supabase
+        .from("collections")
+        .update({
+          name,
+          description: draft.description.trim(),
+          image_url: imageUrl,
+          total_stickers: totalStickers,
+        })
+        .eq("id", editingCollectionId);
+      if (updateError) throw updateError;
+
+      const { data: existingStickers, error: stickersLoadError } = await supabase
+        .from("stickers")
+        .select("number")
+        .eq("collection_id", editingCollectionId)
+        .order("number", { ascending: false });
+      if (stickersLoadError) throw stickersLoadError;
+
+      const highestStickerNumber = Math.max(0, ...((existingStickers || []).map((sticker: any) => Number(sticker.number) || 0)));
+      if (totalStickers > highestStickerNumber) {
+        const missingStickers = buildMissingGeneratedStickers(
+          editingCollectionId,
+          name,
+          highestStickerNumber + 1,
+          totalStickers,
+          imageUrl
+        );
+        const { error: missingStickersError } = await supabase.from("stickers").insert(missingStickers);
+        if (missingStickersError) throw missingStickersError;
+      }
+
+      setEditingCollectionId(null);
+      setDraft(emptyCollection);
+      setSuccess("Colecao atualizada com sucesso.");
+      await loadAdminData();
+    } catch (err: any) {
+      setError(err.message || "Erro ao atualizar colecao.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const uploadCollectionCover = async (file: File | null) => {
+    if (!file || !user?.id) return;
+
+    setUploadingCover(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const collectionKey = editingCollectionId || `new-${Date.now()}`;
+      const filePath = `collections/${collectionKey}-${Date.now()}-${user.id}.${extension}`;
+      const { error: uploadError } = await supabase.storage
+        .from("sticker-images")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage.from("sticker-images").getPublicUrl(filePath);
+      setDraft((prev) => ({ ...prev, image_url: publicUrlData.publicUrl }));
+      setSuccess("Foto da capa carregada. Guarda a colecao para aplicar.");
+    } catch (err: any) {
+      setError(err.message || "Erro ao carregar foto da capa.");
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
+  const clearCollectionCover = () => {
+    setDraft((prev) => ({ ...prev, image_url: "" }));
+    setSuccess("Foto da capa removida. Guarda a colecao para aplicar.");
+  };
+
+  const startEditingUser = (registeredUser: RegisteredUser) => {
+    setEditingUserId(registeredUser.id);
+    setUserDraft({
+      username: registeredUser.username || "",
+      phone: registeredUser.phone || "",
+      city: registeredUser.city || "",
+      is_admin: Boolean(registeredUser.is_admin),
+      is_blocked: Boolean(registeredUser.is_blocked),
+    });
+    setError(null);
+    setSuccess(null);
+  };
+
+  const cancelEditingUser = () => {
+    setEditingUserId(null);
+    setError(null);
+    setSuccess(null);
+  };
+
+  const saveUser = async (userId: string) => {
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: rpcError } = await supabase.rpc("admin_update_user_profile", {
+        p_user_id: userId,
+        p_username: userDraft.username.trim(),
+        p_phone: userDraft.phone.trim(),
+        p_city: userDraft.city.trim(),
+        p_is_admin: userId === user?.id ? true : userDraft.is_admin,
+        p_is_blocked: userId === user?.id ? false : userDraft.is_blocked,
+      });
+      if (rpcError) throw rpcError;
+
+      setEditingUserId(null);
+      setSuccess("Utilizador atualizado.");
+      await loadAdminData();
+    } catch (err: any) {
+      setError(err.message || "Erro ao atualizar utilizador.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleBlockUser = async (registeredUser: RegisteredUser) => {
+    if (registeredUser.id === user?.id) return;
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: rpcError } = await supabase.rpc("admin_update_user_profile", {
+        p_user_id: registeredUser.id,
+        p_username: registeredUser.username,
+        p_phone: registeredUser.phone || "",
+        p_city: registeredUser.city || "",
+        p_is_admin: registeredUser.is_admin,
+        p_is_blocked: !registeredUser.is_blocked,
+      });
+      if (rpcError) throw rpcError;
+
+      setSuccess(registeredUser.is_blocked ? "Utilizador desbloqueado." : "Utilizador bloqueado.");
+      await loadAdminData();
+    } catch (err: any) {
+      setError(err.message || "Erro ao bloquear utilizador.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteUser = async (registeredUser: RegisteredUser) => {
+    if (registeredUser.id === user?.id) return;
+    if (!window.confirm(`Eliminar o utilizador ${registeredUser.email || registeredUser.username}?`)) return;
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: rpcError } = await supabase.rpc("admin_delete_user", {
+        p_user_id: registeredUser.id,
+      });
+      if (rpcError) throw rpcError;
+
+      setSuccess("Utilizador eliminado.");
+      await loadAdminData();
+    } catch (err: any) {
+      setError(err.message || "Erro ao eliminar utilizador.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetTradeData = async () => {
+    if (!window.confirm("Reinicializar todos os dados das trocas? Isto elimina propostas, mensagens e eventos de parceiros.")) return;
+    if (!window.confirm("Confirmas mesmo? Esta acao nao altera utilizadores nem colecoes, mas apaga o historico de trocas.")) return;
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: rpcError } = await supabase.rpc("admin_reset_trade_data");
+      if (rpcError) {
+        const missingRpc = String(rpcError.message || "").includes("admin_reset_trade_data");
+        if (missingRpc) {
+          throw new Error("Funcao admin_reset_trade_data ainda nao existe no Supabase. Aplica a migration 20260510123000_add_admin_reset_trade_data_rpc.sql e tenta novamente.");
+        }
+        throw rpcError;
+      }
+
+      setSuccess("Dados das trocas reinicializados.");
+    } catch (err: any) {
+      setError(err.message || "Erro ao reinicializar dados das trocas.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!profile?.is_admin) {
+    return (
+      <div className="empty-state">
+        <span className="empty-icon">!</span>
+        <h3>Acesso reservado</h3>
+        <p>Esta area esta disponivel apenas para administradores.</p>
+        <p className="muted-text">
+          Sessao atual: {profile?.email || user?.email || "sem email"}.
+          Tipo: {profile ? "utilizador normal" : "perfil nao carregado"}.
+        </p>
+      </div>
+    );
+  }
+
+  if (loading) return <div className="loading">A carregar admin...</div>;
+
+  return (
+    <div className="admin-page">
+      <div className="admin-header">
+        <div>
+          <h2>Admin</h2>
+          <p>Gerir colecoes e consultar utilizadores registados.</p>
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={loadAdminData}>
+          <RefreshCw size={14} /> Atualizar
+        </button>
+      </div>
+
+      {error && <p className="error-text">{error}</p>}
+      {success && <p className="success-text">{success}</p>}
+
+      <div className="admin-grid">
+        <section className="admin-panel">
+          <div className="admin-panel-title">
+            {editingCollectionId ? <Pencil size={18} /> : <PackagePlus size={18} />}
+            <h3>{editingCollectionId ? "Editar colecao" : "Adicionar colecao"}</h3>
+          </div>
+
+          <div className="admin-form">
+            <input
+              type="text"
+              placeholder="Nome da colecao"
+              value={draft.name}
+              onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))}
+              disabled={saving}
+            />
+            <textarea
+              placeholder="Descricao"
+              value={draft.description}
+              onChange={(e) => setDraft((prev) => ({ ...prev, description: e.target.value }))}
+              disabled={saving}
+            />
+            <input
+              type="url"
+              placeholder="URL da imagem"
+              value={draft.image_url}
+              onChange={(e) => setDraft((prev) => ({ ...prev, image_url: e.target.value }))}
+              disabled={saving || uploadingCover}
+            />
+            {draft.image_url && (
+              <>
+                <div className="admin-cover-preview">
+                  <img src={draft.image_url} alt={draft.name || "Capa da colecao"} />
+                </div>
+                <button
+                  className="btn btn-ghost"
+                  type="button"
+                  onClick={clearCollectionCover}
+                  disabled={saving || uploadingCover}
+                >
+                  <X size={16} /> Remover foto da capa
+                </button>
+              </>
+            )}
+            <label className="btn btn-ghost admin-upload-btn" htmlFor="collection-cover-input">
+              <Camera size={16} /> {uploadingCover ? "A carregar foto..." : "Adicionar foto da capa"}
+            </label>
+            <input
+              id="collection-cover-input"
+              className="sticker-photo-input"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              disabled={saving || uploadingCover}
+              onChange={(event) => {
+                uploadCollectionCover(event.target.files?.[0] || null);
+                event.target.value = "";
+              }}
+            />
+            <input
+              type="number"
+              min="0"
+              placeholder="Total de cromos"
+              value={draft.total_stickers}
+              onChange={(e) => setDraft((prev) => ({ ...prev, total_stickers: e.target.value }))}
+              disabled={saving}
+            />
+            <button className="btn btn-primary" onClick={saveCollection} disabled={saving}>
+              {editingCollectionId ? <Pencil size={16} /> : <PackagePlus size={16} />}
+              {saving ? "A guardar..." : editingCollectionId ? "Guardar alteracoes" : "Adicionar colecao"}
+            </button>
+            {editingCollectionId && (
+              <button className="btn btn-ghost" onClick={cancelEditingCollection} disabled={saving}>
+                <X size={16} /> Cancelar edicao
+              </button>
+            )}
+          </div>
+        </section>
+
+        <section className="admin-panel">
+          <div className="admin-panel-title">
+            <PackagePlus size={18} />
+            <h3>Colecoes</h3>
+          </div>
+
+          <div className="admin-list">
+            {collections.map((collection) => (
+              <div className="admin-list-row" key={collection.id}>
+                <div>
+                  <strong>{collection.name}</strong>
+                  <span>{collection.description || "Sem descricao"}</span>
+                </div>
+                <div className="admin-list-actions">
+                  <em>{collection.total_stickers} cromos</em>
+                  <button
+                    className="btn btn-ghost btn-xs"
+                    type="button"
+                    onClick={() => startEditingCollection(collection)}
+                    disabled={saving}
+                  >
+                    <Pencil size={12} /> Editar
+                  </button>
+                </div>
+              </div>
+            ))}
+            {collections.length === 0 && <p className="muted-text">Sem colecoes.</p>}
+          </div>
+        </section>
+      </div>
+
+      <section className="admin-panel admin-maintenance-panel">
+        <div className="admin-panel-title">
+          <RotateCcw size={18} />
+          <h3>Manutencao</h3>
+        </div>
+        <p className="muted-text">
+          Reinicializa propostas, mensagens e registos de entrega/recolha das trocas.
+        </p>
+        <button className="btn btn-danger-soft admin-maintenance-btn" type="button" onClick={resetTradeData} disabled={saving}>
+          <RotateCcw size={16} /> Reinicializar dados das trocas
+        </button>
+      </section>
+
+      <section className="admin-panel admin-users-panel">
+        <div className="admin-panel-title">
+          <Users size={18} />
+          <h3>Utilizadores registados</h3>
+        </div>
+
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Utilizador</th>
+                <th>Email</th>
+                <th>Telefone</th>
+                <th>Cidade</th>
+                <th>Tipo</th>
+                <th>Estado</th>
+                <th>Acoes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((registeredUser) => (
+                <tr key={registeredUser.id}>
+                  <td>
+                    {editingUserId === registeredUser.id ? (
+                      <input
+                        className="admin-table-input"
+                        value={userDraft.username}
+                        onChange={(e) => setUserDraft((prev) => ({ ...prev, username: e.target.value }))}
+                      />
+                    ) : registeredUser.username}
+                  </td>
+                  <td>{registeredUser.email || "-"}</td>
+                  <td>
+                    {editingUserId === registeredUser.id ? (
+                      <input
+                        className="admin-table-input"
+                        value={userDraft.phone}
+                        onChange={(e) => setUserDraft((prev) => ({ ...prev, phone: e.target.value }))}
+                      />
+                    ) : registeredUser.phone || "-"}
+                  </td>
+                  <td>
+                    {editingUserId === registeredUser.id ? (
+                      <input
+                        className="admin-table-input"
+                        value={userDraft.city}
+                        onChange={(e) => setUserDraft((prev) => ({ ...prev, city: e.target.value }))}
+                      />
+                    ) : registeredUser.city || "-"}
+                  </td>
+                  <td>
+                    {editingUserId === registeredUser.id ? (
+                      <label className="admin-check">
+                        <input
+                          type="checkbox"
+                          checked={userDraft.is_admin}
+                          disabled={registeredUser.id === user?.id}
+                          onChange={(e) => setUserDraft((prev) => ({ ...prev, is_admin: e.target.checked }))}
+                        />
+                        Admin
+                      </label>
+                    ) : registeredUser.is_admin ? "Admin" : "Utilizador"}
+                  </td>
+                  <td>
+                    {editingUserId === registeredUser.id ? (
+                      <label className="admin-check">
+                        <input
+                          type="checkbox"
+                          checked={userDraft.is_blocked}
+                          disabled={registeredUser.id === user?.id}
+                          onChange={(e) => setUserDraft((prev) => ({ ...prev, is_blocked: e.target.checked }))}
+                        />
+                        Bloqueado
+                      </label>
+                    ) : registeredUser.is_blocked ? "Bloqueado" : "Ativo"}
+                  </td>
+                  <td>
+                    <div className="admin-table-actions">
+                      {editingUserId === registeredUser.id ? (
+                        <>
+                          <button className="btn btn-primary btn-xs" onClick={() => saveUser(registeredUser.id)} disabled={saving}>
+                            Guardar
+                          </button>
+                          <button className="btn btn-ghost btn-xs" onClick={cancelEditingUser} disabled={saving}>
+                            <X size={12} /> Cancelar
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button className="btn btn-ghost btn-xs" onClick={() => startEditingUser(registeredUser)} disabled={saving}>
+                            <Pencil size={12} /> Editar
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => toggleBlockUser(registeredUser)}
+                            disabled={saving || registeredUser.id === user?.id}
+                          >
+                            <Ban size={12} /> {registeredUser.is_blocked ? "Desbloquear" : "Bloquear"}
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => deleteUser(registeredUser)}
+                            disabled={saving || registeredUser.id === user?.id}
+                          >
+                            <Trash2 size={12} /> Eliminar
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}

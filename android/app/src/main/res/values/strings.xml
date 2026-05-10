@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Papa Cromos</string>
+    <string name="title_activity_main">Papa Cromos</string>
+    <string name="package_name">com.papacromos.app</string>
+    <string name="custom_url_scheme">com.papacromos.app</string>
+</resources>
