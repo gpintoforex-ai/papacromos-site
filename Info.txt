@@ -1,0 +1,3 @@
+https://dash.cloudflare.com/ email
+https://app.netlify.com/ alojamento site
+https://supabase.com/ base dados 

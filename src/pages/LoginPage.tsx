@@ -56,6 +56,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const handleAuth = async () => {
     try {
@@ -73,6 +74,11 @@ export default function LoginPage() {
           return;
         }
 
+        if (!acceptedTerms) {
+          setError("Aceita os Termos e Condições para continuar.");
+          return;
+        }
+
         await signUp({ username, email, phone, city, password });
         setUsername("");
         setEmail("");
@@ -81,6 +87,7 @@ export default function LoginPage() {
         setRegion("");
         setCity("");
         setPassword("");
+        setAcceptedTerms(false);
         setIsSignUp(false);
         setError(null);
       } else {
@@ -185,6 +192,17 @@ export default function LoginPage() {
                   ))}
                 </select>
               </div>
+              <label className="terms-checkbox">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  disabled={loading}
+                />
+                <span>
+                  Aceito os <a href="/terms.html" target="_blank" rel="noreferrer">Termos e Condições</a> e a <a href="/privacy.html" target="_blank" rel="noreferrer">Política de Privacidade</a>
+                </span>
+              </label>
             </>
           )}
           <input
@@ -203,9 +221,16 @@ export default function LoginPage() {
           {loading ? "A processar..." : isSignUp ? "Criar conta" : "Entrar"}
         </button>
 
-        <button className="btn btn-ghost" onClick={() => setIsSignUp(!isSignUp)} disabled={loading}>
+        <button className="btn btn-ghost" onClick={() => {
+          setIsSignUp(!isSignUp);
+          setAcceptedTerms(false);
+        }} disabled={loading}>
           {isSignUp ? "Ja tens conta? Entra" : "Nao tens conta? Regista-te"}
         </button>
+
+        <a className="login-terms-link" href="/terms.html" target="_blank" rel="noreferrer">
+          Termos e Condições
+        </a>
       </div>
     </div>
   );
