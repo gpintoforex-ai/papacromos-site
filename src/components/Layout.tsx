@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "../lib/auth";
-import { Handshake, LogOut, RefreshCw, Shield, Trophy, Users } from "lucide-react";
+import { Handshake, LogOut, RefreshCw, Shield, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
+import LegalFooter from "./LegalFooter";
+import { supabase } from "../lib/supabase";
 
 type Page = "collection" | "matches" | "trades" | "partners" | "admin";
 
@@ -14,6 +16,9 @@ interface LayoutProps {
 export default function Layout({ currentPage, onNavigate, matchCount, children }: LayoutProps) {
   const { user, profile, signOut } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [dataModalOpen, setDataModalOpen] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
   const displayName = profile?.username || user?.email?.split("@")[0] || "Utilizador";
   const displayEmail = profile?.email || user?.email || "-";
   const accountCreatedAt = profile?.created_at || user?.created_at;
@@ -28,6 +33,29 @@ export default function Layout({ currentPage, onNavigate, matchCount, children }
     { page: "partners", label: "Parceiros", icon: <Handshake size={18} /> },
     ...(profile?.is_admin ? [{ page: "admin" as Page, label: "Admin", icon: <Shield size={18} /> }] : []),
   ];
+
+  const deleteOwnAccount = async () => {
+    if (!window.confirm("Eliminar a tua conta e todos os dados associados?")) return;
+    if (!window.confirm("Confirmas mesmo? Esta acao e permanente e remove colecoes, cromos e trocas associados a tua conta.")) return;
+
+    setDeletingAccount(true);
+    setAccountError(null);
+    try {
+      const { error } = await supabase.rpc("delete_own_account");
+      if (error) {
+        const missingRpc = String(error.message || "").includes("delete_own_account");
+        if (missingRpc) {
+          throw new Error("A funcao delete_own_account ainda nao existe no Supabase. Aplica a migration 20260512103000_add_user_self_delete_account.sql.");
+        }
+        throw error;
+      }
+
+      await signOut();
+    } catch (err: any) {
+      setAccountError(err.message || "Erro ao eliminar a conta.");
+      setDeletingAccount(false);
+    }
+  };
 
   return (
     <div className="app-layout">
@@ -92,6 +120,27 @@ export default function Layout({ currentPage, onNavigate, matchCount, children }
                       <dd className="profile-account-id">{user?.id || "-"}</dd>
                     </div>
                   </dl>
+                  {accountError && <p className="profile-error">{accountError}</p>}
+                  <div className="profile-actions">
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      type="button"
+                      onClick={() => {
+                        setDataModalOpen(true);
+                        setProfileOpen(false);
+                      }}
+                    >
+                      <UserRound size={14} /> Os meus dados
+                    </button>
+                    <button
+                      className="btn btn-danger-soft btn-sm"
+                      type="button"
+                      onClick={deleteOwnAccount}
+                      disabled={deletingAccount}
+                    >
+                      <Trash2 size={14} /> {deletingAccount ? "A eliminar..." : "Eliminar conta"}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -102,6 +151,65 @@ export default function Layout({ currentPage, onNavigate, matchCount, children }
         </div>
       </header>
       <main className="app-main">{children}</main>
+      <LegalFooter />
+      {dataModalOpen && (
+        <div className="account-data-overlay" role="dialog" aria-modal="true" aria-labelledby="account-data-title">
+          <div className="account-data-modal">
+            <div className="account-data-header">
+              <div>
+                <h2 id="account-data-title">Os meus dados</h2>
+                <p>Consulta os dados associados a tua conta.</p>
+              </div>
+              <button className="header-icon-btn" type="button" onClick={() => setDataModalOpen(false)} title="Fechar">
+                <X size={18} />
+              </button>
+            </div>
+
+            <dl className="account-data-list">
+              <div>
+                <dt>Nome de utilizador</dt>
+                <dd>{displayName}</dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd>{displayEmail}</dd>
+              </div>
+              <div>
+                <dt>Telefone</dt>
+                <dd>{profile?.phone || "-"}</dd>
+              </div>
+              <div>
+                <dt>Cidade</dt>
+                <dd>{profile?.city || "-"}</dd>
+              </div>
+              <div>
+                <dt>Perfil</dt>
+                <dd>{profile?.is_admin ? "Administrador" : "Colecionador"}</dd>
+              </div>
+              <div>
+                <dt>Estado</dt>
+                <dd>{profile?.is_blocked ? "Bloqueado" : "Ativo"}</dd>
+              </div>
+              <div>
+                <dt>Data de registo</dt>
+                <dd>{createdLabel}</dd>
+              </div>
+              <div>
+                <dt>ID da conta</dt>
+                <dd className="profile-account-id">{user?.id || "-"}</dd>
+              </div>
+            </dl>
+
+            <div className="account-data-note">
+              <strong>Dados de utilizacao</strong>
+              <p>
+                A tua caderneta, cromos marcados, repetidos, pedidos de troca, mensagens e registos de parceiros ficam
+                associados ao ID da tua conta e sao removidos quando eliminas a conta.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       <nav className="bottom-nav" aria-label="Menu principal">
         {navItems.map((item) => (
           <button

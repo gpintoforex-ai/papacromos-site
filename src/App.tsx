@@ -6,6 +6,7 @@ import MatchesPage from "./pages/MatchesPage";
 import TradesPage from "./pages/TradesPage";
 import AdminPage from "./pages/AdminPage";
 import PartnersPage from "./pages/PartnersPage";
+import CookieConsent from "./components/CookieConsent";
 import { useEffect, useState } from "react";
 import { findUserMatches } from "./lib/matches";
 
@@ -47,17 +48,25 @@ function AppContent() {
   }
 
   if (!user) {
-    return <LoginPage />;
+    return (
+      <>
+        <LoginPage />
+        <CookieConsent />
+      </>
+    );
   }
 
   return (
-    <Layout currentPage={page} onNavigate={navigate} matchCount={matchCount}>
-      {page === "collection" && <CollectionPage homeKey={collectionHomeKey} onCollectionChange={refreshMatchCount} />}
-      {page === "matches" && <MatchesPage onMatchesChange={setMatchCount} />}
-      {page === "trades" && <TradesPage />}
-      {page === "partners" && <PartnersPage />}
-      {page === "admin" && <AdminPage />}
-    </Layout>
+    <>
+      <Layout currentPage={page} onNavigate={navigate} matchCount={matchCount}>
+        {page === "collection" && <CollectionPage homeKey={collectionHomeKey} onCollectionChange={refreshMatchCount} />}
+        {page === "matches" && <MatchesPage onMatchesChange={setMatchCount} />}
+        {page === "trades" && <TradesPage />}
+        {page === "partners" && <PartnersPage />}
+        {page === "admin" && <AdminPage />}
+      </Layout>
+      <CookieConsent />
+    </>
   );
 }
 

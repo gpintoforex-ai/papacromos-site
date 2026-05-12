@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Ban, Camera, PackagePlus, Pencil, RefreshCw, RotateCcw, Trash2, Users, X } from "lucide-react";
+import { Ban, BookOpen, Camera, KeyRound, PackagePlus, Pencil, RefreshCw, RotateCcw, Trash2, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 
@@ -29,6 +29,24 @@ interface UserDraft {
   city: string;
   is_admin: boolean;
   is_blocked: boolean;
+}
+
+interface Sticker {
+  id: string;
+  number: number;
+  name: string;
+  image_url: string;
+  rarity: string;
+  collection_id: string;
+}
+
+interface UserSticker {
+  id: string;
+  user_id: string;
+  sticker_id: string;
+  status: "have" | "want";
+  quantity: number;
+  stickers: Sticker | null;
 }
 
 const emptyCollection = {
@@ -80,6 +98,9 @@ export default function AdminPage() {
   const [draft, setDraft] = useState(emptyCollection);
   const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [selectedCollectionUserId, setSelectedCollectionUserId] = useState<string | null>(null);
+  const [selectedUserStickers, setSelectedUserStickers] = useState<UserSticker[]>([]);
+  const [loadingUserCollection, setLoadingUserCollection] = useState(false);
   const [userDraft, setUserDraft] = useState<UserDraft>({
     username: "",
     phone: "",
@@ -179,6 +200,33 @@ export default function AdminPage() {
     setDraft(emptyCollection);
     setError(null);
     setSuccess(null);
+  };
+
+  const deleteCollection = async (collection: Collection) => {
+    if (!window.confirm(`Eliminar a colecao "${collection.name}" e todos os seus cromos?`)) return;
+    if (!window.confirm("Confirmas mesmo? Esta acao tambem remove os cromos desta colecao dos utilizadores.")) return;
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: deleteError } = await supabase
+        .from("collections")
+        .delete()
+        .eq("id", collection.id);
+      if (deleteError) throw deleteError;
+
+      if (editingCollectionId === collection.id) {
+        setEditingCollectionId(null);
+        setDraft(emptyCollection);
+      }
+      setSuccess("Colecao removida com sucesso.");
+      await loadAdminData();
+    } catch (err: any) {
+      setError(err.message || "Erro ao remover colecao.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const saveCollection = async () => {
@@ -371,6 +419,57 @@ export default function AdminPage() {
     }
   };
 
+  const sendPasswordReset = async (registeredUser: RegisteredUser) => {
+    if (!registeredUser.email) {
+      setError("Este utilizador nao tem email associado.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(registeredUser.email, {
+        redirectTo: window.location.origin,
+      });
+      if (resetError) throw resetError;
+
+      setSuccess(`Email de recuperacao de senha enviado para ${registeredUser.email}.`);
+    } catch (err: any) {
+      setError(err.message || "Erro ao enviar recuperacao de senha.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loadUserCollection = async (registeredUser: RegisteredUser) => {
+    setSelectedCollectionUserId(registeredUser.id);
+    setSelectedUserStickers([]);
+    setLoadingUserCollection(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const { data, error: stickersError } = await supabase
+        .from("user_stickers")
+        .select("id, user_id, sticker_id, status, quantity, stickers(id, number, name, image_url, rarity, collection_id)")
+        .eq("user_id", registeredUser.id);
+      if (stickersError) throw stickersError;
+
+      setSelectedUserStickers((data || []) as unknown as UserSticker[]);
+    } catch (err: any) {
+      setError(err.message || "Erro ao carregar a colecao do utilizador.");
+    } finally {
+      setLoadingUserCollection(false);
+    }
+  };
+
+  const closeUserCollection = () => {
+    setSelectedCollectionUserId(null);
+    setSelectedUserStickers([]);
+    setLoadingUserCollection(false);
+  };
+
   const resetTradeData = async () => {
     if (!window.confirm("Reinicializar todos os dados das trocas? Isto elimina propostas, mensagens e eventos de parceiros.")) return;
     if (!window.confirm("Confirmas mesmo? Esta acao nao altera utilizadores nem colecoes, mas apaga o historico de trocas.")) return;
@@ -395,6 +494,28 @@ export default function AdminPage() {
       setSaving(false);
     }
   };
+
+  const selectedCollectionUser = users.find((registeredUser) => registeredUser.id === selectedCollectionUserId);
+  const selectedUserCollectionSummaries = collections.map((collection) => {
+    const collectionEntries = selectedUserStickers.filter((entry) => entry.stickers?.collection_id === collection.id);
+    const haveEntries = collectionEntries.filter((entry) => entry.status === "have");
+    const haveCount = haveEntries.length;
+    const repeatedCount = haveEntries.reduce((total, entry) => total + Math.max(0, (entry.quantity || 0) - 1), 0);
+    const wantedCount = collectionEntries.filter((entry) => entry.status === "want").length;
+    const totalCount = collection.total_stickers || 0;
+    const missingCount = Math.max(0, totalCount - haveCount);
+    const progress = totalCount > 0 ? Math.round((haveCount / totalCount) * 100) : 0;
+
+    return {
+      collection,
+      entries: collectionEntries.sort((a, b) => (a.stickers?.number || 0) - (b.stickers?.number || 0)),
+      haveCount,
+      repeatedCount,
+      wantedCount,
+      missingCount,
+      progress,
+    };
+  });
 
   if (!profile?.is_admin) {
     return (
@@ -528,6 +649,14 @@ export default function AdminPage() {
                   >
                     <Pencil size={12} /> Editar
                   </button>
+                  <button
+                    className="btn btn-danger-soft btn-xs"
+                    type="button"
+                    onClick={() => deleteCollection(collection)}
+                    disabled={saving}
+                  >
+                    <Trash2 size={12} /> Remover
+                  </button>
                 </div>
               </div>
             ))}
@@ -643,6 +772,20 @@ export default function AdminPage() {
                           </button>
                           <button
                             className="btn btn-ghost btn-xs"
+                            onClick={() => loadUserCollection(registeredUser)}
+                            disabled={saving || loadingUserCollection}
+                          >
+                            <BookOpen size={12} /> Colecao
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => sendPasswordReset(registeredUser)}
+                            disabled={saving || !registeredUser.email}
+                          >
+                            <KeyRound size={12} /> Reset senha
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-xs"
                             onClick={() => toggleBlockUser(registeredUser)}
                             disabled={saving || registeredUser.id === user?.id}
                           >
@@ -665,6 +808,64 @@ export default function AdminPage() {
           </table>
         </div>
       </section>
+
+      {selectedCollectionUser && (
+        <section className="admin-panel admin-user-collection-panel">
+          <div className="admin-panel-title admin-user-collection-title">
+            <span>
+              <BookOpen size={18} />
+              <h3>Colecao de {selectedCollectionUser.username || selectedCollectionUser.email || "utilizador"}</h3>
+            </span>
+            <button className="btn btn-ghost btn-xs" type="button" onClick={closeUserCollection}>
+              <X size={12} /> Fechar
+            </button>
+          </div>
+
+          {loadingUserCollection ? (
+            <div className="loading admin-inline-loading">A carregar colecao...</div>
+          ) : (
+            <div className="admin-user-collection-list">
+              {selectedUserCollectionSummaries.map((summary) => (
+                <div className="admin-user-collection-card" key={summary.collection.id}>
+                  <div className="admin-user-collection-card-header">
+                    <div>
+                      <strong>{summary.collection.name}</strong>
+                      <span>{summary.haveCount} de {summary.collection.total_stickers || 0} cromos</span>
+                    </div>
+                    <em>{summary.progress}%</em>
+                  </div>
+
+                  <div className="admin-user-collection-progress">
+                    <span style={{ width: `${summary.progress}%` }} />
+                  </div>
+
+                  <div className="admin-user-collection-stats">
+                    <span>Tenho: {summary.haveCount}</span>
+                    <span>Repetidos: {summary.repeatedCount}</span>
+                    <span>Procuro: {summary.wantedCount || summary.missingCount}</span>
+                  </div>
+
+                  <div className="admin-user-sticker-list">
+                    {summary.entries.length > 0 ? (
+                      summary.entries.map((entry) => (
+                        <span
+                          className={`admin-user-sticker-pill ${entry.status === "have" ? "have" : "want"}`}
+                          key={entry.id}
+                          title={entry.stickers?.name || "Cromo"}
+                        >
+                          #{entry.stickers?.number || "-"} {entry.status === "have" ? `x${entry.quantity}` : "procura"}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="muted-text">Sem cromos registados nesta colecao.</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

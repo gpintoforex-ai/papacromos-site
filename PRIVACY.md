@@ -29,6 +29,8 @@ Os dados são conservados enquanto a conta existir ou conforme exigido por obrig
 - eliminação da conta e dos dados pessoais;
 - limitação ou oposição ao tratamento.
 
+Na aplicação, o utilizador pode consultar os dados da sua conta no menu de perfil e pode eliminar a própria conta. A eliminação remove a conta e os dados associados, incluindo perfil, caderneta, cromos registados, pedidos de troca e mensagens associadas, salvo quando exista obrigação legal de conservação.
+
 ## 7. Segurança
 O Papa Cromos adota medidas de segurança para proteger os dados pessoais contra acessos não autorizados, perda ou alteração.
 

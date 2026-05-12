@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../lib/auth";
+import LegalFooter from "../components/LegalFooter";
 
 const locationOptions = {
   Portugal: {
@@ -232,6 +233,7 @@ export default function LoginPage() {
           Termos e Condições
         </a>
       </div>
+      <LegalFooter />
     </div>
   );
 }

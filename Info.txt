@@ -1,3 +1,8 @@
+desafiosalutar@gmail.com
 https://dash.cloudflare.com/ email
 https://app.netlify.com/ alojamento site
 https://supabase.com/ base dados 
+
+
+git commit -m "site update"
+git push
