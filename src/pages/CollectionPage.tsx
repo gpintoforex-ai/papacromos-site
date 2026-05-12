@@ -32,8 +32,32 @@ interface UserSticker {
 
 type FilterMode = "all" | "have" | "repeated" | "want" | "missing";
 
+interface AlbumTeamPage {
+  teamName: string;
+  groupName: string;
+  stickers: Sticker[];
+}
+
 const collectionFallbackImage =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23f3f4f6'/%3E%3Crect x='92' y='70' width='216' height='260' rx='18' fill='%23ffffff' stroke='%23d1d5db' stroke-width='10'/%3E%3Cpath d='M132 132h136v24H132zm0 58h136v24H132zm0 58h92v24h-92z' fill='%239ca3af'/%3E%3C/svg%3E";
+
+function getStickerTeamName(stickerName: string) {
+  return stickerName.includes(" - ") ? stickerName.split(" - ")[0].trim() : "Cromos";
+}
+
+function buildAlbumTeamPages(stickers: Sticker[]): AlbumTeamPage[] {
+  const teams = new Map<string, Sticker[]>();
+  stickers.forEach((sticker) => {
+    const teamName = getStickerTeamName(sticker.name);
+    teams.set(teamName, [...(teams.get(teamName) || []), sticker]);
+  });
+
+  return Array.from(teams.entries()).map(([teamName, teamStickers], index) => ({
+    teamName,
+    groupName: `Grupo ${String.fromCharCode(65 + Math.floor(index / 4))}`,
+    stickers: teamStickers.sort((a, b) => a.number - b.number),
+  }));
+}
 
 interface CollectionPageProps {
   homeKey: number;
@@ -50,6 +74,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
+  const [selectedAlbumTeamName, setSelectedAlbumTeamName] = useState<string | null>(null);
   const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +87,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
     setSearch("");
     setFilter("all");
     setSelectedStickerId(null);
+    setSelectedAlbumTeamName(null);
   }, [homeKey]);
 
   useEffect(() => {
@@ -140,11 +166,14 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
           .eq("id", existing.id);
         if (updateError) throw updateError;
       } else {
-        const { error: insertError } = await supabase.from("user_stickers").insert({
+        const { error: insertError } = await supabase.from("user_stickers").upsert({
           user_id: user.id,
           sticker_id: stickerId,
           status,
           quantity: 1,
+        }, {
+          onConflict: "user_id,sticker_id,status",
+          ignoreDuplicates: true,
         });
         if (insertError) throw insertError;
       }
@@ -168,11 +197,14 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
     const existingWant = userStickers.find((us) => us.user_id === user.id && us.sticker_id === stickerId && us.status === "want");
     if (existingWant) return;
 
-    const { error: insertError } = await supabase.from("user_stickers").insert({
+    const { error: insertError } = await supabase.from("user_stickers").upsert({
       user_id: user.id,
       sticker_id: stickerId,
       status: "want",
       quantity: 1,
+    }, {
+      onConflict: "user_id,sticker_id,status",
+      ignoreDuplicates: true,
     });
     if (insertError) throw insertError;
   };
@@ -211,7 +243,10 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
 
     try {
       if (wantsToCreate.length > 0) {
-        const { error: insertError } = await supabase.from("user_stickers").insert(wantsToCreate);
+        const { error: insertError } = await supabase.from("user_stickers").upsert(wantsToCreate, {
+          onConflict: "user_id,sticker_id,status",
+          ignoreDuplicates: true,
+        });
         if (insertError) throw insertError;
       }
 
@@ -311,11 +346,14 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
         (userSticker) => userSticker.user_id === user.id && userSticker.sticker_id === stickerId && userSticker.status === "have"
       );
       if (!existingHave) {
-        const { error: insertHaveError } = await supabase.from("user_stickers").insert({
+        const { error: insertHaveError } = await supabase.from("user_stickers").upsert({
           user_id: user.id,
           sticker_id: stickerId,
           status: "have",
           quantity: 1,
+        }, {
+          onConflict: "user_id,sticker_id,status",
+          ignoreDuplicates: true,
         });
         if (insertHaveError) throw insertHaveError;
       }
@@ -383,6 +421,62 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
     .reduce((total, us) => total + Math.max(0, (us.quantity || 0) - 1), 0);
   const totalCount = selectedCollection?.total_stickers || selectedStickers.length;
   const progress = totalCount > 0 ? Math.round((haveCount / totalCount) * 100) : 0;
+  const isWorldAlbum = selectedCollection?.name.toLowerCase().includes("mundial") || false;
+  const albumTeamButtons = isWorldAlbum ? buildAlbumTeamPages(selectedStickers) : [];
+  const albumTeamPages = isWorldAlbum
+    ? buildAlbumTeamPages(filteredStickers).filter((teamPage) => !selectedAlbumTeamName || teamPage.teamName === selectedAlbumTeamName)
+    : [];
+
+  const renderSticker = (sticker: Sticker, compact = false) => {
+    const us = getUserSticker(sticker.id);
+    const photoInputId = `photo-${sticker.id}`;
+
+    return (
+      <StickerCard
+        key={sticker.id}
+        number={sticker.number}
+        name={sticker.name}
+        imageUrl={sticker.image_url}
+        rarity={sticker.rarity}
+        status={us ? "have" : "want"}
+        quantity={us?.quantity}
+        stickerId={sticker.id}
+        selected={selectedStickerId === sticker.id}
+        compact={compact}
+        onClick={() => {
+          setSelectedStickerId(sticker.id);
+          us ? addQuantity(us.id) : addSticker(sticker.id, "have");
+        }}
+        onReduceQuantity={us ? () => reduceQuantity(us.id) : undefined}
+      >
+        <label className="btn btn-photo btn-xs" htmlFor={photoInputId}>
+          <Camera size={12} /> {uploadingImageId === sticker.id ? "A enviar..." : "Foto"}
+        </label>
+        {profile?.is_admin && sticker.image_url && (
+          <button
+            className="btn btn-danger-soft btn-xs"
+            type="button"
+            onClick={() => removeStickerImage(sticker.id)}
+            disabled={uploadingImageId === sticker.id}
+          >
+            <X size={12} /> Remover foto
+          </button>
+        )}
+        <input
+          id={photoInputId}
+          className="sticker-photo-input"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          disabled={uploadingImageId === sticker.id}
+          onChange={(event) => {
+            uploadStickerImage(sticker.id, event.target.files?.[0] || null);
+            event.target.value = "";
+          }}
+        />
+      </StickerCard>
+    );
+  };
 
   if (loading) return <div className="loading">A carregar colecao...</div>;
 
@@ -416,6 +510,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
                 setSelectedCollectionId(collection.id);
                 setSearch("");
                 setFilter("all");
+                setSelectedAlbumTeamName(null);
               }}
             >
               <div className="collection-cover-image">
@@ -498,12 +593,14 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
             setSelectedCollectionId(null);
             setSearch("");
             setFilter("all");
+            setSelectedAlbumTeamName(null);
           }}
         >
           <ArrowLeft size={14} /> Colecoes
         </button>
         <BookOpen size={16} />
         <span>{selectedCollection?.name || "Colecao"}</span>
+        {selectedAlbumTeamName && <span>{selectedAlbumTeamName}</span>}
       </div>
 
       <div className="collection-toolbar">
@@ -520,76 +617,100 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
 
       {error && <p className="error-text">{error}</p>}
 
-      <div className="sticker-grid">
-        {filteredStickers.map((sticker) => {
-          const us = getUserSticker(sticker.id);
-          const photoInputId = `photo-${sticker.id}`;
-          return (
-            <StickerCard
-              key={sticker.id}
-              number={sticker.number}
-              name={sticker.name}
-              imageUrl={sticker.image_url}
-              rarity={sticker.rarity}
-              status={us ? "have" : "want"}
-              quantity={us?.quantity}
-              stickerId={sticker.id}
-              selected={selectedStickerId === sticker.id}
-              onClick={() => {
-                setSelectedStickerId(sticker.id);
-                us ? addQuantity(us.id) : addSticker(sticker.id, "have");
-              }}
-              onReduceQuantity={us ? () => reduceQuantity(us.id) : undefined}
-            >
-              {!us ? (
-                <>
-                  <label className="btn btn-photo btn-xs" htmlFor={photoInputId}>
-                    <Camera size={12} /> Foto
-                  </label>
-                  {profile?.is_admin && sticker.image_url && (
-                    <button
-                      className="btn btn-danger-soft btn-xs"
-                      type="button"
-                      onClick={() => removeStickerImage(sticker.id)}
-                      disabled={uploadingImageId === sticker.id}
-                    >
-                      <X size={12} /> Remover foto
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <label className="btn btn-photo btn-xs" htmlFor={photoInputId}>
-                    <Camera size={12} /> {uploadingImageId === sticker.id ? "A enviar..." : "Foto"}
-                  </label>
-                  {profile?.is_admin && sticker.image_url && (
-                    <button
-                      className="btn btn-danger-soft btn-xs"
-                      type="button"
-                      onClick={() => removeStickerImage(sticker.id)}
-                      disabled={uploadingImageId === sticker.id}
-                    >
-                      <X size={12} /> Remover foto
-                    </button>
-                  )}
-                </>
-              )}
-              <input
-                id={photoInputId}
-                className="sticker-photo-input"
-                type="file"
-                accept="image/*"
-                capture="environment"
-                disabled={uploadingImageId === sticker.id}
-                onChange={(event) => {
-                  uploadStickerImage(sticker.id, event.target.files?.[0] || null);
-                  event.target.value = "";
+      {isWorldAlbum && !selectedAlbumTeamName ? (
+        <div className="album-team-selector">
+          {albumTeamButtons.map((teamPage, pageIndex) => {
+            const teamHaveCount = teamPage.stickers.filter((sticker) => getUserSticker(sticker.id)).length;
+            const teamProgress = Math.round((teamHaveCount / Math.max(1, teamPage.stickers.length)) * 100);
+
+            return (
+              <button
+                className="album-team-button"
+                key={teamPage.teamName}
+                type="button"
+                onClick={() => {
+                  setSelectedAlbumTeamName(teamPage.teamName);
+                  setSearch("");
+                  setFilter("all");
+                  setSelectedStickerId(null);
                 }}
-              />
-            </StickerCard>
-          );
-        })}
-      </div>
+              >
+                <span className="album-team-button-number">{String(pageIndex + 1).padStart(2, "0")}</span>
+                <strong>{teamPage.teamName}</strong>
+                <span>{teamPage.groupName}</span>
+                <em>{teamHaveCount}/{teamPage.stickers.length}</em>
+                <div className="album-team-button-progress">
+                  <span style={{ width: `${teamProgress}%` }} />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      ) : isWorldAlbum ? (
+        <div className="album-page-list">
+          <button
+            className="btn btn-ghost btn-sm album-teams-back"
+            type="button"
+            onClick={() => {
+              setSelectedAlbumTeamName(null);
+              setSearch("");
+              setFilter("all");
+              setSelectedStickerId(null);
+            }}
+          >
+            <ArrowLeft size={14} /> Selecoes
+          </button>
+          {albumTeamPages.map((teamPage) => {
+            const pageIndex = Math.max(0, albumTeamButtons.findIndex((albumTeam) => albumTeam.teamName === teamPage.teamName));
+            const teamHaveCount = teamPage.stickers.filter((sticker) => getUserSticker(sticker.id)).length;
+            const teamProgress = Math.round((teamHaveCount / Math.max(1, teamPage.stickers.length)) * 100);
+            const teamPhoto = teamPage.stickers.find((sticker) => sticker.name.includes("Foto de equipa"));
+            const playerStickers = teamPage.stickers.filter((sticker) => !sticker.name.includes("Foto de equipa"));
+
+            return (
+              <section className="album-spread" key={teamPage.teamName}>
+                <div className="album-team-hero">
+                  <span className="album-page-number">{String(pageIndex + 1).padStart(2, "0")}</span>
+                  <div>
+                    <p>NOS SOMOS</p>
+                    <h3>{teamPage.teamName}</h3>
+                    <span>{teamPage.groupName}</span>
+                  </div>
+                  <div className="album-team-badge">{teamPage.teamName.slice(0, 3).toUpperCase()}</div>
+                </div>
+
+                <div className="album-spread-body">
+                  <aside className="album-team-info">
+                    {teamPhoto && (
+                      <div className="album-team-photo-slot">
+                        {renderSticker(teamPhoto, true)}
+                      </div>
+                    )}
+                    <div>
+                      <strong>Federacao</strong>
+                      <span>{teamPage.teamName} Football Association</span>
+                    </div>
+                    <div>
+                      <strong>Progresso</strong>
+                      <span>{teamHaveCount}/{teamPage.stickers.length} cromos</span>
+                    </div>
+                    <div className="album-team-progress">
+                      <span style={{ width: `${teamProgress}%` }} />
+                    </div>
+                  </aside>
+                  <div className="album-sticker-grid">
+                    {playerStickers.map((sticker) => renderSticker(sticker, true))}
+                  </div>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="sticker-grid">
+          {filteredStickers.map((sticker) => renderSticker(sticker))}
+        </div>
+      )}
 
       {filteredStickers.length === 0 && (
         <div className="empty-state">

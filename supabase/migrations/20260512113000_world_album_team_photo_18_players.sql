@@ -1,6 +1,8 @@
--- Add independent world football album.
--- Creates an original "Caderneta Mundial 2026" collection inspired by
--- the classic football album format, without copying official/Panini content.
+-- Rebuild the independent world album as 48 pages with 1 team photo and 18 players each.
+-- This replaces the previous 6-sticker-per-team seed for this collection.
+
+DELETE FROM stickers
+WHERE collection_id = 'b2026000-0000-4000-8000-000000000001';
 
 INSERT INTO collections (id, name, description, image_url, total_stickers)
 VALUES (
@@ -98,10 +100,4 @@ album_stickers AS (
 )
 INSERT INTO stickers (collection_id, number, name, image_url, rarity)
 SELECT collection_id, number, name, image_url, rarity
-FROM album_stickers
-WHERE NOT EXISTS (
-  SELECT 1
-  FROM stickers
-  WHERE stickers.collection_id = album_stickers.collection_id
-    AND stickers.number = album_stickers.number
-);
+FROM album_stickers;

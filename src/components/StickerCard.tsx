@@ -9,6 +9,7 @@ interface StickerCardProps {
   status?: "have" | "want" | "none";
   quantity?: number;
   selected?: boolean;
+  compact?: boolean;
   stickerId?: string;
   onClick?: () => void;
   onReduceQuantity?: () => void;
@@ -32,6 +33,7 @@ export default function StickerCard({
   status,
   quantity,
   selected,
+  compact,
   stickerId,
   onClick,
   onReduceQuantity,
@@ -44,7 +46,7 @@ export default function StickerCard({
 
   return (
     <div
-      className={`sticker-card ${selected ? "selected" : ""}`}
+      className={`sticker-card ${compact ? "compact" : ""} ${selected ? "selected" : ""}`}
       data-sticker-id={stickerId}
       onClick={onClick}
       style={onClick ? { cursor: "pointer" } : undefined}
