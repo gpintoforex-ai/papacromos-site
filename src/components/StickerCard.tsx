@@ -25,6 +25,12 @@ const rarityConfig: Record<string, { label: string; bg: string; border: string; 
 
 const fallbackImage = "/logo.png";
 
+function vibrateOnStickerAction() {
+  if ("vibrate" in navigator) {
+    navigator.vibrate(35);
+  }
+}
+
 export default function StickerCard({
   number,
   name,
@@ -48,7 +54,11 @@ export default function StickerCard({
     <div
       className={`sticker-card ${compact ? "compact" : ""} ${selected ? "selected" : ""}`}
       data-sticker-id={stickerId}
-      onClick={onClick}
+      onClick={() => {
+        if (!onClick) return;
+        vibrateOnStickerAction();
+        onClick();
+      }}
       style={onClick ? { cursor: "pointer" } : undefined}
     >
       <div
@@ -80,6 +90,7 @@ export default function StickerCard({
             title="Remover 1"
             onClick={(event) => {
               event.stopPropagation();
+              vibrateOnStickerAction();
               onReduceQuantity?.();
             }}
           >
