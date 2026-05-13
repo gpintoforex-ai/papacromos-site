@@ -10,10 +10,11 @@ interface LayoutProps {
   currentPage: Page;
   onNavigate: (page: Page) => void;
   matchCount: number;
+  pendingTradeCount: number;
   children: React.ReactNode;
 }
 
-export default function Layout({ currentPage, onNavigate, matchCount, children }: LayoutProps) {
+export default function Layout({ currentPage, onNavigate, matchCount, pendingTradeCount, children }: LayoutProps) {
   const { user, profile, signOut } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
   const [dataModalOpen, setDataModalOpen] = useState(false);
@@ -32,10 +33,10 @@ export default function Layout({ currentPage, onNavigate, matchCount, children }
     ? new Date(accountCreatedAt).toLocaleDateString("pt-PT")
     : "-";
 
-  const navItems: { page: Page; label: string; icon: React.ReactNode; badge?: number }[] = [
+  const navItems: { page: Page; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
     { page: "collection", label: "Colecao", icon: <Trophy size={18} /> },
     { page: "matches", label: "Matches", icon: <RefreshCw size={18} />, badge: matchCount },
-    { page: "trades", label: "Trocas", icon: <Users size={18} /> },
+    { page: "trades", label: "Trocas", icon: <Users size={18} />, badge: pendingTradeCount, alert: pendingTradeCount > 0 },
     { page: "partners", label: "Parceiros", icon: <Handshake size={18} /> },
     ...(profile?.is_admin ? [{ page: "admin" as Page, label: "Admin", icon: <Shield size={18} /> }] : []),
   ];
@@ -120,7 +121,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, children }
               >
                 {item.icon}
                 <span>{item.label}</span>
-                {item.badge ? <span className="nav-badge">{item.badge}</span> : null}
+                {item.badge ? <span className={`nav-badge ${item.alert ? "alert" : ""}`}>{item.badge}</span> : null}
               </button>
             ))}
           </nav>
@@ -329,7 +330,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, children }
             aria-label={item.label}
           >
             {item.icon}
-            {item.badge ? <span className="bottom-nav-badge">{item.badge}</span> : null}
+            {item.badge ? <span className={`bottom-nav-badge ${item.alert ? "alert" : ""}`}>{item.badge}</span> : null}
           </button>
         ))}
       </nav>

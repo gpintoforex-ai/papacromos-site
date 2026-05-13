@@ -5,6 +5,10 @@ import TradeCard from "../components/TradeCard";
 import { RefreshCw } from "lucide-react";
 import type { DeliveryMethod } from "../lib/trades";
 
+interface TradesPageProps {
+  onPendingTradeCountChange?: (count: number) => void;
+}
+
 interface TradeWithDetails {
   id: string;
   from_user_id: string;
@@ -37,7 +41,7 @@ interface TradeMessage {
 
 type TradeFilter = "all" | "pending" | "accepted" | "completed" | "rejected";
 
-export default function TradesPage() {
+export default function TradesPage({ onPendingTradeCountChange }: TradesPageProps) {
   const { user, profile } = useAuth();
   const [trades, setTrades] = useState<TradeWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,8 +116,10 @@ export default function TradesPage() {
         messages: messagesByTradeId.get(t.id) || [],
       }));
       setTrades(enriched as TradeWithDetails[]);
+      onPendingTradeCountChange?.(enriched.filter((trade) => trade.status === "pending").length);
     } catch (err: any) {
       setTrades([]);
+      onPendingTradeCountChange?.(0);
       setError(err.message || "Erro ao carregar trocas.");
     } finally {
       setLoading(false);
@@ -186,7 +192,7 @@ export default function TradesPage() {
   };
 
   const filteredTrades = trades.filter((t) => filter === "all" || t.status === filter);
-  const incomingCount = trades.filter((t) => t.to_user_id === user?.id && t.status === "pending").length;
+  const pendingCount = trades.filter((t) => t.status === "pending").length;
 
   if (loading) return <div className="loading">A carregar trocas...</div>;
 
@@ -195,7 +201,7 @@ export default function TradesPage() {
       <div className="trades-header">
         <div>
           <h2>Trocas</h2>
-          <p>{incomingCount > 0 ? `Tens ${incomingCount} proposta(s) pendente(s)` : "Sem propostas pendentes"}</p>
+          <p>{pendingCount > 0 ? `Tens ${pendingCount} proposta(s) pendente(s)` : "Sem propostas pendentes"}</p>
         </div>
         <button className="btn btn-primary btn-sm" onClick={loadTrades}>
           <RefreshCw size={14} /> Atualizar

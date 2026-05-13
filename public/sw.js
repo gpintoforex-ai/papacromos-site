@@ -1,5 +1,5 @@
-const CACHE_NAME = "papa-cromos-v1";
-const APP_SHELL = ["/", "/index.html", "/logo.png", "/favicon.svg", "/manifest.webmanifest"];
+const CACHE_NAME = "papa-cromos-v2";
+const APP_SHELL = ["/", "/index.html", "/logo.png", "/favicon.svg", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

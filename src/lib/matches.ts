@@ -22,17 +22,69 @@ export interface Match {
   };
 }
 
+const userStickerSelect = "user_id, sticker_id, quantity, stickers(id, name, number, image_url, rarity)";
+const queryChunkSize = 80;
+
+function chunkIds(ids: string[]) {
+  const chunks: string[][] = [];
+  for (let index = 0; index < ids.length; index += queryChunkSize) {
+    chunks.push(ids.slice(index, index + queryChunkSize));
+  }
+  return chunks;
+}
+
+async function fetchUserStickersByStickerIds(stickerIds: string[], status: "have" | "want", currentUserId: string) {
+  const rows: any[] = [];
+
+  for (const chunk of chunkIds(stickerIds)) {
+    let query = supabase
+      .from("user_stickers")
+      .select(userStickerSelect)
+      .in("sticker_id", chunk)
+      .eq("status", status)
+      .neq("user_id", currentUserId);
+
+    if (status === "have") {
+      query = query.gt("quantity", 1);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    rows.push(...(data || []));
+  }
+
+  return rows;
+}
+
+async function fetchProfilesByIds(userIds: string[]) {
+  const profilesById = new Map<string, { username?: string; avatar_seed?: string }>();
+
+  for (const chunk of chunkIds(userIds)) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from("user_profiles")
+      .select("id, username, avatar_seed")
+      .in("id", chunk);
+    if (profilesError) throw profilesError;
+
+    (profiles || []).forEach((profile: any) => {
+      profilesById.set(profile.id, profile);
+    });
+  }
+
+  return profilesById;
+}
+
 export async function findUserMatches(userId: string): Promise<Match[]> {
   const { data: myHaves, error: myHavesError } = await supabase
     .from("user_stickers")
-    .select("user_id, sticker_id, quantity, stickers(id, name, number, image_url, rarity)")
+    .select(userStickerSelect)
     .eq("user_id", userId)
     .eq("status", "have");
   if (myHavesError) throw myHavesError;
 
   const { data: myWants, error: myWantsError } = await supabase
     .from("user_stickers")
-    .select("user_id, sticker_id, stickers(id, name, number, image_url, rarity)")
+    .select(userStickerSelect)
     .eq("user_id", userId)
     .eq("status", "want");
   if (myWantsError) throw myWantsError;
@@ -52,51 +104,26 @@ export async function findUserMatches(userId: string): Promise<Match[]> {
 
   const myWantIds = ownWants.map((w: any) => w.sticker_id);
 
-  const { data: otherUsersWant, error: otherUsersWantError } = await supabase
-    .from("user_stickers")
-    .select("user_id, sticker_id, quantity, stickers(id, name, number, image_url, rarity)")
-    .in("sticker_id", myHaveIds)
-    .eq("status", "want")
-    .neq("user_id", userId);
-  if (otherUsersWantError) throw otherUsersWantError;
-
-  const { data: otherUsersHave, error: otherUsersHaveError } = await supabase
-    .from("user_stickers")
-    .select("user_id, sticker_id, quantity, stickers(id, name, number, image_url, rarity)")
-    .in("sticker_id", myWantIds)
-    .eq("status", "have")
-    .gt("quantity", 1)
-    .neq("user_id", userId);
-  if (otherUsersHaveError) throw otherUsersHaveError;
+  const otherUsersWant = await fetchUserStickersByStickerIds(myHaveIds, "want", userId);
+  const otherUsersHave = await fetchUserStickersByStickerIds(myWantIds, "have", userId);
 
   const otherUserIds = Array.from(new Set([
-    ...(otherUsersWant || []).map((item: any) => item.user_id),
-    ...(otherUsersHave || []).map((item: any) => item.user_id),
+    ...otherUsersWant.map((item: any) => item.user_id),
+    ...otherUsersHave.map((item: any) => item.user_id),
   ]));
 
-  const profilesById = new Map<string, { username?: string; avatar_seed?: string }>();
-  if (otherUserIds.length) {
-    const { data: profiles, error: profilesError } = await supabase
-      .from("user_profiles")
-      .select("id, username, avatar_seed")
-      .in("id", otherUserIds);
-    if (profilesError) throw profilesError;
-
-    (profiles || []).forEach((profile: any) => {
-      profilesById.set(profile.id, profile);
-    });
-  }
+  const profilesById = otherUserIds.length ? await fetchProfilesByIds(otherUserIds) : new Map<string, { username?: string; avatar_seed?: string }>();
 
   const matchList: Match[] = [];
   const haveByUser = new Map<string, any[]>();
-  for (const h of otherUsersHave || []) {
+  for (const h of otherUsersHave) {
     const list = haveByUser.get(h.user_id) || [];
     list.push(h);
     haveByUser.set(h.user_id, list);
   }
 
   const seenMatchKeys = new Set<string>();
-  for (const w of otherUsersWant || []) {
+  for (const w of otherUsersWant) {
     const theirHaves = haveByUser.get(w.user_id) || [];
     for (const th of theirHaves) {
       const matchKey = `${w.user_id}:${w.sticker_id}:${th.sticker_id}`;

@@ -105,7 +105,7 @@ export default function TradeCard({
           <span>{requestedSticker.name}</span>
         </div>
       </div>
-      {isIncoming && status === "pending" && (
+      {status === "pending" && (
         <div className="trade-card-actions">
           <button className="btn btn-success btn-sm" onClick={() => onAccept?.(id)}>
             <Check size={14} /> Aceitar
@@ -122,13 +122,6 @@ export default function TradeCard({
               <Check size={14} /> Concluir troca
             </button>
           )}
-          <button className="btn btn-error btn-sm" onClick={() => onCancel?.(id)}>
-            <X size={14} /> Anular
-          </button>
-        </div>
-      )}
-      {status === "pending" && !isIncoming && (
-        <div className="trade-card-actions">
           <button className="btn btn-error btn-sm" onClick={() => onCancel?.(id)}>
             <X size={14} /> Anular
           </button>

@@ -193,9 +193,6 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
       if (offeredUnits.length === 0 || requestedUnits.length === 0) {
         throw new Error("Escolhe os cromos e as quantidades para propor a troca.");
       }
-      if (offeredUnits.length !== requestedUnits.length) {
-        throw new Error("A quantidade proposta deve ser igual a quantidade pedida.");
-      }
 
       const deliveryMethod = deliveryMethods[tradeKey] || "presencial";
       const partnerId = selectedPartners[tradeKey] || (deliveryMethod === "outro" && partners.length === 1 ? partners[0].id : "");
@@ -207,20 +204,27 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
       const selectedPartner = partners.find((partner) => partner.id === partnerId);
       const baseNote = tradeNotes[tradeKey]?.trim() || "";
       const partnerNote = selectedPartner ? `Parceiro pretendido: ${selectedPartner.name}${selectedPartner.city ? ` (${selectedPartner.city})` : ""}.` : "";
-      const payloads = offeredUnits.map((offeredSticker, index) => ({
-        from_user_id: user.id,
-        to_user_id: group.otherUserId,
-        offered_sticker_id: offeredSticker.id,
-        requested_sticker_id: requestedUnits[index].id,
-        delivery_method: databaseDeliveryMethod,
-        ...(deliveryMethod === "outro" ? { partner_id: partnerId } : {}),
-        note: [
-          baseNote,
-          `Troca proposta: ${offeredSticker.name} por ${requestedUnits[index].name}.`,
-          deliveryMethod === "outro" ? partnerNote : "",
-        ].filter(Boolean).join(" "),
-        status: "pending",
-      }));
+      const tradeCount = Math.max(offeredUnits.length, requestedUnits.length);
+      const proposalSummary = `Troca proposta: ${offeredUnits.length} cromo${offeredUnits.length === 1 ? "" : "s"} por ${requestedUnits.length} cromo${requestedUnits.length === 1 ? "" : "s"}.`;
+      const payloads = Array.from({ length: tradeCount }, (_, index) => {
+        const offeredSticker = offeredUnits[Math.min(index, offeredUnits.length - 1)];
+        const requestedSticker = requestedUnits[Math.min(index, requestedUnits.length - 1)];
+
+        return {
+          from_user_id: user.id,
+          to_user_id: group.otherUserId,
+          offered_sticker_id: offeredSticker.id,
+          requested_sticker_id: requestedSticker.id,
+          delivery_method: databaseDeliveryMethod,
+          ...(deliveryMethod === "outro" ? { partner_id: partnerId } : {}),
+          note: [
+            baseNote,
+            proposalSummary,
+            deliveryMethod === "outro" ? partnerNote : "",
+          ].filter(Boolean).join(" "),
+          status: "pending",
+        };
+      });
 
       let { error } = await supabase.from("trade_offers").insert(payloads);
       if (error && deliveryMethod === "outro" && error.message?.toLowerCase().includes("partner_id")) {
