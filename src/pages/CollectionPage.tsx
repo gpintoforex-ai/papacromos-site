@@ -35,14 +35,242 @@ type FilterMode = "all" | "have" | "repeated" | "want" | "missing";
 interface AlbumTeamPage {
   teamName: string;
   groupName: string;
+  flag: string;
+  flagCode: string;
+  flagUrl: string;
   stickers: Sticker[];
 }
 
 const collectionFallbackImage =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23f3f4f6'/%3E%3Crect x='92' y='70' width='216' height='260' rx='18' fill='%23ffffff' stroke='%23d1d5db' stroke-width='10'/%3E%3Cpath d='M132 132h136v24H132zm0 58h136v24H132zm0 58h92v24h-92z' fill='%239ca3af'/%3E%3C/svg%3E";
 
+const teamFlags: Record<string, string> = {
+  Portugal: "🇵🇹",
+  Brasil: "🇧🇷",
+  Argentina: "🇦🇷",
+  Franca: "🇫🇷",
+  França: "🇫🇷",
+  Espanha: "🇪🇸",
+  Alemanha: "🇩🇪",
+  Inglaterra: "🏴",
+  Italia: "🇮🇹",
+  Holanda: "🇳🇱",
+  "Paises Baixos": "🇳🇱",
+  Belgica: "🇧🇪",
+  Bélgica: "🇧🇪",
+  Croacia: "🇭🇷",
+  Croácia: "🇭🇷",
+  Uruguai: "🇺🇾",
+  Mexico: "🇲🇽",
+  México: "🇲🇽",
+  "Estados Unidos": "🇺🇸",
+  Japao: "🇯🇵",
+  Japão: "🇯🇵",
+  Marrocos: "🇲🇦",
+  Canada: "🇨🇦",
+  Canadá: "🇨🇦",
+  Suica: "🇨🇭",
+  Suíça: "🇨🇭",
+  Turquia: "🇹🇷",
+  Senegal: "🇸🇳",
+  Argelia: "🇩🇿",
+  Argélia: "🇩🇿",
+  "Congo DR": "🇨🇩",
+  "RD do Congo": "🇨🇩",
+  "Coreia do Sul": "🇰🇷",
+  "República da Coreia": "🇰🇷",
+  Australia: "🇦🇺",
+  Austrália: "🇦🇺",
+  Dinamarca: "🇩🇰",
+  Suecia: "🇸🇪",
+  Suécia: "🇸🇪",
+  Noruega: "🇳🇴",
+  Colombia: "🇨🇴",
+  Colômbia: "🇨🇴",
+  Equador: "🇪🇨",
+  Paraguai: "🇵🇾",
+  Panama: "🇵🇦",
+  Panamá: "🇵🇦",
+  Egito: "🇪🇬",
+  Gana: "🇬🇭",
+  Tunisia: "🇹🇳",
+  Tunísia: "🇹🇳",
+  "Africa do Sul": "🇿🇦",
+  "África do Sul": "🇿🇦",
+  "Arabia Saudita": "🇸🇦",
+  "Arábia Saudita": "🇸🇦",
+  Iraque: "🇮🇶",
+  Qatar: "🇶🇦",
+  Catar: "🇶🇦",
+  "Nova Zelandia": "🇳🇿",
+  "Nova Zelândia": "🇳🇿",
+  "Bósnia e Herzegovina": "🇧🇦",
+  Tchéquia: "🇨🇿",
+  Haiti: "🇭🇹",
+  Escócia: "🏴",
+  Curaçau: "🇨🇼",
+  "Costa do Marfim": "🇨🇮",
+  "RI do Irã": "🇮🇷",
+  "Cabo Verde": "🇨🇻",
+  Áustria: "🇦🇹",
+  Jordânia: "🇯🇴",
+  Uzbequistão: "🇺🇿",
+};
+
+const flagCodeByTeam: Record<string, string> = {
+  Portugal: "pt",
+  Brasil: "br",
+  Argentina: "ar",
+  Franca: "fr",
+  França: "fr",
+  Espanha: "es",
+  Alemanha: "de",
+  Inglaterra: "gb-eng",
+  Italia: "it",
+  Holanda: "nl",
+  "Paises Baixos": "nl",
+  Belgica: "be",
+  Bélgica: "be",
+  Croacia: "hr",
+  Croácia: "hr",
+  Uruguai: "uy",
+  Mexico: "mx",
+  México: "mx",
+  "Estados Unidos": "us",
+  Japao: "jp",
+  Japão: "jp",
+  Marrocos: "ma",
+  Canada: "ca",
+  Canadá: "ca",
+  Suica: "ch",
+  Suíça: "ch",
+  Turquia: "tr",
+  Senegal: "sn",
+  Argelia: "dz",
+  Argélia: "dz",
+  "Congo DR": "cd",
+  "RD do Congo": "cd",
+  "Coreia do Sul": "kr",
+  "República da Coreia": "kr",
+  Australia: "au",
+  Austrália: "au",
+  Dinamarca: "dk",
+  Suecia: "se",
+  Suécia: "se",
+  Noruega: "no",
+  Colombia: "co",
+  Colômbia: "co",
+  Equador: "ec",
+  Paraguai: "py",
+  Panama: "pa",
+  Panamá: "pa",
+  Egito: "eg",
+  Gana: "gh",
+  Tunisia: "tn",
+  Tunísia: "tn",
+  "Africa do Sul": "za",
+  "África do Sul": "za",
+  "Arabia Saudita": "sa",
+  "Arábia Saudita": "sa",
+  Iraque: "iq",
+  Qatar: "qa",
+  Catar: "qa",
+  "Nova Zelandia": "nz",
+  "Nova Zelândia": "nz",
+  "Bósnia e Herzegovina": "ba",
+  Tchéquia: "cz",
+  Haiti: "ht",
+  Escócia: "gb-sct",
+  Curaçau: "cw",
+  "Costa do Marfim": "ci",
+  "RI do Irã": "ir",
+  "Cabo Verde": "cv",
+  Áustria: "at",
+  Jordânia: "jo",
+  Uzbequistão: "uz",
+};
+
+const groupByTeam: Record<string, string> = {
+  México: "Grupo A",
+  Mexico: "Grupo A",
+  "África do Sul": "Grupo A",
+  "Africa do Sul": "Grupo A",
+  "República da Coreia": "Grupo A",
+  "Coreia do Sul": "Grupo A",
+  Tchéquia: "Grupo A",
+  Canadá: "Grupo B",
+  Canada: "Grupo B",
+  "Bósnia e Herzegovina": "Grupo B",
+  Catar: "Grupo B",
+  Qatar: "Grupo B",
+  Suíça: "Grupo B",
+  Suica: "Grupo B",
+  Brasil: "Grupo C",
+  Marrocos: "Grupo C",
+  Haiti: "Grupo C",
+  Escócia: "Grupo C",
+  "Estados Unidos": "Grupo D",
+  Austrália: "Grupo D",
+  Australia: "Grupo D",
+  Paraguai: "Grupo D",
+  Turquia: "Grupo D",
+  Dinamarca: "Grupo D",
+  Alemanha: "Grupo E",
+  Curaçau: "Grupo E",
+  "Costa do Marfim": "Grupo E",
+  Equador: "Grupo E",
+  Holanda: "Grupo F",
+  "Paises Baixos": "Grupo F",
+  Japão: "Grupo F",
+  Japao: "Grupo F",
+  Suécia: "Grupo F",
+  Suecia: "Grupo F",
+  Tunísia: "Grupo F",
+  Tunisia: "Grupo F",
+  Bélgica: "Grupo G",
+  Belgica: "Grupo G",
+  Egito: "Grupo G",
+  "RI do Irã": "Grupo G",
+  "Nova Zelândia": "Grupo G",
+  "Nova Zelandia": "Grupo G",
+  Espanha: "Grupo H",
+  "Cabo Verde": "Grupo H",
+  "Arábia Saudita": "Grupo H",
+  "Arabia Saudita": "Grupo H",
+  Uruguai: "Grupo H",
+  França: "Grupo I",
+  Franca: "Grupo I",
+  Iraque: "Grupo I",
+  Noruega: "Grupo I",
+  Senegal: "Grupo I",
+  Argentina: "Grupo J",
+  Argélia: "Grupo J",
+  Argelia: "Grupo J",
+  Áustria: "Grupo J",
+  Jordânia: "Grupo J",
+  Portugal: "Grupo K",
+  "RD do Congo": "Grupo K",
+  "Congo DR": "Grupo K",
+  Uzbequistão: "Grupo K",
+  Colômbia: "Grupo K",
+  Colombia: "Grupo K",
+  Inglaterra: "Grupo L",
+  Croácia: "Grupo L",
+  Croacia: "Grupo L",
+  Gana: "Grupo L",
+  Panamá: "Grupo L",
+  Panama: "Grupo L",
+};
+
 function getStickerTeamName(stickerName: string) {
   return stickerName.includes(" - ") ? stickerName.split(" - ")[0].trim() : "Cromos";
+}
+
+function getAlbumLocalNumber(sticker: Sticker) {
+  const slot = ((sticker.number - 1) % 20) + 1;
+  if (sticker.name.includes("Escudo")) return 1;
+  if (sticker.name.includes("Foto de equipa")) return 13;
+  return slot;
 }
 
 function buildAlbumTeamPages(stickers: Sticker[]): AlbumTeamPage[] {
@@ -54,8 +282,11 @@ function buildAlbumTeamPages(stickers: Sticker[]): AlbumTeamPage[] {
 
   return Array.from(teams.entries()).map(([teamName, teamStickers], index) => ({
     teamName,
-    groupName: `Grupo ${String.fromCharCode(65 + Math.floor(index / 4))}`,
-    stickers: teamStickers.sort((a, b) => a.number - b.number),
+    groupName: groupByTeam[teamName] || `Grupo ${String.fromCharCode(65 + Math.floor(index / 4))}`,
+    flag: teamFlags[teamName] || "🏳️",
+    flagCode: flagCodeByTeam[teamName] || "",
+    flagUrl: flagCodeByTeam[teamName] ? `https://flagcdn.com/w160/${flagCodeByTeam[teamName]}.png` : "",
+    stickers: teamStickers.sort((a, b) => getAlbumLocalNumber(a) - getAlbumLocalNumber(b)),
   }));
 }
 
@@ -415,17 +646,30 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
   const selectedStickerIds = new Set(selectedStickers.map((sticker) => sticker.id));
   const selectedUserStickers = userStickers.filter((us) => us.user_id === user?.id && selectedStickerIds.has(us.sticker_id));
   const haveCount = selectedUserStickers.filter((us) => us.status === "have").length;
-  const wantCount = Math.max(0, selectedStickers.length - haveCount);
   const repeatedCount = selectedUserStickers
     .filter((us) => us.status === "have")
     .reduce((total, us) => total + Math.max(0, (us.quantity || 0) - 1), 0);
-  const totalCount = selectedCollection?.total_stickers || selectedStickers.length;
+  const totalCount = Math.max(selectedStickers.length, selectedCollection?.total_stickers || 0);
+  const wantCount = Math.max(0, totalCount - haveCount);
   const progress = totalCount > 0 ? Math.round((haveCount / totalCount) * 100) : 0;
   const isWorldAlbum = selectedCollection?.name.toLowerCase().includes("mundial") || false;
   const albumTeamButtons = isWorldAlbum ? buildAlbumTeamPages(selectedStickers) : [];
   const albumTeamPages = isWorldAlbum
     ? buildAlbumTeamPages(filteredStickers).filter((teamPage) => !selectedAlbumTeamName || teamPage.teamName === selectedAlbumTeamName)
     : [];
+  const selectedAlbumTeamIndex = albumTeamButtons.findIndex((teamPage) => teamPage.teamName === selectedAlbumTeamName);
+  const previousAlbumTeam = selectedAlbumTeamIndex > 0 ? albumTeamButtons[selectedAlbumTeamIndex - 1] : null;
+  const nextAlbumTeam =
+    selectedAlbumTeamIndex >= 0 && selectedAlbumTeamIndex < albumTeamButtons.length - 1
+      ? albumTeamButtons[selectedAlbumTeamIndex + 1]
+      : null;
+
+  const openAlbumTeam = (teamName: string) => {
+    setSelectedAlbumTeamName(teamName);
+    setSearch("");
+    setFilter("all");
+    setSelectedStickerId(null);
+  };
 
   const renderSticker = (sticker: Sticker, compact = false) => {
     const us = getUserSticker(sticker.id);
@@ -434,7 +678,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
     return (
       <StickerCard
         key={sticker.id}
-        number={sticker.number}
+        number={isWorldAlbum ? getAlbumLocalNumber(sticker) : sticker.number}
         name={sticker.name}
         imageUrl={sticker.image_url}
         rarity={sticker.rarity}
@@ -629,14 +873,17 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
                 key={teamPage.teamName}
                 type="button"
                 onClick={() => {
-                  setSelectedAlbumTeamName(teamPage.teamName);
-                  setSearch("");
-                  setFilter("all");
-                  setSelectedStickerId(null);
+                  openAlbumTeam(teamPage.teamName);
                 }}
               >
+                {teamPage.flagUrl && (
+                  <img className="album-team-bg-flag" src={teamPage.flagUrl} alt="" loading="lazy" aria-hidden="true" />
+                )}
                 <span className="album-team-button-number">{String(pageIndex + 1).padStart(2, "0")}</span>
-                <strong>{teamPage.teamName}</strong>
+                <strong>
+                  {teamPage.flagUrl && <img className="album-team-mini-flag" src={teamPage.flagUrl} alt="" loading="lazy" />}
+                  {teamPage.teamName}
+                </strong>
                 <span>{teamPage.groupName}</span>
                 <em>{teamHaveCount}/{teamPage.stickers.length}</em>
                 <div className="album-team-button-progress">
@@ -648,23 +895,43 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
         </div>
       ) : isWorldAlbum ? (
         <div className="album-page-list">
-          <button
-            className="btn btn-ghost btn-sm album-teams-back"
-            type="button"
-            onClick={() => {
-              setSelectedAlbumTeamName(null);
-              setSearch("");
-              setFilter("all");
-              setSelectedStickerId(null);
-            }}
-          >
-            <ArrowLeft size={14} /> Selecoes
-          </button>
+          <div className="album-page-nav">
+            <button
+              className="btn btn-ghost btn-sm"
+              type="button"
+              onClick={() => {
+                setSelectedAlbumTeamName(null);
+                setSearch("");
+                setFilter("all");
+                setSelectedStickerId(null);
+              }}
+            >
+              <ArrowLeft size={14} /> Selecoes
+            </button>
+            <div className="album-page-nav-arrows">
+              <button
+                className="btn btn-album-nav"
+                type="button"
+                onClick={() => previousAlbumTeam && openAlbumTeam(previousAlbumTeam.teamName)}
+                disabled={!previousAlbumTeam}
+              >
+                <ArrowLeft size={14} /> Anterior
+              </button>
+              <button
+                className="btn btn-album-nav"
+                type="button"
+                onClick={() => nextAlbumTeam && openAlbumTeam(nextAlbumTeam.teamName)}
+                disabled={!nextAlbumTeam}
+              >
+                Seguinte <ArrowLeft className="icon-flip-horizontal" size={14} />
+              </button>
+            </div>
+          </div>
           {albumTeamPages.map((teamPage) => {
             const pageIndex = Math.max(0, albumTeamButtons.findIndex((albumTeam) => albumTeam.teamName === teamPage.teamName));
             const teamHaveCount = teamPage.stickers.filter((sticker) => getUserSticker(sticker.id)).length;
             const teamProgress = Math.round((teamHaveCount / Math.max(1, teamPage.stickers.length)) * 100);
-            const teamPhoto = teamPage.stickers.find((sticker) => sticker.name.includes("Foto de equipa"));
+            const teamPhoto = teamPage.stickers.find((sticker) => getAlbumLocalNumber(sticker) === 13);
             const playerStickers = teamPage.stickers.filter((sticker) => !sticker.name.includes("Foto de equipa"));
 
             return (
@@ -673,10 +940,12 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
                   <span className="album-page-number">{String(pageIndex + 1).padStart(2, "0")}</span>
                   <div>
                     <p>NOS SOMOS</p>
-                    <h3>{teamPage.teamName}</h3>
+                    <h3><span className="album-team-hero-flag">{teamPage.flag}</span>{teamPage.teamName}</h3>
                     <span>{teamPage.groupName}</span>
                   </div>
-                  <div className="album-team-badge">{teamPage.teamName.slice(0, 3).toUpperCase()}</div>
+                  <div className="album-team-badge">
+                    {teamPage.flagUrl ? <img src={teamPage.flagUrl} alt={`Bandeira ${teamPage.teamName}`} /> : teamPage.flag}
+                  </div>
                 </div>
 
                 <div className="album-spread-body">

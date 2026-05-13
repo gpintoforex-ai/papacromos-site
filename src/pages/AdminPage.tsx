@@ -59,6 +59,8 @@ const emptyCollection = {
 const defaultStickerImage =
   "https://images.pexels.com/photos/46798/the-ball-stadion-football-the-pitch.jpg?auto=compress&cs=tinysrgb&w=400";
 
+const appLogoUrl = "https://hwqexlticbsokpqpqdvk.supabase.co/storage/v1/object/public/sticker-images/collections/new-1760223165876-105a2aec-9f65-47f0-adf1-b44b781e9ae6.png";
+
 function buildGeneratedStickers(collectionId: string, collectionName: string, total: number, imageUrl: string) {
   return Array.from({ length: total }, (_, index) => {
     const number = index + 1;
@@ -224,6 +226,58 @@ export default function AdminPage() {
       await loadAdminData();
     } catch (err: any) {
       setError(err.message || "Erro ao remover colecao.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const clearCollectionStickerImages = async (collection: Collection) => {
+    if (!window.confirm(`Remover todas as imagens dos cromos da colecao "${collection.name}"?`)) return;
+    if (!window.confirm("Confirmas mesmo? A capa da colecao nao sera alterada, apenas as imagens dos cromos. A reposicao exata so sera possivel se houver backup dos URLs anteriores.")) return;
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: clearError } = await supabase
+        .from("stickers")
+        .update({ image_url: "" })
+        .eq("collection_id", collection.id);
+      if (clearError) throw clearError;
+
+      setSuccess("Imagens dos cromos removidas.");
+    } catch (err: any) {
+      setError(err.message || "Erro ao remover imagens dos cromos.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const restoreCollectionStickerImages = async (collection: Collection, source: "cover" | "logo") => {
+    const imageUrl = source === "cover" ? collection.image_url : appLogoUrl;
+    const sourceLabel = source === "cover" ? "imagem da capa" : "logotipo da app";
+
+    if (!imageUrl) {
+      setError("Esta colecao nao tem imagem de capa para repor nos cromos.");
+      setSuccess(null);
+      return;
+    }
+
+    if (!window.confirm(`Substituir a imagem de todos os cromos da colecao "${collection.name}" por ${sourceLabel}?`)) return;
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: restoreError } = await supabase
+        .from("stickers")
+        .update({ image_url: imageUrl })
+        .eq("collection_id", collection.id);
+      if (restoreError) throw restoreError;
+
+      setSuccess(`Imagens dos cromos substituidas por ${sourceLabel}.`);
+    } catch (err: any) {
+      setError(err.message || "Erro ao repor imagens dos cromos.");
     } finally {
       setSaving(false);
     }
@@ -656,6 +710,30 @@ export default function AdminPage() {
                     disabled={saving}
                   >
                     <Trash2 size={12} /> Remover
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-xs"
+                    type="button"
+                    onClick={() => clearCollectionStickerImages(collection)}
+                    disabled={saving}
+                  >
+                    <X size={12} /> Remover imagens
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-xs"
+                    type="button"
+                    onClick={() => restoreCollectionStickerImages(collection, "cover")}
+                    disabled={saving || !collection.image_url}
+                  >
+                    <RefreshCw size={12} /> Repor capa
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-xs"
+                    type="button"
+                    onClick={() => restoreCollectionStickerImages(collection, "logo")}
+                    disabled={saving}
+                  >
+                    <RefreshCw size={12} /> Repor logo
                   </button>
                 </div>
               </div>

@@ -52,7 +52,7 @@ export default function StickerCard({
       style={onClick ? { cursor: "pointer" } : undefined}
     >
       <div
-        className="sticker-card-image"
+        className={`sticker-card-image ${status === "want" ? "missing" : ""}`}
         style={{ borderColor: r.border }}
       >
         <img
