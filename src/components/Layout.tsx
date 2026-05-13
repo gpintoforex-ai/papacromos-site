@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../lib/auth";
-import { Handshake, LogOut, RefreshCw, Shield, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
+import { Handshake, KeyRound, LogOut, RefreshCw, Shield, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
 import LegalFooter from "./LegalFooter";
 import { supabase } from "../lib/supabase";
 
@@ -17,6 +17,12 @@ export default function Layout({ currentPage, onNavigate, matchCount, children }
   const { user, profile, signOut } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
   const [dataModalOpen, setDataModalOpen] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
   const displayName = profile?.username || user?.email?.split("@")[0] || "Utilizador";
@@ -54,6 +60,46 @@ export default function Layout({ currentPage, onNavigate, matchCount, children }
     } catch (err: any) {
       setAccountError(err.message || "Erro ao eliminar a conta.");
       setDeletingAccount(false);
+    }
+  };
+
+  const closePasswordModal = () => {
+    setPasswordModalOpen(false);
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordError(null);
+    setPasswordSuccess(null);
+  };
+
+  const changePassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const cleanPassword = newPassword.trim();
+
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    if (cleanPassword.length < 6) {
+      setPasswordError("A nova senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    if (cleanPassword !== confirmPassword.trim()) {
+      setPasswordError("As senhas nao coincidem.");
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: cleanPassword });
+      if (error) throw error;
+
+      setPasswordSuccess("Senha alterada com sucesso.");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      setPasswordError(err.message || "Erro ao alterar senha.");
+    } finally {
+      setPasswordSaving(false);
     }
   };
 
@@ -133,6 +179,16 @@ export default function Layout({ currentPage, onNavigate, matchCount, children }
                       <UserRound size={14} /> Os meus dados
                     </button>
                     <button
+                      className="btn btn-password-soft btn-sm"
+                      type="button"
+                      onClick={() => {
+                        setPasswordModalOpen(true);
+                        setProfileOpen(false);
+                      }}
+                    >
+                      <KeyRound size={14} /> Alterar senha
+                    </button>
+                    <button
                       className="btn btn-danger-soft btn-sm"
                       type="button"
                       onClick={deleteOwnAccount}
@@ -207,6 +263,58 @@ export default function Layout({ currentPage, onNavigate, matchCount, children }
                 associados ao ID da tua conta e sao removidos quando eliminas a conta.
               </p>
             </div>
+          </div>
+        </div>
+      )}
+      {passwordModalOpen && (
+        <div className="account-data-overlay" role="dialog" aria-modal="true" aria-labelledby="password-title">
+          <div className="account-data-modal account-password-modal">
+            <div className="account-data-header">
+              <div>
+                <h2 id="password-title">Alterar senha</h2>
+                <p>Define uma nova senha para entrar na tua conta.</p>
+              </div>
+              <button className="header-icon-btn" type="button" onClick={closePasswordModal} title="Fechar">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form className="account-password-form" onSubmit={changePassword}>
+              <label>
+                Nova senha
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  minLength={6}
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+              <label>
+                Confirmar nova senha
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  minLength={6}
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+
+              {passwordError && <p className="profile-error">{passwordError}</p>}
+              {passwordSuccess && <p className="profile-success">{passwordSuccess}</p>}
+
+              <div className="account-password-actions">
+                <button className="btn btn-ghost" type="button" onClick={closePasswordModal} disabled={passwordSaving}>
+                  Cancelar
+                </button>
+                <button className="btn btn-primary" type="submit" disabled={passwordSaving}>
+                  <KeyRound size={16} /> {passwordSaving ? "A alterar..." : "Alterar senha"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -897,7 +897,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
         <div className="album-page-list">
           <div className="album-page-nav">
             <button
-              className="btn btn-ghost btn-sm"
+              className="btn btn-album-back"
               type="button"
               onClick={() => {
                 setSelectedAlbumTeamName(null);
@@ -906,7 +906,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
                 setSelectedStickerId(null);
               }}
             >
-              <ArrowLeft size={14} /> Selecoes
+              <ArrowLeft size={16} /> Seleções
             </button>
             <div className="album-page-nav-arrows">
               <button

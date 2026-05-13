@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../lib/auth";
 import LegalFooter from "../components/LegalFooter";
+import { supabase } from "../lib/supabase";
 
 const locationOptions = {
   Portugal: {
@@ -55,7 +56,9 @@ export default function LoginPage() {
   const [city, setCity] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
@@ -68,6 +71,7 @@ export default function LoginPage() {
 
       setLoading(true);
       setError(null);
+      setSuccess(null);
 
       if (isSignUp) {
         if (!username || !phone || !country || !region || !city) {
@@ -103,6 +107,32 @@ export default function LoginPage() {
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleAuth();
+  };
+
+  const handlePasswordReset = async () => {
+    const cleanEmail = email.trim();
+
+    if (!cleanEmail) {
+      setError("Preenche o email para recuperar a password.");
+      setSuccess(null);
+      return;
+    }
+
+    setResetLoading(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: window.location.origin,
+      });
+      if (resetError) throw resetError;
+
+      setSuccess(`Enviamos um email de recuperacao para ${cleanEmail}.`);
+    } catch (err: any) {
+      setError(getAuthErrorMessage(err));
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   return (
@@ -217,21 +247,27 @@ export default function LoginPage() {
         </div>
 
         {error && <p className="error-text">{error}</p>}
+        {success && <p className="success-text">{success}</p>}
 
         <button className="btn btn-primary btn-lg" onClick={handleAuth} disabled={loading}>
           {loading ? "A processar..." : isSignUp ? "Criar conta" : "Entrar"}
         </button>
 
-        <button className="btn btn-ghost" onClick={() => {
+        <button className={`btn ${isSignUp ? "btn-ghost" : "btn-register-cta"}`} onClick={() => {
           setIsSignUp(!isSignUp);
           setAcceptedTerms(false);
+          setError(null);
+          setSuccess(null);
         }} disabled={loading}>
           {isSignUp ? "Ja tens conta? Entra" : "Nao tens conta? Regista-te"}
         </button>
 
-        <a className="login-terms-link" href="/terms.html" target="_blank" rel="noreferrer">
-          Termos e Condições
-        </a>
+        {!isSignUp && (
+          <button className="btn btn-forgot-password" type="button" onClick={handlePasswordReset} disabled={loading || resetLoading}>
+            {resetLoading ? "A enviar..." : "Esqueci-me da senha"}
+          </button>
+        )}
+
       </div>
       <LegalFooter />
     </div>

@@ -1,0 +1,21 @@
+{
+  "name": "Papa Cromos",
+  "short_name": "Papa Cromos",
+  "description": "Caderneta digital para organizar coleções, repetidos e trocas de cromos.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#0d9488",
+  "categories": ["sports", "productivity", "social"],
+  "lang": "pt-PT",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "2000x2000",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
