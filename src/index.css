@@ -2222,18 +2222,18 @@ textarea {
 .btn-album-back {
   min-height: 42px;
   padding: 9px 15px;
-  border: 1px solid var(--border);
-  background: white;
-  color: var(--text);
+  border: 1px solid #14b8a6;
+  background: linear-gradient(135deg, #14b8a6, #5ecb9d);
+  color: white;
   font-size: 14px;
   font-weight: 800;
   box-shadow: var(--shadow-sm);
 }
 
 .btn-album-back:hover:not(:disabled) {
-  border-color: var(--primary-600);
-  background: var(--primary-50);
-  color: var(--primary-700);
+  border-color: #0f9f90;
+  background: linear-gradient(135deg, #0f9f90, #48b987);
+  color: white;
   box-shadow: var(--shadow);
 }
 
@@ -2246,16 +2246,17 @@ textarea {
 .btn-collection-back {
   min-height: 42px;
   padding: 9px 15px;
-  border: 1px solid var(--primary-600);
-  background: var(--primary-50);
-  color: var(--primary-800);
+  border: 1px solid #14b8a6;
+  background: linear-gradient(135deg, #14b8a6, #5ecb9d);
+  color: white;
   font-size: 14px;
   font-weight: 900;
   box-shadow: var(--shadow-sm);
 }
 
 .btn-collection-back:hover:not(:disabled) {
-  background: var(--primary-600);
+  border-color: #0f9f90;
+  background: linear-gradient(135deg, #0f9f90, #48b987);
   color: white;
   box-shadow: var(--shadow);
 }
@@ -2269,8 +2270,8 @@ textarea {
 .btn-album-nav {
   min-height: 42px;
   padding: 9px 15px;
-  border: 1px solid var(--primary-600);
-  background: var(--primary-600);
+  border: 1px solid #c9a72c;
+  background: #d6b532;
   color: white;
   font-size: 14px;
   font-weight: 800;
@@ -2278,8 +2279,8 @@ textarea {
 }
 
 .btn-album-nav:hover:not(:disabled) {
-  background: var(--primary-700);
-  border-color: var(--primary-700);
+  background: #b99524;
+  border-color: #b99524;
   box-shadow: var(--shadow-md);
 }
 

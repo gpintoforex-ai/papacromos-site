@@ -1062,7 +1062,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
             onChange={(event) => setVoiceText(event.target.value)}
           />
           <div className="voice-mark-actions">
-            <button className="btn btn-ghost btn-sm" type="button" onClick={startVoiceRecognition} disabled={voiceListening}>
+            <button className="btn btn-voice-toggle btn-sm" type="button" onClick={startVoiceRecognition} disabled={voiceListening}>
               <Mic size={14} /> {voiceListening ? "A ouvir..." : "Ditar"}
             </button>
             <button className="btn btn-primary btn-sm" type="button" onClick={markSpokenStickers} disabled={!voiceText.trim()}>
