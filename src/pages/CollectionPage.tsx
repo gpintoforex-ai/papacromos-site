@@ -883,6 +883,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
     selectedAlbumTeamIndex >= 0 && selectedAlbumTeamIndex < albumTeamButtons.length - 1
       ? albumTeamButtons[selectedAlbumTeamIndex + 1]
       : null;
+  const showVoiceMarkControls = !isWorldAlbum || Boolean(selectedAlbumTeamName);
 
   const openAlbumTeam = (teamName: string) => {
     setSelectedAlbumTeamName(teamName);
@@ -1093,12 +1094,14 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <button className="btn btn-voice-toggle btn-sm" type="button" onClick={() => setVoicePanelOpen((open) => !open)}>
-          <Mic size={14} /> Marcar por voz
-        </button>
+        {showVoiceMarkControls && (
+          <button className="btn btn-voice-toggle btn-sm" type="button" onClick={() => setVoicePanelOpen((open) => !open)}>
+            <Mic size={14} /> Marcar por voz
+          </button>
+        )}
       </div>
 
-      {voicePanelOpen && (
+      {showVoiceMarkControls && voicePanelOpen && (
         <div className="voice-mark-panel">
           <div className="voice-mark-header">
             <div>
