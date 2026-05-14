@@ -7,7 +7,7 @@ VALUES (
   'b2026000-0000-4000-8000-000000000001',
   'Caderneta Mundial 2026',
   'Uma caderneta comunitaria independente inspirada no grande torneio mundial de futebol. Cada selecao tem foto de equipa e 18 jogadores.',
-  'https://images.pexels.com/photos/46798/the-ball-stadion-football-the-pitch.jpg?auto=compress&cs=tinysrgb&w=800',
+  '/logo.png',
   912
 )
 ON CONFLICT (id) DO UPDATE SET

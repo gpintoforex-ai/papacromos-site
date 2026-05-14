@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import StickerCard from "../components/StickerCard";
-import { Search, BookOpen, Camera, ArrowLeft, X } from "lucide-react";
+import { Search, BookOpen, Camera, ArrowLeft, X, Mic, ClipboardCheck } from "lucide-react";
 
 interface Collection {
   id: string;
@@ -31,6 +31,7 @@ interface UserSticker {
 }
 
 type FilterMode = "all" | "have" | "repeated" | "want" | "missing";
+type VoiceMarkMode = "have" | "want";
 
 interface AlbumTeamPage {
   teamName: string;
@@ -308,6 +309,11 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
   const [selectedAlbumTeamName, setSelectedAlbumTeamName] = useState<string | null>(null);
   const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [voicePanelOpen, setVoicePanelOpen] = useState(false);
+  const [voiceMode, setVoiceMode] = useState<VoiceMarkMode>("have");
+  const [voiceText, setVoiceText] = useState("");
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceResult, setVoiceResult] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -548,6 +554,174 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
     } catch (err: any) {
       setError(err.message || "Erro ao atualizar quantidade.");
     }
+  };
+
+  const getStickerBySpokenNumber = (number: number) => {
+    const collectionStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
+    if (isWorldAlbum && selectedAlbumTeamName && number >= 1 && number <= 20) {
+      const teamSticker = collectionStickers.find(
+        (sticker) => getStickerTeamName(sticker.name) === selectedAlbumTeamName && getAlbumLocalNumber(sticker) === number
+      );
+      if (teamSticker) return teamSticker;
+    }
+
+    return collectionStickers.find((sticker) => sticker.number === number) || null;
+  };
+
+  const parseSpokenStickerCounts = (text: string) => {
+    const counts = new Map<number, number>();
+    const matches = text.match(/\d+/g) || [];
+
+    matches.forEach((match) => {
+      const number = Number.parseInt(match, 10);
+      if (!Number.isFinite(number) || number <= 0) return;
+      counts.set(number, (counts.get(number) || 0) + 1);
+    });
+
+    return counts;
+  };
+
+  const markSpokenStickers = async () => {
+    setError(null);
+    setVoiceResult(null);
+    try {
+      if (!user?.id) throw new Error("Sessao expirada. Entra novamente.");
+      if (!selectedCollectionId) throw new Error("Abre uma colecao primeiro.");
+
+      const spokenCounts = parseSpokenStickerCounts(voiceText);
+      if (spokenCounts.size === 0) {
+        throw new Error("Nao encontrei numeros de cromos no texto.");
+      }
+
+      const matched = Array.from(spokenCounts.entries())
+        .map(([number, count]) => ({ number, count, sticker: getStickerBySpokenNumber(number) }))
+        .filter((item): item is { number: number; count: number; sticker: Sticker } => Boolean(item.sticker));
+      const missingNumbers = Array.from(spokenCounts.keys())
+        .filter((number) => !matched.some((item) => item.number === number));
+
+      if (matched.length === 0) {
+        throw new Error("Nenhum dos numeros indicados pertence a esta caderneta.");
+      }
+
+      if (voiceMode === "have") {
+        const existingHaveByStickerId = new Map(
+          userStickers
+            .filter((userSticker) => userSticker.user_id === user.id && userSticker.status === "have")
+            .map((userSticker) => [userSticker.sticker_id, userSticker])
+        );
+        const updates = matched
+          .filter((item) => existingHaveByStickerId.has(item.sticker.id))
+          .map((item) => {
+            const existing = existingHaveByStickerId.get(item.sticker.id)!;
+            return supabase
+              .from("user_stickers")
+              .update({ quantity: Math.max(existing.quantity, item.count) })
+              .eq("id", existing.id);
+          });
+        const inserts = matched
+          .filter((item) => !existingHaveByStickerId.has(item.sticker.id))
+          .map((item) => ({
+            user_id: user.id,
+            sticker_id: item.sticker.id,
+            status: "have",
+            quantity: item.count,
+          }));
+
+        for (const update of updates) {
+          const { error: updateError } = await update;
+          if (updateError) throw updateError;
+        }
+
+        if (inserts.length > 0) {
+          const { error: insertError } = await supabase.from("user_stickers").upsert(inserts, {
+            onConflict: "user_id,sticker_id,status",
+          });
+          if (insertError) throw insertError;
+        }
+
+        const wantIdsToRemove = userStickers
+          .filter((userSticker) =>
+            userSticker.user_id === user.id &&
+            userSticker.status === "want" &&
+            matched.some((item) => item.sticker.id === userSticker.sticker_id)
+          )
+          .map((userSticker) => userSticker.id);
+        if (wantIdsToRemove.length > 0) {
+          const { error: deleteWantError } = await supabase.from("user_stickers").delete().in("id", wantIdsToRemove);
+          if (deleteWantError) throw deleteWantError;
+        }
+      } else {
+        const existingWantIds = new Set(
+          userStickers
+            .filter((userSticker) => userSticker.user_id === user.id && userSticker.status === "want")
+            .map((userSticker) => userSticker.sticker_id)
+        );
+        const haveIdsToRemove = userStickers
+          .filter((userSticker) =>
+            userSticker.user_id === user.id &&
+            userSticker.status === "have" &&
+            matched.some((item) => item.sticker.id === userSticker.sticker_id)
+          )
+          .map((userSticker) => userSticker.id);
+        if (haveIdsToRemove.length > 0) {
+          const { error: deleteHaveError } = await supabase.from("user_stickers").delete().in("id", haveIdsToRemove);
+          if (deleteHaveError) throw deleteHaveError;
+        }
+
+        const wantsToInsert = matched
+          .filter((item) => !existingWantIds.has(item.sticker.id))
+          .map((item) => ({
+            user_id: user.id,
+            sticker_id: item.sticker.id,
+            status: "want",
+            quantity: 1,
+          }));
+        if (wantsToInsert.length > 0) {
+          const { error: insertWantError } = await supabase.from("user_stickers").upsert(wantsToInsert, {
+            onConflict: "user_id,sticker_id,status",
+            ignoreDuplicates: true,
+          });
+          if (insertWantError) throw insertWantError;
+        }
+      }
+
+      await loadData();
+      onCollectionChange?.();
+      setVoiceResult(`${matched.length} cromo${matched.length === 1 ? "" : "s"} marcado${matched.length === 1 ? "" : "s"}${missingNumbers.length ? `. Nao encontrei: ${missingNumbers.join(", ")}.` : "."}`);
+    } catch (err: any) {
+      setError(err.message || "Erro ao marcar cromos automaticamente.");
+    }
+  };
+
+  const startVoiceRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    setError(null);
+    setVoiceResult(null);
+
+    if (!SpeechRecognition) {
+      setError("Este browser nao suporta reconhecimento de voz. Podes escrever os numeros na caixa.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "pt-PT";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    setVoiceListening(true);
+
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .map((result: any) => result[0]?.transcript || "")
+        .join(" ");
+      setVoiceText((current) => [current, transcript].filter(Boolean).join(" "));
+    };
+    recognition.onerror = () => {
+      setError("Nao foi possivel reconhecer a voz. Tenta novamente ou escreve os numeros.");
+    };
+    recognition.onend = () => {
+      setVoiceListening(false);
+    };
+    recognition.start();
   };
 
   const uploadStickerImage = async (stickerId: string, file: File | null) => {
@@ -831,7 +1005,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
 
       <div className="collection-picker">
         <button
-          className="btn btn-ghost btn-sm"
+          className="btn btn-collection-back"
           type="button"
           onClick={() => {
             setSelectedCollectionId(null);
@@ -840,7 +1014,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
             setSelectedAlbumTeamName(null);
           }}
         >
-          <ArrowLeft size={14} /> Colecoes
+          <ArrowLeft size={16} /> Coleções
         </button>
         <BookOpen size={16} />
         <span>{selectedCollection?.name || "Colecao"}</span>
@@ -857,7 +1031,57 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+        <button className="btn btn-primary btn-sm" type="button" onClick={() => setVoicePanelOpen((open) => !open)}>
+          <Mic size={14} /> Marcar por voz
+        </button>
       </div>
+
+      {voicePanelOpen && (
+        <div className="voice-mark-panel">
+          <div className="voice-mark-header">
+            <div>
+              <strong>Marcar cromos automaticamente</strong>
+              <span>Diz ou escreve os numeros dos cromos, por exemplo: 48, 226, 98.</span>
+            </div>
+            <div className="voice-mark-mode">
+              <button
+                type="button"
+                className={voiceMode === "have" ? "active" : ""}
+                onClick={() => setVoiceMode("have")}
+              >
+                Tenho
+              </button>
+              <button
+                type="button"
+                className={voiceMode === "want" ? "active" : ""}
+                onClick={() => setVoiceMode("want")}
+              >
+                Procuro
+              </button>
+            </div>
+          </div>
+          <textarea
+            value={voiceText}
+            placeholder="Ex.: 48 226 98"
+            onChange={(event) => setVoiceText(event.target.value)}
+          />
+          <div className="voice-mark-actions">
+            <button className="btn btn-ghost btn-sm" type="button" onClick={startVoiceRecognition} disabled={voiceListening}>
+              <Mic size={14} /> {voiceListening ? "A ouvir..." : "Ditar"}
+            </button>
+            <button className="btn btn-primary btn-sm" type="button" onClick={markSpokenStickers} disabled={!voiceText.trim()}>
+              <ClipboardCheck size={14} /> Marcar
+            </button>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => setVoiceText("")}>
+              Limpar
+            </button>
+          </div>
+          {voiceResult && <p className="success-text">{voiceResult}</p>}
+          {isWorldAlbum && selectedAlbumTeamName && (
+            <p className="muted-text">Nesta selecao tambem podes dizer numeros locais de 1 a 20.</p>
+          )}
+        </div>
+      )}
 
       {error && <p className="error-text">{error}</p>}
 

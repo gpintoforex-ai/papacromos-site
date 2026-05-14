@@ -30,6 +30,28 @@ interface TradeWithDetails {
   messages: TradeMessage[];
 }
 
+interface TradeStickerDetails {
+  name: string;
+  number: number;
+  imageUrl: string;
+  rarity: string;
+}
+
+interface TradeProposalItem {
+  id: string;
+  offeredSticker: TradeStickerDetails;
+  requestedSticker: TradeStickerDetails;
+}
+
+interface GroupedTradeWithDetails extends Omit<TradeWithDetails, "id" | "offered_sticker" | "requested_sticker" | "messages"> {
+  id: string;
+  ids: string[];
+  offeredStickers: TradeStickerDetails[];
+  requestedStickers: TradeStickerDetails[];
+  items: TradeProposalItem[];
+  messages: TradeMessage[];
+}
+
 interface TradeMessage {
   id: string;
   trade_id: string;
@@ -40,6 +62,72 @@ interface TradeMessage {
 }
 
 type TradeFilter = "all" | "pending" | "accepted" | "completed" | "rejected";
+
+function proposalKey(trade: TradeWithDetails) {
+  return [
+    trade.from_user_id,
+    trade.to_user_id,
+    trade.status,
+    trade.delivery_method,
+    trade.partner_id || "",
+    trade.note || "",
+    trade.created_at,
+  ].join("|");
+}
+
+function groupTradeProposals(trades: TradeWithDetails[]): GroupedTradeWithDetails[] {
+  const groups = new Map<string, GroupedTradeWithDetails>();
+
+  trades.forEach((trade) => {
+    const key = proposalKey(trade);
+    const existing = groups.get(key);
+    const offeredSticker = {
+      name: trade.offered_sticker.name,
+      number: trade.offered_sticker.number,
+      imageUrl: trade.offered_sticker.image_url,
+      rarity: trade.offered_sticker.rarity,
+    };
+    const requestedSticker = {
+      name: trade.requested_sticker.name,
+      number: trade.requested_sticker.number,
+      imageUrl: trade.requested_sticker.image_url,
+      rarity: trade.requested_sticker.rarity,
+    };
+
+    if (!existing) {
+      groups.set(key, {
+        ...trade,
+        id: trade.id,
+        ids: [trade.id],
+        offeredStickers: [offeredSticker],
+        requestedStickers: [requestedSticker],
+        items: [{
+          id: trade.id,
+          offeredSticker,
+          requestedSticker,
+        }],
+        messages: trade.messages,
+      });
+      return;
+    }
+
+    const messageIds = new Set(existing.messages.map((message) => message.id));
+    existing.ids.push(trade.id);
+    existing.offeredStickers.push(offeredSticker);
+    existing.requestedStickers.push(requestedSticker);
+    existing.items.push({
+      id: trade.id,
+      offeredSticker,
+      requestedSticker,
+    });
+    existing.messages = [
+      ...existing.messages,
+      ...trade.messages.filter((message) => !messageIds.has(message.id)),
+    ].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  });
+
+  return Array.from(groups.values());
+}
 
 export default function TradesPage({ onPendingTradeCountChange }: TradesPageProps) {
   const { user, profile } = useAuth();
@@ -116,7 +204,7 @@ export default function TradesPage({ onPendingTradeCountChange }: TradesPageProp
         messages: messagesByTradeId.get(t.id) || [],
       }));
       setTrades(enriched as TradeWithDetails[]);
-      onPendingTradeCountChange?.(enriched.filter((trade) => trade.status === "pending").length);
+      onPendingTradeCountChange?.(groupTradeProposals(enriched as TradeWithDetails[]).filter((trade) => trade.status === "pending").length);
     } catch (err: any) {
       setTrades([]);
       onPendingTradeCountChange?.(0);
@@ -140,9 +228,10 @@ export default function TradesPage({ onPendingTradeCountChange }: TradesPageProp
     return partners.find((partner: any) => userCity && partner.city?.trim().toLowerCase() === userCity) || partners[0] || null;
   };
 
-  const updateTradeStatus = async (tradeId: string, status: string) => {
+  const updateTradeStatus = async (tradeIds: string | string[], status: string) => {
+    const ids = Array.isArray(tradeIds) ? tradeIds : [tradeIds];
     const updates: Record<string, any> = { status, updated_at: new Date().toISOString() };
-    const existingTrade = trades.find((trade) => trade.id === tradeId);
+    const existingTrade = trades.find((trade) => trade.id === ids[0]);
 
     if (status === "accepted") {
       if (existingTrade?.partner_id) {
@@ -156,7 +245,7 @@ export default function TradesPage({ onPendingTradeCountChange }: TradesPageProp
       }
     }
 
-    const { error } = await supabase.from("trade_offers").update(updates).eq("id", tradeId);
+    const { error } = await supabase.from("trade_offers").update(updates).in("id", ids);
     if (error) {
       setError(error.message || "Erro ao atualizar troca.");
       return;
@@ -164,7 +253,7 @@ export default function TradesPage({ onPendingTradeCountChange }: TradesPageProp
 
     if (status === "accepted" && updates.partner_id) {
       await supabase.from("trade_messages").insert({
-        trade_id: tradeId,
+        trade_id: ids[0],
         user_id: user?.id,
         message: "Troca aceite. O sistema atribuiu um parceiro para entrega e recolha dos cromos.",
       });
@@ -191,8 +280,9 @@ export default function TradesPage({ onPendingTradeCountChange }: TradesPageProp
     await loadTrades();
   };
 
-  const filteredTrades = trades.filter((t) => filter === "all" || t.status === filter);
-  const pendingCount = trades.filter((t) => t.status === "pending").length;
+  const groupedTrades = groupTradeProposals(trades);
+  const filteredTrades = groupedTrades.filter((t) => filter === "all" || t.status === filter);
+  const pendingCount = groupedTrades.filter((t) => t.status === "pending").length;
 
   if (loading) return <div className="loading">A carregar trocas...</div>;
 
@@ -234,18 +324,10 @@ export default function TradesPage({ onPendingTradeCountChange }: TradesPageProp
             <TradeCard
               key={trade.id}
               id={trade.id}
-              offeredSticker={{
-                name: trade.offered_sticker.name,
-                number: trade.offered_sticker.number,
-                imageUrl: trade.offered_sticker.image_url,
-                rarity: trade.offered_sticker.rarity,
-              }}
-              requestedSticker={{
-                name: trade.requested_sticker.name,
-                number: trade.requested_sticker.number,
-                imageUrl: trade.requested_sticker.image_url,
-                rarity: trade.requested_sticker.rarity,
-              }}
+              ids={trade.ids}
+              offeredStickers={trade.offeredStickers}
+              requestedStickers={trade.requestedStickers}
+              proposalItems={trade.items}
               fromUser={trade.from_user_id === user?.id ? trade.to_user_id : trade.from_user_id}
               fromUsername={trade.from_user_id === user?.id ? trade.to_username : trade.from_username}
               fromAvatarSeed={trade.from_user_id === user?.id ? trade.to_avatar_seed : trade.from_avatar_seed}

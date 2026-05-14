@@ -22,6 +22,10 @@ export interface Match {
   };
 }
 
+export function countUniqueRequestedStickers(matches: Match[]) {
+  return new Set(matches.map((match) => match.requestedSticker.id)).size;
+}
+
 const userStickerSelect = "user_id, sticker_id, quantity, stickers(id, name, number, image_url, rarity)";
 const queryChunkSize = 80;
 

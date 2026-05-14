@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { getAvatarColor, getAvatarInitial } from "../lib/avatar";
 import { ArrowRightLeft, ChevronDown, Minus, Plus, RefreshCw } from "lucide-react";
-import { findUserMatches, type Match } from "../lib/matches";
+import { countUniqueRequestedStickers, findUserMatches, type Match } from "../lib/matches";
 import type { DeliveryMethod } from "../lib/trades";
 
 interface MatchesPageProps {
@@ -143,7 +143,7 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
 
       const matchList = await findUserMatches(user.id);
       setMatches(matchList);
-      onMatchesChange?.(matchList.length);
+      onMatchesChange?.(countUniqueRequestedStickers(matchList));
       setOpenUserId(null);
       setOfferedQuantities({});
       setRequestedQuantities({});

@@ -9,7 +9,7 @@ VALUES (
   'b2026000-0000-4000-8000-000000000001',
   'Caderneta Mundial 2026',
   'Uma caderneta comunitaria independente inspirada no grande torneio mundial de futebol. Cada selecao tem escudo, foto de equipa e 18 jogadores.',
-  'https://images.pexels.com/photos/46798/the-ball-stadion-football-the-pitch.jpg?auto=compress&cs=tinysrgb&w=800',
+  '/logo.png',
   960
 )
 ON CONFLICT (id) DO UPDATE SET
@@ -92,6 +92,98 @@ album_stickers AS (
     ((teams.team_order - 1) * 20 + slots.slot_order) AS number,
     teams.team_name || ' - ' || slots.slot_name AS name,
     CASE
+      WHEN teams.team_name = 'Tchéquia' THEN
+        CASE slots.slot_order
+          WHEN 1 THEN '/stickers/tchequia/tchequia-01.png'
+          WHEN 2 THEN '/stickers/tchequia/tchequia-02.png'
+          WHEN 3 THEN '/stickers/tchequia/tchequia-03.png'
+          WHEN 4 THEN '/stickers/tchequia/tchequia-04.png'
+          WHEN 5 THEN '/stickers/tchequia/tchequia-06.png'
+          WHEN 6 THEN '/stickers/tchequia/tchequia-07.png'
+          WHEN 7 THEN '/stickers/tchequia/tchequia-08.png'
+          WHEN 8 THEN '/stickers/tchequia/tchequia-09.png'
+          WHEN 9 THEN '/stickers/tchequia/tchequia-10.png'
+          WHEN 10 THEN '/stickers/tchequia/tchequia-11.png'
+          WHEN 11 THEN '/stickers/tchequia/tchequia-12.png'
+          WHEN 12 THEN '/stickers/tchequia/tchequia-13.png'
+          WHEN 13 THEN '/stickers/tchequia/tchequia-05.png'
+          WHEN 14 THEN '/stickers/tchequia/tchequia-14.png'
+          WHEN 15 THEN '/stickers/tchequia/tchequia-15.png'
+          WHEN 16 THEN '/stickers/tchequia/tchequia-16.png'
+          WHEN 17 THEN '/stickers/tchequia/tchequia-17.png'
+          WHEN 18 THEN '/stickers/tchequia/tchequia-18.png'
+          WHEN 19 THEN '/stickers/tchequia/tchequia-19.png'
+          WHEN 20 THEN '/stickers/tchequia/tchequia-20.png'
+        END
+      WHEN teams.team_name = 'República da Coreia' THEN
+        CASE slots.slot_order
+          WHEN 1 THEN '/stickers/republica-da-coreia/republica-da-coreia-01.png'
+          WHEN 2 THEN '/stickers/republica-da-coreia/republica-da-coreia-02.png'
+          WHEN 3 THEN '/stickers/republica-da-coreia/republica-da-coreia-03.png'
+          WHEN 4 THEN '/stickers/republica-da-coreia/republica-da-coreia-04.png'
+          WHEN 5 THEN '/stickers/republica-da-coreia/republica-da-coreia-06.png'
+          WHEN 6 THEN '/stickers/republica-da-coreia/republica-da-coreia-07.png'
+          WHEN 7 THEN '/stickers/republica-da-coreia/republica-da-coreia-08.png'
+          WHEN 8 THEN '/stickers/republica-da-coreia/republica-da-coreia-09.png'
+          WHEN 9 THEN '/stickers/republica-da-coreia/republica-da-coreia-10.png'
+          WHEN 10 THEN '/stickers/republica-da-coreia/republica-da-coreia-11.png'
+          WHEN 11 THEN '/stickers/republica-da-coreia/republica-da-coreia-12.png'
+          WHEN 12 THEN '/stickers/republica-da-coreia/republica-da-coreia-13.png'
+          WHEN 13 THEN '/stickers/republica-da-coreia/republica-da-coreia-05.png'
+          WHEN 14 THEN '/stickers/republica-da-coreia/republica-da-coreia-14.png'
+          WHEN 15 THEN '/stickers/republica-da-coreia/republica-da-coreia-15.png'
+          WHEN 16 THEN '/stickers/republica-da-coreia/republica-da-coreia-16.png'
+          WHEN 17 THEN '/stickers/republica-da-coreia/republica-da-coreia-17.png'
+          WHEN 18 THEN '/stickers/republica-da-coreia/republica-da-coreia-18.png'
+          WHEN 19 THEN '/stickers/republica-da-coreia/republica-da-coreia-19.png'
+          WHEN 20 THEN '/stickers/republica-da-coreia/republica-da-coreia-20.png'
+        END
+      WHEN teams.team_name = 'África do Sul' THEN
+        CASE slots.slot_order
+          WHEN 1 THEN '/stickers/africa-do-sul/africa-do-sul-01.png'
+          WHEN 2 THEN '/stickers/africa-do-sul/africa-do-sul-02.png'
+          WHEN 3 THEN '/stickers/africa-do-sul/africa-do-sul-03.png'
+          WHEN 4 THEN '/stickers/africa-do-sul/africa-do-sul-04.png'
+          WHEN 5 THEN '/stickers/africa-do-sul/africa-do-sul-06.png'
+          WHEN 6 THEN '/stickers/africa-do-sul/africa-do-sul-07.png'
+          WHEN 7 THEN '/stickers/africa-do-sul/africa-do-sul-08.png'
+          WHEN 8 THEN '/stickers/africa-do-sul/africa-do-sul-09.png'
+          WHEN 9 THEN '/stickers/africa-do-sul/africa-do-sul-10.png'
+          WHEN 10 THEN '/stickers/africa-do-sul/africa-do-sul-11.png'
+          WHEN 11 THEN '/stickers/africa-do-sul/africa-do-sul-12.png'
+          WHEN 12 THEN '/stickers/africa-do-sul/africa-do-sul-13.png'
+          WHEN 13 THEN '/stickers/africa-do-sul/africa-do-sul-05.png'
+          WHEN 14 THEN '/stickers/africa-do-sul/africa-do-sul-14.png'
+          WHEN 15 THEN '/stickers/africa-do-sul/africa-do-sul-15.png'
+          WHEN 16 THEN '/stickers/africa-do-sul/africa-do-sul-16.png'
+          WHEN 17 THEN '/stickers/africa-do-sul/africa-do-sul-17.png'
+          WHEN 18 THEN '/stickers/africa-do-sul/africa-do-sul-18.png'
+          WHEN 19 THEN '/stickers/africa-do-sul/africa-do-sul-19.png'
+          WHEN 20 THEN '/stickers/africa-do-sul/africa-do-sul-20.png'
+        END
+      WHEN teams.team_name = 'México' THEN
+        CASE slots.slot_order
+          WHEN 1 THEN '/stickers/mexico/mexico-01.png'
+          WHEN 2 THEN '/stickers/mexico/mexico-02.png'
+          WHEN 3 THEN '/stickers/mexico/mexico-03.png'
+          WHEN 4 THEN '/stickers/mexico/mexico-04.png'
+          WHEN 5 THEN '/stickers/mexico/mexico-06.png'
+          WHEN 6 THEN '/stickers/mexico/mexico-07.png'
+          WHEN 7 THEN '/stickers/mexico/mexico-08.png'
+          WHEN 8 THEN '/stickers/mexico/mexico-09.png'
+          WHEN 9 THEN '/stickers/mexico/mexico-10.png'
+          WHEN 10 THEN '/stickers/mexico/mexico-11.png'
+          WHEN 11 THEN '/stickers/mexico/mexico-12.png'
+          WHEN 12 THEN '/stickers/mexico/mexico-13.png'
+          WHEN 13 THEN '/stickers/mexico/mexico-05.png'
+          WHEN 14 THEN '/stickers/mexico/mexico-14.png'
+          WHEN 15 THEN '/stickers/mexico/mexico-15.png'
+          WHEN 16 THEN '/stickers/mexico/mexico-16.png'
+          WHEN 17 THEN '/stickers/mexico/mexico-17.png'
+          WHEN 18 THEN '/stickers/mexico/mexico-18.png'
+          WHEN 19 THEN '/stickers/mexico/mexico-19.png'
+          WHEN 20 THEN '/stickers/mexico/mexico-20.png'
+        END
       WHEN slots.slot_order = 1 THEN 'https://images.pexels.com/photos/399187/pexels-photo-399187.jpeg?auto=compress&cs=tinysrgb&w=400'
       WHEN slots.slot_order = 13 THEN 'https://images.pexels.com/photos/399187/pexels-photo-399187.jpeg?auto=compress&cs=tinysrgb&w=600'
       WHEN slots.slot_order = 18 THEN 'https://images.pexels.com/photos/114296/pexels-photo-114296.jpeg?auto=compress&cs=tinysrgb&w=400'

@@ -6,13 +6,14 @@ import MatchesPage from "./pages/MatchesPage";
 import TradesPage from "./pages/TradesPage";
 import AdminPage from "./pages/AdminPage";
 import PartnersPage from "./pages/PartnersPage";
+import SharePage from "./pages/SharePage";
 import CookieConsent from "./components/CookieConsent";
 import InstallAppPrompt from "./components/InstallAppPrompt";
 import { useEffect, useState } from "react";
-import { findUserMatches } from "./lib/matches";
+import { countUniqueRequestedStickers, findUserMatches } from "./lib/matches";
 import { supabase } from "./lib/supabase";
 
-type Page = "collection" | "matches" | "trades" | "partners" | "admin";
+type Page = "collection" | "matches" | "trades" | "share" | "partners" | "admin";
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -20,6 +21,7 @@ function AppContent() {
   const [collectionHomeKey, setCollectionHomeKey] = useState(0);
   const [matchCount, setMatchCount] = useState(0);
   const [pendingTradeCount, setPendingTradeCount] = useState(0);
+  const [sharedUserId, setSharedUserId] = useState<string | null>(null);
 
   const refreshMatchCount = async () => {
     if (!user?.id) {
@@ -29,7 +31,7 @@ function AppContent() {
 
     try {
       const matches = await findUserMatches(user.id);
-      setMatchCount(matches.length);
+      setMatchCount(countUniqueRequestedStickers(matches));
     } catch {
       setMatchCount(0);
     }
@@ -55,6 +57,12 @@ function AppContent() {
   };
 
   useEffect(() => {
+    const sharedId = new URLSearchParams(window.location.search).get("share");
+    if (sharedId) {
+      setSharedUserId(sharedId);
+      setPage("share");
+    }
+
     refreshMatchCount();
     refreshPendingTradeCount();
 
@@ -76,6 +84,12 @@ function AppContent() {
   const navigate = (nextPage: Page) => {
     if (nextPage === "collection") {
       setCollectionHomeKey((key) => key + 1);
+    }
+    if (nextPage === "share") {
+      setSharedUserId(null);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("share");
+      window.history.replaceState({}, "", url.toString());
     }
     setPage(nextPage);
   };
@@ -100,6 +114,7 @@ function AppContent() {
         {page === "collection" && <CollectionPage homeKey={collectionHomeKey} onCollectionChange={refreshMatchCount} />}
         {page === "matches" && <MatchesPage onMatchesChange={setMatchCount} />}
         {page === "trades" && <TradesPage onPendingTradeCountChange={setPendingTradeCount} />}
+        {page === "share" && <SharePage sharedUserId={sharedUserId} />}
         {page === "partners" && <PartnersPage />}
         {page === "admin" && <AdminPage />}
       </Layout>

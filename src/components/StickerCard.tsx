@@ -49,10 +49,11 @@ export default function StickerCard({
   const isHave = status === "have";
   const displayImage = imageUrl || fallbackImage;
   const isFallbackImage = !imageUrl;
+  const isTeamPhoto = name.includes("Foto de equipa");
 
   return (
     <div
-      className={`sticker-card ${compact ? "compact" : ""} ${selected ? "selected" : ""}`}
+      className={`sticker-card ${compact ? "compact" : ""} ${selected ? "selected" : ""} ${isTeamPhoto ? "team-photo" : ""}`}
       data-sticker-id={stickerId}
       onClick={() => {
         if (!onClick) return;
