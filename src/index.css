@@ -1326,6 +1326,13 @@ textarea {
   justify-content: flex-end;
 }
 
+.collection-header-side {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .stat {
   text-align: center;
 }
@@ -1530,6 +1537,19 @@ textarea {
 }
 
 .search-box svg { color: var(--text-muted); flex-shrink: 0; }
+
+.btn-voice-toggle {
+  border: 1px solid #fecaca;
+  background: #fca5a5;
+  color: #7f1d1d;
+  font-weight: 800;
+}
+
+.btn-voice-toggle:hover:not(:disabled) {
+  border-color: #fca5a5;
+  background: #f87171;
+  color: #7f1d1d;
+}
 
 .voice-mark-panel {
   display: flex;
@@ -2531,7 +2551,20 @@ textarea {
 .match-user-counts span {
   padding: 5px 8px;
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-sm);
+}
+
+.match-user-counts span:nth-child(1) {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: var(--accent-100);
+  color: var(--accent-700);
+}
+
+.match-user-counts span:nth-child(2) {
+  border-color: rgba(13, 148, 136, 0.28);
+  background: var(--primary-100);
+  color: var(--primary-800);
 }
 
 .match-user-counts svg {
@@ -2665,13 +2698,28 @@ textarea {
 }
 
 .match-label {
-  display: block;
+  width: fit-content;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-weight: 900;
+  color: var(--primary-800);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0;
   margin-bottom: 8px;
+  padding: 5px 9px;
+  border: 1px solid rgba(13, 148, 136, 0.24);
+  border-radius: var(--radius-sm);
+  background: var(--primary-50);
+  box-shadow: var(--shadow-sm);
+  overflow-wrap: anywhere;
+}
+
+.match-sticker-col:first-child .match-label {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: var(--accent-100);
+  color: var(--accent-700);
 }
 
 .match-arrow {
@@ -4327,6 +4375,11 @@ textarea {
   .collection-header {
     flex-direction: column;
     gap: 16px;
+  }
+
+  .collection-header-side {
+    width: 100%;
+    align-items: stretch;
   }
 
   .collection-stats {

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import StickerCard from "../components/StickerCard";
-import { Search, BookOpen, Camera, ArrowLeft, X, Mic, ClipboardCheck } from "lucide-react";
+import { Search, Camera, ArrowLeft, X, Mic, ClipboardCheck } from "lucide-react";
 
 interface Collection {
   id: string;
@@ -959,7 +959,20 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
           <h2>{selectedCollection?.name || "Colecao"}</h2>
           <p>{totalCount} cromos para colecionar</p>
         </div>
-        <div className="collection-stats">
+        <div className="collection-header-side">
+          <button
+            className="btn btn-collection-back"
+            type="button"
+            onClick={() => {
+              setSelectedCollectionId(null);
+              setSearch("");
+              setFilter("all");
+              setSelectedAlbumTeamName(null);
+            }}
+          >
+            <ArrowLeft size={16} /> Coleções
+          </button>
+          <div className="collection-stats">
           <button
             className={`stat stat-button ${filter === "all" ? "active" : ""}`}
             type="button"
@@ -992,6 +1005,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
             <span className="stat-value">{wantCount}</span>
             <span className="stat-label">Procuro</span>
           </button>
+          </div>
         </div>
       </div>
 
@@ -1001,24 +1015,6 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
       </div>
       <div className="progress-bar">
         <div className="progress-fill" style={{ width: `${progress}%` }} />
-      </div>
-
-      <div className="collection-picker">
-        <button
-          className="btn btn-collection-back"
-          type="button"
-          onClick={() => {
-            setSelectedCollectionId(null);
-            setSearch("");
-            setFilter("all");
-            setSelectedAlbumTeamName(null);
-          }}
-        >
-          <ArrowLeft size={16} /> Coleções
-        </button>
-        <BookOpen size={16} />
-        <span>{selectedCollection?.name || "Colecao"}</span>
-        {selectedAlbumTeamName && <span>{selectedAlbumTeamName}</span>}
       </div>
 
       <div className="collection-toolbar">
@@ -1031,7 +1027,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <button className="btn btn-primary btn-sm" type="button" onClick={() => setVoicePanelOpen((open) => !open)}>
+        <button className="btn btn-voice-toggle btn-sm" type="button" onClick={() => setVoicePanelOpen((open) => !open)}>
           <Mic size={14} /> Marcar por voz
         </button>
       </div>

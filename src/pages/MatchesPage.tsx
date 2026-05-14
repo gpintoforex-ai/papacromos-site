@@ -360,7 +360,7 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
                     <div className="match-balance-row">
                       <span>Proponho: <strong>{offeredTotal}</strong></span>
                       <ArrowRightLeft size={16} />
-                      <span>PeÃ§o: <strong>{requestedTotal}</strong></span>
+                      <span>Peço: <strong>{requestedTotal}</strong></span>
                     </div>
 
                     <div className="match-proposal-fields">
