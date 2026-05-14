@@ -484,13 +484,15 @@ textarea {
   top: calc(100% + 10px);
   right: 0;
   z-index: 200;
-  width: min(320px, calc(100vw - 32px));
+  width: min(340px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
-  padding: 14px;
+  padding: 16px;
   text-align: left;
+  overflow: hidden;
 }
 
 .profile-popover-header {
@@ -505,6 +507,7 @@ textarea {
 .profile-popover-header strong {
   color: var(--text-heading);
   font-size: 15px;
+  overflow-wrap: anywhere;
 }
 
 .profile-popover-header span {
@@ -515,29 +518,34 @@ textarea {
 .profile-details {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
 
 .profile-details div {
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
 }
 
 .profile-details dt {
   color: var(--text-muted);
   font-size: 12px;
+  line-height: 1.35;
 }
 
 .profile-details dd {
   color: var(--text);
   font-size: 13px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .profile-account-id {
   font-family: var(--mono);
   font-size: 12px !important;
+  word-break: break-all;
 }
 
 .profile-actions {
@@ -551,6 +559,7 @@ textarea {
 
 .profile-actions .btn {
   justify-content: center;
+  width: 100%;
 }
 
 .profile-error {
@@ -891,6 +900,16 @@ textarea {
     max-width: 112px;
     padding: 5px 8px;
     font-size: 12px;
+  }
+
+  .profile-popover {
+    position: fixed;
+    top: 64px;
+    right: 12px;
+    left: auto;
+    width: min(340px, calc(100vw - 24px));
+    max-height: calc(100dvh - 84px);
+    overflow-y: auto;
   }
 
   .bottom-nav {
@@ -4537,6 +4556,12 @@ textarea {
     left: 10px;
     right: 10px;
     width: auto;
+    max-width: none;
+  }
+
+  .profile-details div {
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 10px;
   }
 
   .bottom-nav {
