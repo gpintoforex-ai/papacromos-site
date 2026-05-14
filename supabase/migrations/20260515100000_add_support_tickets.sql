@@ -20,22 +20,26 @@ CREATE TABLE IF NOT EXISTS support_ticket_messages (
 ALTER TABLE support_tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE support_ticket_messages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users and admins can view support tickets" ON support_tickets;
 CREATE POLICY "Users and admins can view support tickets"
   ON support_tickets FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id OR public.current_user_is_admin());
 
+DROP POLICY IF EXISTS "Users can create own support tickets" ON support_tickets;
 CREATE POLICY "Users can create own support tickets"
   ON support_tickets FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users and admins can update related support tickets" ON support_tickets;
 CREATE POLICY "Users and admins can update related support tickets"
   ON support_tickets FOR UPDATE
   TO authenticated
   USING (auth.uid() = user_id OR public.current_user_is_admin())
   WITH CHECK (auth.uid() = user_id OR public.current_user_is_admin());
 
+DROP POLICY IF EXISTS "Users and admins can view support messages" ON support_ticket_messages;
 CREATE POLICY "Users and admins can view support messages"
   ON support_ticket_messages FOR SELECT
   TO authenticated
@@ -48,6 +52,7 @@ CREATE POLICY "Users and admins can view support messages"
     )
   );
 
+DROP POLICY IF EXISTS "Users and admins can create support messages" ON support_ticket_messages;
 CREATE POLICY "Users and admins can create support messages"
   ON support_ticket_messages FOR INSERT
   TO authenticated
@@ -108,3 +113,5 @@ CREATE TRIGGER touch_support_ticket_from_message
   AFTER INSERT ON support_ticket_messages
   FOR EACH ROW
   EXECUTE FUNCTION touch_support_ticket_from_message();
+
+NOTIFY pgrst, 'reload schema';
