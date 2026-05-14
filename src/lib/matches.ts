@@ -26,7 +26,7 @@ export function countUniqueRequestedStickers(matches: Match[]) {
   return new Set(matches.map((match) => match.requestedSticker.id)).size;
 }
 
-const userStickerSelect = "user_id, sticker_id, quantity, stickers(id, name, number, image_url, rarity)";
+const userStickerSelect = "user_id, sticker_id, quantity, stickers(id, name, number, image_url, rarity, collection_id)";
 const queryChunkSize = 80;
 
 function chunkIds(ids: string[]) {
@@ -78,6 +78,40 @@ async function fetchProfilesByIds(userIds: string[]) {
   return profilesById;
 }
 
+function getStickerCollectionId(row: any) {
+  const sticker = Array.isArray(row.stickers) ? row.stickers[0] : row.stickers;
+  return sticker?.collection_id || "";
+}
+
+async function fetchInactiveCollectionIdsByUser(userIds: string[]) {
+  const inactiveByUser = new Map<string, Set<string>>();
+  const uniqueUserIds = Array.from(new Set(userIds)).filter(Boolean);
+
+  for (const chunk of chunkIds(uniqueUserIds)) {
+    const { data, error } = await supabase
+      .from("user_collection_preferences")
+      .select("user_id, collection_id")
+      .in("user_id", chunk)
+      .eq("is_active", false);
+    if (error) throw error;
+
+    (data || []).forEach((preference: any) => {
+      const inactiveIds = inactiveByUser.get(preference.user_id) || new Set<string>();
+      inactiveIds.add(preference.collection_id);
+      inactiveByUser.set(preference.user_id, inactiveIds);
+    });
+  }
+
+  return inactiveByUser;
+}
+
+function filterActiveCollectionRows(rows: any[], inactiveByUser: Map<string, Set<string>>) {
+  return rows.filter((row) => {
+    const collectionId = getStickerCollectionId(row);
+    return !collectionId || !inactiveByUser.get(row.user_id)?.has(collectionId);
+  });
+}
+
 export async function findUserMatches(userId: string): Promise<Match[]> {
   const { data: myHaves, error: myHavesError } = await supabase
     .from("user_stickers")
@@ -93,8 +127,15 @@ export async function findUserMatches(userId: string): Promise<Match[]> {
     .eq("status", "want");
   if (myWantsError) throw myWantsError;
 
-  const ownHaves = (myHaves || []).filter((item: any) => item.user_id === userId);
-  const ownWants = (myWants || []).filter((item: any) => item.user_id === userId);
+  const inactiveOwnCollections = await fetchInactiveCollectionIdsByUser([userId]);
+  const ownHaves = filterActiveCollectionRows(
+    (myHaves || []).filter((item: any) => item.user_id === userId),
+    inactiveOwnCollections
+  );
+  const ownWants = filterActiveCollectionRows(
+    (myWants || []).filter((item: any) => item.user_id === userId),
+    inactiveOwnCollections
+  );
   if (!ownHaves.length || !ownWants.length) return [];
 
   const myHaveIds = ownHaves
@@ -108,13 +149,17 @@ export async function findUserMatches(userId: string): Promise<Match[]> {
 
   const myWantIds = ownWants.map((w: any) => w.sticker_id);
 
-  const otherUsersWant = await fetchUserStickersByStickerIds(myHaveIds, "want", userId);
-  const otherUsersHave = await fetchUserStickersByStickerIds(myWantIds, "have", userId);
+  const otherUsersWantRows = await fetchUserStickersByStickerIds(myHaveIds, "want", userId);
+  const otherUsersHaveRows = await fetchUserStickersByStickerIds(myWantIds, "have", userId);
 
   const otherUserIds = Array.from(new Set([
-    ...otherUsersWant.map((item: any) => item.user_id),
-    ...otherUsersHave.map((item: any) => item.user_id),
+    ...otherUsersWantRows.map((item: any) => item.user_id),
+    ...otherUsersHaveRows.map((item: any) => item.user_id),
   ]));
+
+  const inactiveOtherCollections = await fetchInactiveCollectionIdsByUser(otherUserIds);
+  const otherUsersWant = filterActiveCollectionRows(otherUsersWantRows, inactiveOtherCollections);
+  const otherUsersHave = filterActiveCollectionRows(otherUsersHaveRows, inactiveOtherCollections);
 
   const profilesById = otherUserIds.length ? await fetchProfilesByIds(otherUserIds) : new Map<string, { username?: string; avatar_seed?: string }>();
 

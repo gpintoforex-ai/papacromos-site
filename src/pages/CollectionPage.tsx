@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import StickerCard from "../components/StickerCard";
-import { Search, Camera, ArrowLeft, X, Mic, ClipboardCheck } from "lucide-react";
+import { Search, Camera, ArrowLeft, X, Mic, ClipboardCheck, Eye, EyeOff } from "lucide-react";
 
 interface Collection {
   id: string;
@@ -28,6 +28,11 @@ interface UserSticker {
   status: "have" | "want";
   quantity: number;
   stickers: Sticker;
+}
+
+interface UserCollectionPreference {
+  collection_id: string;
+  is_active: boolean;
 }
 
 type FilterMode = "all" | "have" | "repeated" | "want" | "missing";
@@ -299,6 +304,7 @@ interface CollectionPageProps {
 export default function CollectionPage({ homeKey, onCollectionChange }: CollectionPageProps) {
   const { user, profile } = useAuth();
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [collectionPreferences, setCollectionPreferences] = useState<UserCollectionPreference[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [stickers, setStickers] = useState<Sticker[]>([]);
   const [userStickers, setUserStickers] = useState<UserSticker[]>([]);
@@ -349,13 +355,15 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
     try {
       if (!user?.id) {
         setCollections([]);
+        setCollectionPreferences([]);
         setStickers([]);
         setUserStickers([]);
         return;
       }
 
-      const [collectionsRes, stickersRes, userStickersRes] = await Promise.all([
+      const [collectionsRes, preferencesRes, stickersRes, userStickersRes] = await Promise.all([
         supabase.from("collections").select("*").order("created_at", { ascending: false }),
+        supabase.from("user_collection_preferences").select("collection_id, is_active").eq("user_id", user.id),
         supabase.from("stickers").select("*").order("number", { ascending: true }),
         supabase
           .from("user_stickers")
@@ -364,10 +372,12 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
       ]);
 
       if (collectionsRes.error) throw collectionsRes.error;
+      if (preferencesRes.error) throw preferencesRes.error;
       if (stickersRes.error) throw stickersRes.error;
       if (userStickersRes.error) throw userStickersRes.error;
 
       if (collectionsRes.data) setCollections(collectionsRes.data);
+      if (preferencesRes.data) setCollectionPreferences(preferencesRes.data as UserCollectionPreference[]);
       if (stickersRes.data) setStickers(stickersRes.data);
       if (userStickersRes.data) {
         const ownStickers = (userStickersRes.data as unknown as UserSticker[]).filter(
@@ -693,6 +703,41 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
     }
   };
 
+  const isCollectionActive = (collectionId: string) => {
+    return collectionPreferences.find((preference) => preference.collection_id === collectionId)?.is_active !== false;
+  };
+
+  const toggleCollectionActive = async (collectionId: string, nextActive: boolean) => {
+    setError(null);
+    try {
+      if (!user?.id) throw new Error("Sessao expirada. Entra novamente.");
+
+      const { error: upsertError } = await supabase.from("user_collection_preferences").upsert({
+        user_id: user.id,
+        collection_id: collectionId,
+        is_active: nextActive,
+      }, {
+        onConflict: "user_id,collection_id",
+      });
+      if (upsertError) throw upsertError;
+
+      setCollectionPreferences((current) => {
+        const withoutCurrent = current.filter((preference) => preference.collection_id !== collectionId);
+        return [...withoutCurrent, { collection_id: collectionId, is_active: nextActive }];
+      });
+
+      if (!nextActive && selectedCollectionId === collectionId) {
+        setSelectedCollectionId(null);
+        setSearch("");
+        setFilter("all");
+        setSelectedAlbumTeamName(null);
+      }
+      onCollectionChange?.();
+    } catch (err: any) {
+      setError(err.message || "Erro ao alterar estado da colecao.");
+    }
+  };
+
   const startVoiceRecognition = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     setError(null);
@@ -801,7 +846,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
   };
 
   const filteredStickers = stickers.filter((s) => {
-    if (!selectedCollectionId || s.collection_id !== selectedCollectionId) return false;
+    if (!selectedCollectionId || s.collection_id !== selectedCollectionId || !isCollectionActive(s.collection_id)) return false;
     if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
     if (filter === "have") return hasUserStickerStatus(s.id, "have");
     if (filter === "repeated") {
@@ -816,6 +861,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
   });
 
   const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId);
+  const selectedCollectionActive = selectedCollectionId ? isCollectionActive(selectedCollectionId) : true;
   const selectedStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
   const selectedStickerIds = new Set(selectedStickers.map((sticker) => sticker.id));
   const selectedUserStickers = userStickers.filter((us) => us.user_id === user?.id && selectedStickerIds.has(us.sticker_id));
@@ -908,45 +954,65 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
     );
   }
 
-  if (!selectedCollectionId) {
+  if (!selectedCollectionId || !selectedCollectionActive) {
     return (
       <div className="collection-page">
         <div className="collection-header">
           <div>
             <h2>Colecoes</h2>
-            <p>Escolhe uma colecao para abrir a tua caderneta.</p>
+            <p>Escolhe uma colecao ativa para abrir a tua caderneta.</p>
           </div>
         </div>
+        {error && <p className="error-message">{error}</p>}
 
         <div className="collection-cover-grid">
-          {collections.map((collection) => (
-            <button
-              key={collection.id}
-              className="collection-cover-card"
-              type="button"
-              onClick={() => {
-                setSelectedCollectionId(collection.id);
-                setSearch("");
-                setFilter("all");
-                setSelectedAlbumTeamName(null);
-              }}
-            >
-              <div className="collection-cover-image">
-                <img
-                  src={collection.image_url || collectionFallbackImage}
-                  alt={collection.name}
-                  loading="lazy"
-                  onError={(event) => {
-                    event.currentTarget.src = collectionFallbackImage;
+          {collections.map((collection) => {
+            const active = isCollectionActive(collection.id);
+
+            return (
+              <article key={collection.id} className={`collection-cover-card ${active ? "" : "inactive"}`}>
+                <button
+                  className="collection-cover-main"
+                  type="button"
+                  disabled={!active}
+                  onClick={() => {
+                    setSelectedCollectionId(collection.id);
+                    setSearch("");
+                    setFilter("all");
+                    setSelectedAlbumTeamName(null);
                   }}
-                />
-              </div>
-              <div className="collection-cover-body">
-                <strong>{collection.name}</strong>
-                <span>{collection.total_stickers || 0} cromos</span>
-              </div>
-            </button>
-          ))}
+                >
+                  <div className="collection-cover-image">
+                    <img
+                      src={collection.image_url || collectionFallbackImage}
+                      alt={collection.name}
+                      loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.src = collectionFallbackImage;
+                      }}
+                    />
+                  </div>
+                  <div className="collection-cover-body">
+                    <strong>{collection.name}</strong>
+                    <span>{collection.total_stickers || 0} cromos</span>
+                  </div>
+                </button>
+                <div className="collection-cover-actions">
+                  <span className={`collection-status-pill ${active ? "active" : "inactive"}`}>
+                    {active ? "Ativa" : "Desativada"}
+                  </span>
+                  <button
+                    className={`btn btn-xs ${active ? "btn-ghost" : "btn-primary"}`}
+                    type="button"
+                    onClick={() => toggleCollectionActive(collection.id, !active)}
+                  >
+                    {active ? <EyeOff size={12} /> : <Eye size={12} />}
+                    {active ? "Desativar" : "Ativar"}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </div>
     );
