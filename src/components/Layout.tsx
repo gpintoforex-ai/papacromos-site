@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useAuth } from "../lib/auth";
-import { Handshake, KeyRound, LogOut, QrCode, RefreshCw, Shield, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
+import { Handshake, KeyRound, LifeBuoy, LogOut, QrCode, RefreshCw, Shield, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
 import LegalFooter from "./LegalFooter";
 import { supabase } from "../lib/supabase";
 
-type Page = "collection" | "matches" | "trades" | "share" | "partners" | "admin";
+type Page = "collection" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
 
 interface LayoutProps {
   currentPage: Page;
@@ -39,6 +39,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
     { page: "trades", label: "Trocas", icon: <Users size={18} />, badge: pendingTradeCount, alert: pendingTradeCount > 0 },
     { page: "share", label: "Partilhar", icon: <QrCode size={18} /> },
     { page: "partners", label: "Parceiros", icon: <Handshake size={18} /> },
+    { page: "support", label: "Suporte", icon: <LifeBuoy size={18} /> },
     ...(profile?.is_admin ? [{ page: "admin" as Page, label: "Admin", icon: <Shield size={18} /> }] : []),
   ];
 

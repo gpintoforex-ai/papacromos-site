@@ -7,13 +7,14 @@ import TradesPage from "./pages/TradesPage";
 import AdminPage from "./pages/AdminPage";
 import PartnersPage from "./pages/PartnersPage";
 import SharePage from "./pages/SharePage";
+import SupportPage from "./pages/SupportPage";
 import CookieConsent from "./components/CookieConsent";
 import InstallAppPrompt from "./components/InstallAppPrompt";
 import { useEffect, useState } from "react";
 import { countUniqueRequestedStickers, findUserMatches } from "./lib/matches";
 import { supabase } from "./lib/supabase";
 
-type Page = "collection" | "matches" | "trades" | "share" | "partners" | "admin";
+type Page = "collection" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -116,6 +117,7 @@ function AppContent() {
         {page === "trades" && <TradesPage onPendingTradeCountChange={setPendingTradeCount} />}
         {page === "share" && <SharePage sharedUserId={sharedUserId} />}
         {page === "partners" && <PartnersPage />}
+        {page === "support" && <SupportPage />}
         {page === "admin" && <AdminPage />}
       </Layout>
       <InstallAppPrompt />
