@@ -78,6 +78,8 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
   const [error, setError] = useState<string | null>(null);
   const [proposingKey, setProposingKey] = useState<string | null>(null);
   const viewingFriend = Boolean(sharedUserId && sharedUserId !== user?.id);
+  const friendDisplayName = friendProfile?.username || "amigo";
+  const friendDisplayNameWithArticle = friendProfile?.username ? `o ${friendProfile.username}` : "o amigo";
 
   useEffect(() => {
     setShareUrl(buildShareUrl(user?.id));
@@ -430,7 +432,7 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
       <div className="share-header">
         <div>
           <h2>Caderneta partilhada</h2>
-          <p>{friendProfile?.username ? `Caderneta de ${friendProfile.username}` : "Caderneta de outro colecionador"}</p>
+          <p>{friendProfile?.username ? `Caderneta do ${friendProfile.username}` : "Caderneta de outro colecionador"}</p>
         </div>
         <button className="btn btn-primary btn-sm" type="button" onClick={loadSharedAlbum}>
           <RefreshCw size={14} /> Atualizar
@@ -445,13 +447,17 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
         <>
           <section className="shared-album-grid">
             <SharedStickerSection
-              title="Repetidos do amigo"
+              title={`Repetidos do ${friendDisplayName}`}
               stickers={friendExtras}
               emptyText="Este utilizador ainda nao marcou repetidos."
               missingStickerIds={myHaveStickerIds}
               missingNotice="Nao tens este cromo"
             />
-            <SharedStickerSection title="Cromos que procura" stickers={friendWants} emptyText="Este utilizador ainda nao marcou cromos procurados." />
+            <SharedStickerSection
+              title={`Cromos que ${friendDisplayNameWithArticle} procura`}
+              stickers={friendWants}
+              emptyText="Este utilizador ainda nao marcou cromos procurados."
+            />
           </section>
 
           <section className="share-panel share-trade-panel">
