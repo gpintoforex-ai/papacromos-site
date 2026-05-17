@@ -44,9 +44,33 @@ interface TradeOption {
 }
 
 const stickerSelect = "user_id, sticker_id, status, quantity, stickers(id, name, number, image_url, rarity)";
+const DATA_PAGE_SIZE = 1000;
 
 function getSticker(row: UserStickerRow) {
   return Array.isArray(row.stickers) ? row.stickers[0] : row.stickers;
+}
+
+async function fetchUserStickerRows(userId: string) {
+  const rows: UserStickerRow[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("user_stickers")
+      .select(stickerSelect)
+      .eq("user_id", userId)
+      .order("status", { ascending: true })
+      .order("created_at", { ascending: true })
+      .range(from, from + DATA_PAGE_SIZE - 1);
+
+    if (error) throw error;
+    rows.push(...((data || []) as UserStickerRow[]));
+
+    if (!data || data.length < DATA_PAGE_SIZE) break;
+    from += DATA_PAGE_SIZE;
+  }
+
+  return rows;
 }
 
 function buildShareUrl(userId?: string) {
@@ -106,7 +130,11 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
     .map((row) => ({ ...getSticker(row), availableQuantity: row.quantity - 1 })), [friendRows]);
 
   const myHaveStickerIds = useMemo(() => new Set(
-    myRows.filter((row) => row.status === "have").map((row) => row.sticker_id)
+    myRows.filter((row) => row.status === "have" && (row.quantity || 0) > 0).map((row) => row.sticker_id)
+  ), [myRows]);
+
+  const myExtraStickerIds = useMemo(() => new Set(
+    myRows.filter((row) => row.status === "have" && row.quantity > 1).map((row) => row.sticker_id)
   ), [myRows]);
 
   const friendWants = useMemo(() => friendRows
@@ -174,21 +202,14 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
         .maybeSingle();
       if (profileError) throw profileError;
 
-      const { data: friendData, error: friendError } = await supabase
-        .from("user_stickers")
-        .select(stickerSelect)
-        .eq("user_id", sharedUserId);
-      if (friendError) throw friendError;
-
-      const { data: myData, error: myError } = await supabase
-        .from("user_stickers")
-        .select(stickerSelect)
-        .eq("user_id", user.id);
-      if (myError) throw myError;
+      const [friendData, myData] = await Promise.all([
+        fetchUserStickerRows(sharedUserId),
+        fetchUserStickerRows(user.id),
+      ]);
 
       setFriendProfile(profileData as SharedProfile | null);
-      setFriendRows((friendData || []) as UserStickerRow[]);
-      setMyRows((myData || []) as UserStickerRow[]);
+      setFriendRows(friendData);
+      setMyRows(myData);
     } catch (err: any) {
       setError(err.message || "Erro ao carregar caderneta partilhada.");
     } finally {
@@ -457,6 +478,8 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
               title={`Cromos que ${friendDisplayNameWithArticle} procura`}
               stickers={friendWants}
               emptyText="Este utilizador ainda nao marcou cromos procurados."
+              highlightedStickerIds={myExtraStickerIds}
+              highlightedNotice="Tens repetido para oferecer"
             />
           </section>
 
@@ -497,12 +520,16 @@ function SharedStickerSection({
   emptyText,
   missingStickerIds,
   missingNotice,
+  highlightedStickerIds,
+  highlightedNotice,
 }: {
   title: string;
   stickers: StickerInfo[];
   emptyText: string;
   missingStickerIds?: Set<string>;
   missingNotice?: string;
+  highlightedStickerIds?: Set<string>;
+  highlightedNotice?: string;
 }) {
   return (
     <section className="share-panel">
@@ -519,6 +546,7 @@ function SharedStickerSection({
               key={sticker.id}
               sticker={sticker}
               notice={missingStickerIds && !missingStickerIds.has(sticker.id) ? missingNotice : undefined}
+              highlightNotice={highlightedStickerIds?.has(sticker.id) ? highlightedNotice : undefined}
             />
           ))}
         </div>
@@ -527,9 +555,21 @@ function SharedStickerSection({
   );
 }
 
-function MiniSticker({ sticker, label, notice }: { sticker: StickerInfo; label?: string; notice?: string }) {
+function MiniSticker({
+  sticker,
+  label,
+  notice,
+  highlightNotice,
+}: {
+  sticker: StickerInfo;
+  label?: string;
+  notice?: string;
+  highlightNotice?: string;
+}) {
+  const cardStateClass = notice ? "has-notice" : highlightNotice ? "has-positive-notice" : "";
+
   return (
-    <div className={`shared-mini-sticker ${notice ? "has-notice" : ""}`}>
+    <div className={`shared-mini-sticker ${cardStateClass}`}>
       {label && <em>{label}</em>}
       <img
         src={sticker.image_url || "/logo.png"}
@@ -541,6 +581,7 @@ function MiniSticker({ sticker, label, notice }: { sticker: StickerInfo; label?:
       <strong>#{String(sticker.number).padStart(3, "0")}</strong>
       <span>{sticker.name}</span>
       {notice && <small>{notice}</small>}
+      {highlightNotice && <small>{highlightNotice}</small>}
     </div>
   );
 }
