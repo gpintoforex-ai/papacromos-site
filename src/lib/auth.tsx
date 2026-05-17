@@ -7,11 +7,13 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (profile: SignUpProfile) => Promise<void>;
+  signUp: (profile: SignUpProfile) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
 }
 
 interface UserProfile {
+  first_name: string | null;
+  last_name: string | null;
   username: string;
   email: string | null;
   phone: string | null;
@@ -23,6 +25,8 @@ interface UserProfile {
 }
 
 interface SignUpProfile {
+  firstName: string;
+  lastName: string;
   username: string;
   email: string;
   password: string;
@@ -30,12 +34,16 @@ interface SignUpProfile {
   city: string;
 }
 
+interface SignUpResult {
+  needsEmailConfirmation: boolean;
+}
+
 const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   loading: true,
   signIn: async () => {},
-  signUp: async () => {},
+  signUp: async () => ({ needsEmailConfirmation: false }),
   signOut: async () => {},
 });
 
@@ -92,21 +100,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error) throw error;
   };
 
-  const signUp = async ({ username, email, password, phone, city }: SignUpProfile) => {
+  const signUp = async ({ firstName, lastName, username, email, password, phone, city }: SignUpProfile) => {
+    const cleanFirstName = firstName.trim();
+    const cleanLastName = lastName.trim();
     const cleanUsername = username.trim();
     const cleanEmail = email.trim();
     const cleanPhone = phone.trim();
     const cleanCity = city.trim();
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
       password,
       options: {
         data: {
+          first_name: cleanFirstName,
+          last_name: cleanLastName,
           username: cleanUsername,
           phone: cleanPhone,
           city: cleanCity,
@@ -114,6 +126,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     if (error) throw error;
+    if (!data.user) {
+      throw new Error("Nao foi possivel criar a conta. Tenta novamente.");
+    }
+
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error("Este email ja esta registado. Usa a opcao Entrar ou recupera a senha.");
+    }
+
+    if (data.user && data.session) {
+      setUser(data.user);
+      setProfile(await createOrUpdateProfile(data.user));
+    }
+
+    return { needsEmailConfirmation: !data.session };
   };
 
   const signOut = async () => {
@@ -125,12 +151,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const metadata = currentUser.user_metadata || {};
     const email = currentUser.email || "";
 
-    const { data: existing } = await supabase
+    let supportsNameFields = true;
+    let existing: any = null;
+    const { data: selectedProfile, error: profileSelectError } = await supabase
       .from("user_profiles")
-      .select("id, username, email, phone, city, avatar_seed, is_admin, is_blocked, created_at")
+      .select("id, first_name, last_name, username, email, phone, city, avatar_seed, is_admin, is_blocked, created_at")
       .eq("id", userId)
       .maybeSingle();
+    existing = selectedProfile;
 
+    if (profileSelectError) {
+      const message = String(profileSelectError.message || "").toLowerCase();
+      const nameFieldsMissing = message.includes("first_name") || message.includes("last_name") || profileSelectError.code === "42703" || profileSelectError.code === "PGRST204";
+      if (!nameFieldsMissing) throw profileSelectError;
+
+      supportsNameFields = false;
+      const fallback = await supabase
+        .from("user_profiles")
+        .select("id, username, email, phone, city, avatar_seed, is_admin, is_blocked, created_at")
+        .eq("id", userId)
+        .maybeSingle();
+      if (fallback.error) throw fallback.error;
+      existing = fallback.data;
+    }
+
+    const firstName = String(metadata.first_name || (supportsNameFields ? existing?.first_name : "") || "").trim();
+    const lastName = String(metadata.last_name || (supportsNameFields ? existing?.last_name : "") || "").trim();
     const username = String(metadata.username || existing?.username || email.split("@")[0] || "utilizador").trim();
     const phone = String(metadata.phone || existing?.phone || "").trim();
     const city = String(metadata.city || existing?.city || "").trim();
@@ -144,7 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (!existing) {
-      const { error } = await supabase.from("user_profiles").insert({
+      const insertProfile: Record<string, any> = {
         id: userId,
         username,
         email,
@@ -153,25 +199,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         avatar_seed: avatarSeed,
         is_admin: isAdmin,
         is_blocked: false,
-      });
+      };
+
+      if (supportsNameFields) {
+        insertProfile.first_name = firstName || null;
+        insertProfile.last_name = lastName || null;
+      }
+
+      const { data: insertedProfile, error } = await supabase
+        .from("user_profiles")
+        .insert(insertProfile)
+        .select("created_at")
+        .single();
       if (error) throw error;
 
-      return { username, email, phone, city, avatar_seed: avatarSeed, is_admin: isAdmin, is_blocked: false, created_at: null };
+      return {
+        first_name: firstName || null,
+        last_name: lastName || null,
+        username,
+        email,
+        phone,
+        city,
+        avatar_seed: avatarSeed,
+        is_admin: isAdmin,
+        is_blocked: false,
+        created_at: insertedProfile?.created_at || null,
+      };
+    }
+
+    const profileUpdates: Record<string, any> = {
+      email,
+      phone,
+      city,
+      ...(isAdmin && !existing.is_admin ? { is_admin: true } : {}),
+    };
+
+    if (supportsNameFields) {
+      profileUpdates.first_name = firstName || null;
+      profileUpdates.last_name = lastName || null;
     }
 
     const { error } = await supabase
       .from("user_profiles")
-      .update({
-        email,
-        phone,
-        city,
-        ...(isAdmin && !existing.is_admin ? { is_admin: true } : {}),
-      })
+      .update(profileUpdates)
       .eq("id", userId);
     if (error) throw error;
 
     return {
       username,
+      first_name: firstName || null,
+      last_name: lastName || null,
       email,
       phone,
       city,

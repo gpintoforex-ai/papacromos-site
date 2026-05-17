@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import StickerCard from "../components/StickerCard";
-import { Search, Camera, ArrowLeft, X, Mic, ClipboardCheck, Eye, EyeOff } from "lucide-react";
+import { Search, Camera, ArrowLeft, X, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, ChartNoAxesColumnIncreasing } from "lucide-react";
+import type { IScannerControls } from "@zxing/browser";
 
 interface Collection {
   id: string;
@@ -37,6 +38,7 @@ interface UserCollectionPreference {
 
 type FilterMode = "all" | "have" | "repeated" | "want" | "missing";
 type VoiceMarkMode = "have" | "want";
+type HomeResultMode = "collections" | "owned" | "complete";
 
 interface AlbumTeamPage {
   teamName: string;
@@ -83,6 +85,7 @@ const teamFlags: Record<string, string> = {
   Argélia: "🇩🇿",
   "Congo DR": "🇨🇩",
   "RD do Congo": "🇨🇩",
+  Jamaica: "🇯🇲",
   "Coreia do Sul": "🇰🇷",
   "República da Coreia": "🇰🇷",
   Australia: "🇦🇺",
@@ -156,6 +159,7 @@ const flagCodeByTeam: Record<string, string> = {
   Argélia: "dz",
   "Congo DR": "cd",
   "RD do Congo": "cd",
+  Jamaica: "jm",
   "Coreia do Sul": "kr",
   "República da Coreia": "kr",
   Australia: "au",
@@ -257,6 +261,7 @@ const groupByTeam: Record<string, string> = {
   Portugal: "Grupo K",
   "RD do Congo": "Grupo K",
   "Congo DR": "Grupo K",
+  Jamaica: "Grupo K",
   Uzbequistão: "Grupo K",
   Colômbia: "Grupo K",
   Colombia: "Grupo K",
@@ -296,6 +301,113 @@ function buildAlbumTeamPages(stickers: Sticker[]): AlbumTeamPage[] {
   }));
 }
 
+const DATA_PAGE_SIZE = 1000;
+
+async function fetchAllStickers() {
+  const allStickers: Sticker[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("stickers")
+      .select("*")
+      .order("collection_id", { ascending: true })
+      .order("number", { ascending: true })
+      .range(from, from + DATA_PAGE_SIZE - 1);
+
+    if (error) throw error;
+    allStickers.push(...((data || []) as Sticker[]));
+
+    if (!data || data.length < DATA_PAGE_SIZE) break;
+    from += DATA_PAGE_SIZE;
+  }
+
+  return allStickers;
+}
+
+async function fetchUserStickers(userId: string) {
+  const allUserStickers: UserSticker[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("user_stickers")
+      .select("id, user_id, sticker_id, status, quantity, stickers(*)")
+      .eq("user_id", userId)
+      .range(from, from + DATA_PAGE_SIZE - 1);
+
+    if (error) throw error;
+    allUserStickers.push(...((data || []) as unknown as UserSticker[]));
+
+    if (!data || data.length < DATA_PAGE_SIZE) break;
+    from += DATA_PAGE_SIZE;
+  }
+
+  return allUserStickers;
+}
+
+function CollectionHomeCarousel({
+  itemCount,
+  emptyText,
+  children,
+}: {
+  itemCount: number;
+  emptyText: string;
+  children: ReactNode;
+}) {
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const [canScroll, setCanScroll] = useState(false);
+
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip || itemCount === 0) {
+      setCanScroll(false);
+      return;
+    }
+
+    const updateCanScroll = () => {
+      setCanScroll(strip.scrollWidth > strip.clientWidth + 4);
+    };
+
+    updateCanScroll();
+    window.addEventListener("resize", updateCanScroll);
+
+    return () => window.removeEventListener("resize", updateCanScroll);
+  }, [itemCount]);
+
+  const scrollCarousel = (direction: -1 | 1) => {
+    const strip = stripRef.current;
+    if (!strip) return;
+
+    strip.scrollBy({
+      left: direction * Math.max(160, strip.clientWidth * 0.85),
+      behavior: "smooth",
+    });
+  };
+
+  if (itemCount === 0) {
+    return <p className="muted-text collection-home-empty">{emptyText}</p>;
+  }
+
+  return (
+    <div className="collection-home-carousel">
+      {canScroll && (
+        <button className="collection-carousel-btn prev" type="button" onClick={() => scrollCarousel(-1)} title="Anterior">
+          <ChevronLeft size={18} />
+        </button>
+      )}
+      <div className="collection-home-strip" ref={stripRef}>
+        {children}
+      </div>
+      {canScroll && (
+        <button className="collection-carousel-btn next" type="button" onClick={() => scrollCarousel(1)} title="Seguinte">
+          <ChevronRight size={18} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 interface CollectionPageProps {
   homeKey: number;
   onCollectionChange?: () => void;
@@ -320,10 +432,31 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
   const [voiceText, setVoiceText] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceResult, setVoiceResult] = useState<string | null>(null);
+  const [homeResultMode, setHomeResultMode] = useState<HomeResultMode>("collections");
+  const [statsPanelOpen, setStatsPanelOpen] = useState(false);
+  const [codePanelOpen, setCodePanelOpen] = useState(false);
+  const [codeText, setCodeText] = useState("");
+  const [codeScanning, setCodeScanning] = useState(false);
+  const [codeResult, setCodeResult] = useState<string | null>(null);
+  const collectionsSectionRef = useRef<HTMLElement | null>(null);
+  const codeVideoRef = useRef<HTMLVideoElement | null>(null);
+  const codeScannerControlsRef = useRef<IScannerControls | null>(null);
+  const codeScanHandledRef = useRef(false);
 
   useEffect(() => {
     loadData();
   }, [user]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadData();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [user?.id]);
 
   useEffect(() => {
     setSelectedCollectionId(null);
@@ -331,12 +464,20 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
     setFilter("all");
     setSelectedStickerId(null);
     setSelectedAlbumTeamName(null);
+    loadData();
   }, [homeKey]);
 
   useEffect(() => {
     if (!selectedCollectionId || !user?.id || stickers.length === 0) return;
     syncWantedForCollection(selectedCollectionId);
   }, [selectedCollectionId, stickers.length, userStickers.length, user?.id]);
+
+  useEffect(() => {
+    if (!selectedCollectionId) return;
+    window.setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }, 0);
+  }, [selectedCollectionId]);
 
   useEffect(() => {
     if (!selectedStickerId) return;
@@ -348,6 +489,10 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
 
     return () => window.clearTimeout(timeoutId);
   }, [selectedStickerId, userStickers]);
+
+  useEffect(() => {
+    return () => stopCodeScanner();
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -361,30 +506,20 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
         return;
       }
 
-      const [collectionsRes, preferencesRes, stickersRes, userStickersRes] = await Promise.all([
+      const [collectionsRes, preferencesRes, allStickers, allUserStickers] = await Promise.all([
         supabase.from("collections").select("*").order("created_at", { ascending: false }),
         supabase.from("user_collection_preferences").select("collection_id, is_active").eq("user_id", user.id),
-        supabase.from("stickers").select("*").order("number", { ascending: true }),
-        supabase
-          .from("user_stickers")
-          .select("id, user_id, sticker_id, status, quantity, stickers(*)")
-          .eq("user_id", user.id),
+        fetchAllStickers(),
+        fetchUserStickers(user.id),
       ]);
 
       if (collectionsRes.error) throw collectionsRes.error;
       if (preferencesRes.error) throw preferencesRes.error;
-      if (stickersRes.error) throw stickersRes.error;
-      if (userStickersRes.error) throw userStickersRes.error;
 
       if (collectionsRes.data) setCollections(collectionsRes.data);
       if (preferencesRes.data) setCollectionPreferences(preferencesRes.data as UserCollectionPreference[]);
-      if (stickersRes.data) setStickers(stickersRes.data);
-      if (userStickersRes.data) {
-        const ownStickers = (userStickersRes.data as unknown as UserSticker[]).filter(
-          (userSticker) => userSticker.user_id === user.id
-        );
-        setUserStickers(ownStickers);
-      }
+      setStickers(allStickers);
+      setUserStickers(allUserStickers.filter((userSticker) => userSticker.user_id === user.id));
     } catch (err: any) {
       setError(err.message || "Erro ao carregar caderneta.");
     } finally {
@@ -566,6 +701,13 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
     }
   };
 
+  const showHomeCollections = () => {
+    setHomeResultMode("collections");
+    window.setTimeout(() => {
+      collectionsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
   const getStickerBySpokenNumber = (number: number) => {
     const collectionStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
     if (isWorldAlbum && selectedAlbumTeamName && number >= 1 && number <= 20) {
@@ -591,14 +733,44 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
     return counts;
   };
 
-  const markSpokenStickers = async () => {
+  const getCodeNumberCandidates = (text: string) => {
+    const candidates = new Set<number>();
+    const matches = text.match(/\d+/g) || [];
+
+    matches.forEach((match) => {
+      const clean = match.replace(/^0+(?=\d)/, "");
+      const fullNumber = Number.parseInt(clean, 10);
+      if (Number.isFinite(fullNumber) && fullNumber > 0) candidates.add(fullNumber);
+
+      [1, 2, 3, 4].forEach((size) => {
+        if (clean.length <= size) return;
+        const suffixNumber = Number.parseInt(clean.slice(-size), 10);
+        if (Number.isFinite(suffixNumber) && suffixNumber > 0) candidates.add(suffixNumber);
+      });
+    });
+
+    return candidates;
+  };
+
+  const markStickerNumbersFromText = async (
+    text: string,
+    mode: VoiceMarkMode,
+    setResult: (message: string | null) => void,
+    options?: { codeMode?: boolean; selectFirstMatch?: boolean }
+  ) => {
     setError(null);
-    setVoiceResult(null);
+    setResult(null);
     try {
       if (!user?.id) throw new Error("Sessao expirada. Entra novamente.");
       if (!selectedCollectionId) throw new Error("Abre uma colecao primeiro.");
 
-      const spokenCounts = parseSpokenStickerCounts(voiceText);
+      const spokenCounts = parseSpokenStickerCounts(text);
+      if (options?.codeMode) {
+        getCodeNumberCandidates(text).forEach((number) => {
+          if (!spokenCounts.has(number)) spokenCounts.set(number, 1);
+        });
+      }
+
       if (spokenCounts.size === 0) {
         throw new Error("Nao encontrei numeros de cromos no texto.");
       }
@@ -613,7 +785,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
         throw new Error("Nenhum dos numeros indicados pertence a esta caderneta.");
       }
 
-      if (voiceMode === "have") {
+      if (mode === "have") {
         const existingHaveByStickerId = new Map(
           userStickers
             .filter((userSticker) => userSticker.user_id === user.id && userSticker.status === "have")
@@ -695,11 +867,92 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
         }
       }
 
+      if (options?.selectFirstMatch) {
+        setFilter("all");
+        setSelectedStickerId(matched[0].sticker.id);
+        if (isWorldAlbum) {
+          setSelectedAlbumTeamName(getStickerTeamName(matched[0].sticker.name));
+        }
+      }
+
       await loadData();
       onCollectionChange?.();
-      setVoiceResult(`${matched.length} cromo${matched.length === 1 ? "" : "s"} marcado${matched.length === 1 ? "" : "s"}${missingNumbers.length ? `. Nao encontrei: ${missingNumbers.join(", ")}.` : "."}`);
+      setResult(`${matched.length} cromo${matched.length === 1 ? "" : "s"} marcado${matched.length === 1 ? "" : "s"}${missingNumbers.length ? `. Nao encontrei: ${missingNumbers.join(", ")}.` : "."}`);
     } catch (err: any) {
       setError(err.message || "Erro ao marcar cromos automaticamente.");
+    }
+  };
+
+  const markSpokenStickers = async () => {
+    await markStickerNumbersFromText(voiceText, voiceMode, setVoiceResult);
+  };
+
+  const markCodeSticker = async (text = codeText) => {
+    await markStickerNumbersFromText(text, "have", setCodeResult, { codeMode: true, selectFirstMatch: true });
+  };
+
+  const stopCodeScanner = () => {
+    codeScannerControlsRef.current?.stop();
+    codeScannerControlsRef.current = null;
+    if (codeVideoRef.current) {
+      codeVideoRef.current.srcObject = null;
+    }
+    codeScanHandledRef.current = false;
+    setCodeScanning(false);
+  };
+
+  const startCodeScanner = async () => {
+    setError(null);
+    setCodeResult(null);
+
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Este browser nao permite abrir a camara aqui. Experimenta em HTTPS/localhost ou escreve o codigo no campo.");
+      }
+
+      stopCodeScanner();
+      const video = codeVideoRef.current;
+      if (!video) throw new Error("Nao consegui abrir o leitor de codigos.");
+
+      const { BrowserMultiFormatReader } = await import("@zxing/browser");
+      const reader = new BrowserMultiFormatReader();
+      const controls = await reader.decodeFromConstraints(
+        {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        },
+        video,
+        async (result) => {
+          const rawValue = result?.getText();
+          if (!rawValue || codeScanHandledRef.current) return;
+
+          codeScanHandledRef.current = true;
+          setCodeText(rawValue);
+          await markCodeSticker(rawValue);
+          stopCodeScanner();
+        }
+      );
+      codeScannerControlsRef.current = controls;
+      setCodeScanning(true);
+    } catch (err: any) {
+      stopCodeScanner();
+      if (err?.name === "NotAllowedError") {
+        setError("Permissao da camara bloqueada. Autoriza a camara no browser e tenta novamente.");
+        return;
+      }
+      if (err?.name === "NotFoundError") {
+        setError("Nao encontrei nenhuma camara disponivel neste dispositivo.");
+        return;
+      }
+      if (window.location.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+        setError("A camara no telemovel precisa de HTTPS. Abre a app pelo endereco seguro ou instala/usa a versao Android.");
+        return;
+      }
+      setError(err.message || "Erro ao iniciar leitura de codigos.");
     }
   };
 
@@ -862,6 +1115,39 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
 
   const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId);
   const selectedCollectionActive = selectedCollectionId ? isCollectionActive(selectedCollectionId) : true;
+  const activeCollections = collections.filter((collection) => isCollectionActive(collection.id));
+  const activeCollectionIds = new Set(activeCollections.map((collection) => collection.id));
+  const activeStickers = stickers.filter((sticker) => activeCollectionIds.has(sticker.collection_id));
+  const activeStickerIds = new Set(activeStickers.map((sticker) => sticker.id));
+  const ownHaveStickers = userStickers.filter((us) => us.user_id === user?.id && us.status === "have" && activeStickerIds.has(us.sticker_id));
+  const ownHaveStickerIds = new Set(ownHaveStickers.map((us) => us.sticker_id));
+  const repeatedUserStickers = ownHaveStickers.filter((us) => (us.quantity || 0) > 1);
+  const missingPreviewStickers = activeStickers.filter((sticker) => !ownHaveStickerIds.has(sticker.id));
+  const repeatedPreviewStickers = repeatedUserStickers
+    .map((us) => ({ userSticker: us, sticker: stickers.find((sticker) => sticker.id === us.sticker_id) }))
+    .filter((entry): entry is { userSticker: UserSticker; sticker: Sticker } => Boolean(entry.sticker));
+  const ownedPreviewStickers = ownHaveStickers
+    .map((us) => ({ userSticker: us, sticker: stickers.find((sticker) => sticker.id === us.sticker_id) }))
+    .filter((entry): entry is { userSticker: UserSticker; sticker: Sticker } => Boolean(entry.sticker))
+    .slice(0, 12);
+  const activeCollectionSummaries = activeCollections.map((collection) => {
+    const collectionStickers = stickers.filter((sticker) => sticker.collection_id === collection.id);
+    const collectionStickerIds = new Set(collectionStickers.map((sticker) => sticker.id));
+    const collectionHaveCount = ownHaveStickers.filter((us) => collectionStickerIds.has(us.sticker_id)).length;
+    const collectionTotal = Math.max(collection.total_stickers || 0, collectionStickers.length);
+
+    return {
+      collection,
+      total: collectionTotal,
+      have: collectionHaveCount,
+      progress: collectionTotal > 0 ? Math.round((collectionHaveCount / collectionTotal) * 100) : 0,
+    };
+  });
+  const completedCollections = activeCollectionSummaries.filter((summary) => summary.total > 0 && summary.have >= summary.total).length;
+  const completeCollectionSummaries = activeCollectionSummaries.filter((summary) => summary.total > 0 && summary.have >= summary.total);
+  const totalActiveStickerCount = activeCollectionSummaries.reduce((total, summary) => total + summary.total, 0);
+  const homeMissingCount = Math.max(0, totalActiveStickerCount - ownHaveStickerIds.size);
+  const homeRepeatedCount = repeatedUserStickers.reduce((total, us) => total + Math.max(0, (us.quantity || 0) - 1), 0);
   const selectedStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
   const selectedStickerIds = new Set(selectedStickers.map((sticker) => sticker.id));
   const selectedUserStickers = userStickers.filter((us) => us.user_id === user?.id && selectedStickerIds.has(us.sticker_id));
@@ -884,12 +1170,43 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
       ? albumTeamButtons[selectedAlbumTeamIndex + 1]
       : null;
   const showVoiceMarkControls = !isWorldAlbum || Boolean(selectedAlbumTeamName);
+  const showCodeMarkControls = Boolean(selectedCollectionId);
 
   const openAlbumTeam = (teamName: string) => {
     setSelectedAlbumTeamName(teamName);
     setSearch("");
     setFilter("all");
     setSelectedStickerId(null);
+  };
+
+  const openStickerCollection = (sticker: Sticker) => {
+    setSelectedCollectionId(sticker.collection_id);
+    setSearch("");
+    setFilter("all");
+    setSelectedStickerId(sticker.id);
+    setSelectedAlbumTeamName(null);
+  };
+
+  const openMissingStickerCollection = (sticker: Sticker) => {
+    const stickerCollection = collections.find((collection) => collection.id === sticker.collection_id);
+    const isStickerWorldAlbum = stickerCollection?.name.toLowerCase().includes("mundial") || false;
+
+    setSelectedCollectionId(sticker.collection_id);
+    setSearch("");
+    setFilter("want");
+    setSelectedStickerId(sticker.id);
+    setSelectedAlbumTeamName(isStickerWorldAlbum ? getStickerTeamName(sticker.name) : null);
+  };
+
+  const openRepeatedStickerCollection = (sticker: Sticker) => {
+    const stickerCollection = collections.find((collection) => collection.id === sticker.collection_id);
+    const isStickerWorldAlbum = stickerCollection?.name.toLowerCase().includes("mundial") || false;
+
+    setSelectedCollectionId(sticker.collection_id);
+    setSearch("");
+    setFilter("repeated");
+    setSelectedStickerId(sticker.id);
+    setSelectedAlbumTeamName(isStickerWorldAlbum ? getStickerTeamName(sticker.name) : null);
   };
 
   const renderSticker = (sticker: Sticker, compact = false) => {
@@ -957,18 +1274,103 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
 
   if (!selectedCollectionId || !selectedCollectionActive) {
     return (
-      <div className="collection-page">
-        <div className="collection-header">
+      <div className="collection-page collection-home">
+        <section className="collection-home-hero">
           <div>
-            <h2>Colecoes</h2>
-            <p>Escolhe uma colecao ativa para abrir a tua caderneta.</p>
+            <span className="collection-home-kicker">A minha colecao</span>
+            <h2>Papa Cromos</h2>
+            <p>Resumo rapido das tuas cadernetas, faltas e repetidos.</p>
           </div>
-        </div>
+          <div className="collection-home-stats">
+            <button
+              className={`collection-home-stat ${homeResultMode === "collections" ? "active" : ""}`}
+              type="button"
+              onClick={showHomeCollections}
+            >
+              <span>Colecoes</span>
+              <strong>{activeCollections.length}</strong>
+            </button>
+            <button
+              className={`collection-home-stat ${homeResultMode === "owned" ? "active" : ""}`}
+              type="button"
+              onClick={() => setHomeResultMode("owned")}
+            >
+              <span>Cromos</span>
+              <strong>{ownHaveStickerIds.size}</strong>
+            </button>
+            <button
+              className={`collection-home-stat ${homeResultMode === "complete" ? "active" : ""}`}
+              type="button"
+              onClick={() => setHomeResultMode("complete")}
+            >
+              <span>Completas</span>
+              <strong>{completedCollections}</strong>
+            </button>
+          </div>
+        </section>
+
         {error && <p className="error-message">{error}</p>}
 
+        {homeResultMode === "owned" && (
+          <section className="collection-home-section">
+            <div className="collection-home-section-title">
+              <h3>Cromos que tens</h3>
+              <span>{ownHaveStickerIds.size}</span>
+            </div>
+            <CollectionHomeCarousel itemCount={ownedPreviewStickers.length} emptyText="Ainda nao marcaste cromos como teus.">
+              {ownedPreviewStickers.map(({ userSticker, sticker }) => (
+                <button className="collection-home-mini-card" key={userSticker.id} type="button" onClick={() => openStickerCollection(sticker)}>
+                  <img src={sticker.image_url || collectionFallbackImage} alt={sticker.name} loading="lazy" />
+                  <strong>{sticker.name}</strong>
+                  {userSticker.quantity > 1 && <em>{userSticker.quantity}</em>}
+                </button>
+              ))}
+            </CollectionHomeCarousel>
+          </section>
+        )}
+
+        <section className="collection-home-section">
+          <div className="collection-home-section-title">
+            <h3>Em falta</h3>
+            <span className="missing">{homeMissingCount}</span>
+          </div>
+          <CollectionHomeCarousel itemCount={missingPreviewStickers.length} emptyText="Sem cromos em falta nas colecoes ativas.">
+            {missingPreviewStickers.map((sticker) => (
+              <button className="collection-home-mini-card" key={sticker.id} type="button" onClick={() => openMissingStickerCollection(sticker)}>
+                <img src={sticker.image_url || collectionFallbackImage} alt={sticker.name} loading="lazy" />
+                <strong>{sticker.name}</strong>
+              </button>
+            ))}
+          </CollectionHomeCarousel>
+        </section>
+
+        <section className="collection-home-section">
+          <div className="collection-home-section-title">
+            <h3>Repetidos</h3>
+            <span className="repeated">{homeRepeatedCount}</span>
+          </div>
+          <CollectionHomeCarousel itemCount={repeatedPreviewStickers.length} emptyText="Ainda nao tens repetidos.">
+            {repeatedPreviewStickers.map(({ userSticker, sticker }) => (
+              <button className="collection-home-mini-card repeated" key={userSticker.id} type="button" onClick={() => openRepeatedStickerCollection(sticker)}>
+                <img src={sticker.image_url || collectionFallbackImage} alt={sticker.name} loading="lazy" />
+                <strong>{sticker.name}</strong>
+                <em>{Math.max(0, (userSticker.quantity || 0) - 1)}</em>
+              </button>
+            ))}
+          </CollectionHomeCarousel>
+        </section>
+
+        <section className="collection-home-section" ref={collectionsSectionRef}>
+          <div className="collection-home-section-title">
+            <h3>{homeResultMode === "complete" ? "Colecoes completas" : "Colecoes"}</h3>
+            <span>{homeResultMode === "complete" ? completedCollections : activeCollections.length}</span>
+          </div>
+        </section>
+
         <div className="collection-cover-grid">
-          {collections.map((collection) => {
+          {(homeResultMode === "complete" ? completeCollectionSummaries.map((summary) => summary.collection) : collections).map((collection) => {
             const active = isCollectionActive(collection.id);
+            const summary = activeCollectionSummaries.find((item) => item.collection.id === collection.id);
 
             return (
               <article key={collection.id} className={`collection-cover-card ${active ? "" : "inactive"}`}>
@@ -995,7 +1397,12 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
                   </div>
                   <div className="collection-cover-body">
                     <strong>{collection.name}</strong>
-                    <span>{collection.total_stickers || 0} cromos</span>
+                    <span>{summary ? `${summary.have}/${summary.total} cromos` : `${collection.total_stickers || 0} cromos`}</span>
+                    {summary && (
+                      <div className="collection-cover-progress">
+                        <span style={{ width: `${summary.progress}%` }} />
+                      </div>
+                    )}
                   </div>
                 </button>
                 <div className="collection-cover-actions">
@@ -1014,6 +1421,9 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
               </article>
             );
           })}
+          {homeResultMode === "complete" && completeCollectionSummaries.length === 0 && (
+            <p className="muted-text">Ainda nao tens colecoes completas.</p>
+          )}
         </div>
       </div>
     );
@@ -1021,8 +1431,9 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
 
   return (
     <div className="collection-page">
-      <div className="collection-header">
+      <section className="collection-detail-hero">
         <div>
+          <span className="collection-home-kicker">Caderneta ativa</span>
           <h2>{selectedCollection?.name || "Colecao"}</h2>
           <p>{totalCount} cromos para colecionar</p>
         </div>
@@ -1039,42 +1450,36 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
           >
             <ArrowLeft size={16} /> Coleções
           </button>
-          <div className="collection-stats">
           <button
-            className={`stat stat-button ${filter === "all" ? "active" : ""}`}
+            className={`btn btn-collection-stats ${statsPanelOpen ? "active" : ""}`}
             type="button"
-            onClick={() => setFilter("all")}
+            onClick={() => setStatsPanelOpen((open) => !open)}
+            aria-expanded={statsPanelOpen}
           >
-            <span className="stat-value">{totalCount}</span>
-            <span className="stat-label">Todos</span>
+            <ChartNoAxesColumnIncreasing size={17} /> Estatisticas
           </button>
-          <button
-            className={`stat stat-button ${filter === "have" ? "active" : ""}`}
-            type="button"
-            onClick={() => setFilter("have")}
-          >
-            <span className="stat-value">{haveCount}</span>
-            <span className="stat-label">Tenho</span>
-          </button>
-          <button
-            className={`stat stat-button ${filter === "repeated" ? "active" : ""}`}
-            type="button"
-            onClick={() => setFilter("repeated")}
-          >
-            <span className="stat-value">{repeatedCount}</span>
-            <span className="stat-label">Repetidos</span>
-          </button>
-          <button
-            className={`stat stat-button ${filter === "want" ? "active" : ""}`}
-            type="button"
-            onClick={() => setFilter("want")}
-          >
-            <span className="stat-value">{wantCount}</span>
-            <span className="stat-label">Procuro</span>
-          </button>
-          </div>
+          {statsPanelOpen && (
+            <div className="collection-stats-panel">
+              <span>
+                <strong>{totalCount}</strong>
+                Todos
+              </span>
+              <span>
+                <strong>{haveCount}</strong>
+                Tenho
+              </span>
+              <span>
+                <strong>{repeatedCount}</strong>
+                Repetidos
+              </span>
+              <span>
+                <strong>{wantCount}</strong>
+                Procuro
+              </span>
+            </div>
+          )}
         </div>
-      </div>
+      </section>
 
       <div className="progress-label">
         <strong>{progress}%</strong>
@@ -1097,6 +1502,20 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
         {showVoiceMarkControls && (
           <button className="btn btn-voice-toggle btn-sm" type="button" onClick={() => setVoicePanelOpen((open) => !open)}>
             <Mic size={14} /> Marcar por voz
+          </button>
+        )}
+        {showCodeMarkControls && (
+          <button
+            className="btn btn-code-toggle btn-sm"
+            type="button"
+            onClick={() => {
+              setCodePanelOpen((open) => {
+                if (open) stopCodeScanner();
+                return !open;
+              });
+            }}
+          >
+            <ScanLine size={14} /> Ler codigo
           </button>
         )}
       </div>
@@ -1144,6 +1563,44 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
           {voiceResult && <p className="success-text">{voiceResult}</p>}
           {isWorldAlbum && selectedAlbumTeamName && (
             <p className="muted-text">Nesta selecao tambem podes dizer numeros locais de 1 a 20.</p>
+          )}
+        </div>
+      )}
+
+      {showCodeMarkControls && codePanelOpen && (
+        <div className="code-scan-panel">
+          <div className="voice-mark-header">
+            <div>
+              <strong>Ler codigo do cromo</strong>
+              <span>Aponta a camara ao codigo ou escreve o codigo/numero para marcar como Tenho.</span>
+            </div>
+          </div>
+          <div className="code-scan-reader">
+            <video ref={codeVideoRef} muted playsInline />
+            {!codeScanning && <span>Camara desligada</span>}
+          </div>
+          <div className="code-scan-actions">
+            <input
+              type="text"
+              value={codeText}
+              placeholder="Ex.: 48, POR-13, 000226"
+              onChange={(event) => setCodeText(event.target.value)}
+            />
+            <button className="btn btn-code-toggle btn-sm" type="button" onClick={startCodeScanner} disabled={codeScanning}>
+              <ScanLine size={14} /> {codeScanning ? "A ler..." : "Usar camara"}
+            </button>
+            {codeScanning && (
+              <button className="btn btn-ghost btn-sm" type="button" onClick={stopCodeScanner}>
+                Parar
+              </button>
+            )}
+            <button className="btn btn-primary btn-sm" type="button" onClick={() => markCodeSticker()} disabled={!codeText.trim()}>
+              <ClipboardCheck size={14} /> Marcar
+            </button>
+          </div>
+          {codeResult && <p className="success-text">{codeResult}</p>}
+          {isWorldAlbum && selectedAlbumTeamName && (
+            <p className="muted-text">Nesta selecao tambem podes usar numeros locais de 1 a 20.</p>
           )}
         </div>
       )}
@@ -1229,7 +1686,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
                   <span className="album-page-number">{String(pageIndex + 1).padStart(2, "0")}</span>
                   <div>
                     <p>NOS SOMOS</p>
-                    <h3><span className="album-team-hero-flag">{teamPage.flag}</span>{teamPage.teamName}</h3>
+                    <h3>{teamPage.teamName}</h3>
                     <span>{teamPage.groupName}</span>
                   </div>
                   <div className="album-team-badge">

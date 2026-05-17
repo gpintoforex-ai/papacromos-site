@@ -35,6 +35,10 @@ function getAuthErrorMessage(error: any) {
     return "Limite de emails do Supabase atingido. Aguarda alguns minutos ou cria o utilizador no Dashboard do Supabase.";
   }
 
+  if (message.includes("email signups are disabled") || message.includes("signup disabled") || message.includes("signups are disabled")) {
+    return "O registo por email esta desativado no Supabase. Ativa os registos por email nas definicoes de Authentication.";
+  }
+
   if (message.includes("user already registered") || message.includes("already registered")) {
     return "Este email ja esta registado. Usa a opcao Entrar.";
   }
@@ -43,11 +47,17 @@ function getAuthErrorMessage(error: any) {
     return "Email ou password incorretos.";
   }
 
+  if (message.includes("email not confirmed")) {
+    return "Confirma o email antes de entrar. Verifica a caixa de entrada e o spam.";
+  }
+
   return error?.message || "Erro ao autenticar. Tenta novamente.";
 }
 
 export default function LoginPage() {
   const { signIn, signUp } = useAuth();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -61,10 +71,36 @@ export default function LoginPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
 
   const handleAuth = async () => {
     try {
-      if (!email || !password) {
+      if (isSignUp) {
+        const nextMissingFields = [
+          ...(!firstName.trim() ? ["firstName"] : []),
+          ...(!lastName.trim() ? ["lastName"] : []),
+          ...(!username.trim() ? ["username"] : []),
+          ...(!email.trim() ? ["email"] : []),
+          ...(!phone.trim() ? ["phone"] : []),
+          ...(!country.trim() ? ["country"] : []),
+          ...(!region.trim() ? ["region"] : []),
+          ...(!city.trim() ? ["city"] : []),
+          ...(!password ? ["password"] : []),
+          ...(!acceptedTerms ? ["terms"] : []),
+        ];
+
+        if (nextMissingFields.length > 0) {
+          setMissingFields(nextMissingFields);
+          setError("Preenche os campos assinalados para criar a conta.");
+          return;
+        }
+      }
+
+      if (!isSignUp && (!email.trim() || !password)) {
+        setMissingFields([
+          ...(!email.trim() ? ["email"] : []),
+          ...(!password ? ["password"] : []),
+        ]);
         setError("Preenche email e password");
         return;
       }
@@ -72,19 +108,17 @@ export default function LoginPage() {
       setLoading(true);
       setError(null);
       setSuccess(null);
+      setMissingFields([]);
 
       if (isSignUp) {
-        if (!username || !phone || !country || !region || !city) {
-          setError("Preenche utilizador, email, telefone, pais, regiao, cidade e password");
-          return;
-        }
-
         if (!acceptedTerms) {
           setError("Aceita os Termos e Condições para continuar.");
           return;
         }
 
-        await signUp({ username, email, phone, city, password });
+        const result = await signUp({ firstName, lastName, username, email, phone, city, password });
+        setFirstName("");
+        setLastName("");
         setUsername("");
         setEmail("");
         setPhone("");
@@ -93,8 +127,13 @@ export default function LoginPage() {
         setCity("");
         setPassword("");
         setAcceptedTerms(false);
-        setIsSignUp(false);
         setError(null);
+        if (result.needsEmailConfirmation) {
+          setSuccess("Conta criada. Confirma o email antes de entrar. Verifica tambem o spam.");
+        } else {
+          setIsSignUp(false);
+          setSuccess("Conta criada com sucesso. Ja podes entrar com o teu email e password.");
+        }
       } else {
         await signIn(email, password);
       }
@@ -108,6 +147,12 @@ export default function LoginPage() {
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleAuth();
   };
+
+  const clearMissingField = (field: string) => {
+    setMissingFields((current) => current.filter((item) => item !== field));
+  };
+
+  const isMissing = (field: string) => missingFields.includes(field);
 
   const handlePasswordReset = async () => {
     const cleanEmail = email.trim();
@@ -158,20 +203,58 @@ export default function LoginPage() {
 
         <div className="login-form">
           {isSignUp && (
-            <input
-              type="text"
-              placeholder="Utilizador"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onKeyDown={handleKeyPress}
-              disabled={loading}
-            />
+            <>
+              <div className="login-name-grid">
+                <input
+                  type="text"
+                  placeholder="Nome"
+                  className={isMissing("firstName") ? "field-error" : ""}
+                  value={firstName}
+                  onChange={(e) => {
+                    setFirstName(e.target.value);
+                    clearMissingField("firstName");
+                  }}
+                  onKeyDown={handleKeyPress}
+                  disabled={loading}
+                  autoComplete="given-name"
+                />
+                <input
+                  type="text"
+                  placeholder="Apelido"
+                  className={isMissing("lastName") ? "field-error" : ""}
+                  value={lastName}
+                  onChange={(e) => {
+                    setLastName(e.target.value);
+                    clearMissingField("lastName");
+                  }}
+                  onKeyDown={handleKeyPress}
+                  disabled={loading}
+                  autoComplete="family-name"
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="Utilizador"
+                className={isMissing("username") ? "field-error" : ""}
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  clearMissingField("username");
+                }}
+                onKeyDown={handleKeyPress}
+                disabled={loading}
+              />
+            </>
           )}
           <input
             type="email"
             placeholder="Email"
+            className={isMissing("email") ? "field-error" : ""}
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              clearMissingField("email");
+            }}
             onKeyDown={handleKeyPress}
             disabled={loading}
           />
@@ -180,8 +263,12 @@ export default function LoginPage() {
               <input
                 type="tel"
                 placeholder="Telefone"
+                className={isMissing("phone") ? "field-error" : ""}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  clearMissingField("phone");
+                }}
                 onKeyDown={handleKeyPress}
                 disabled={loading}
               />
@@ -192,7 +279,9 @@ export default function LoginPage() {
                     setCountry(e.target.value);
                     setRegion("");
                     setCity("");
+                    clearMissingField("country");
                   }}
+                  className={isMissing("country") ? "field-error" : ""}
                   disabled={loading}
                 >
                   {Object.keys(locationOptions).map((countryName) => (
@@ -204,7 +293,9 @@ export default function LoginPage() {
                   onChange={(e) => {
                     setRegion(e.target.value);
                     setCity("");
+                    clearMissingField("region");
                   }}
+                  className={isMissing("region") ? "field-error" : ""}
                   disabled={loading}
                 >
                   <option value="">Regiao</option>
@@ -214,7 +305,11 @@ export default function LoginPage() {
                 </select>
                 <select
                   value={city}
-                  onChange={(e) => setCity(e.target.value)}
+                  onChange={(e) => {
+                    setCity(e.target.value);
+                    clearMissingField("city");
+                  }}
+                  className={isMissing("city") ? "field-error" : ""}
                   disabled={loading || !region}
                 >
                   <option value="">Cidade</option>
@@ -223,11 +318,14 @@ export default function LoginPage() {
                   ))}
                 </select>
               </div>
-              <label className="terms-checkbox">
+              <label className={`terms-checkbox ${isMissing("terms") ? "field-error" : ""}`}>
                 <input
                   type="checkbox"
                   checked={acceptedTerms}
-                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  onChange={(e) => {
+                    setAcceptedTerms(e.target.checked);
+                    clearMissingField("terms");
+                  }}
                   disabled={loading}
                 />
                 <span>
@@ -239,8 +337,12 @@ export default function LoginPage() {
           <input
             type="password"
             placeholder="Password"
+            className={isMissing("password") ? "field-error" : ""}
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              clearMissingField("password");
+            }}
             onKeyDown={handleKeyPress}
             disabled={loading}
           />
@@ -256,6 +358,7 @@ export default function LoginPage() {
         <button className={`btn ${isSignUp ? "btn-ghost" : "btn-register-cta"}`} onClick={() => {
           setIsSignUp(!isSignUp);
           setAcceptedTerms(false);
+          setMissingFields([]);
           setError(null);
           setSuccess(null);
         }} disabled={loading}>

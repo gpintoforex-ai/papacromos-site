@@ -13,6 +13,7 @@ import InstallAppPrompt from "./components/InstallAppPrompt";
 import { useEffect, useState } from "react";
 import { countUniqueRequestedStickers, findUserMatches } from "./lib/matches";
 import { supabase } from "./lib/supabase";
+import { setupPushNotifications } from "./lib/pushNotifications";
 
 type Page = "collection" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
 
@@ -58,10 +59,16 @@ function AppContent() {
   };
 
   useEffect(() => {
-    const sharedId = new URLSearchParams(window.location.search).get("share");
-    if (sharedId) {
-      setSharedUserId(sharedId);
-      setPage("share");
+    if (user?.id) {
+      setPage("collection");
+      setSharedUserId(null);
+      setCollectionHomeKey((key) => key + 1);
+
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("share")) {
+        url.searchParams.delete("share");
+        window.history.replaceState({}, "", url.toString());
+      }
     }
 
     refreshMatchCount();
@@ -81,6 +88,30 @@ function AppContent() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cleanup: (() => Promise<void>) | undefined;
+    let cancelled = false;
+
+    setupPushNotifications(user.id)
+      .then((removeListeners) => {
+        if (cancelled) {
+          removeListeners();
+          return;
+        }
+        cleanup = removeListeners;
+      })
+      .catch((error) => {
+        console.error("Failed to initialize push notifications", error);
+      });
+
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
+  }, [user?.id]);
 
   const navigate = (nextPage: Page) => {
     if (nextPage === "collection") {
@@ -115,7 +146,7 @@ function AppContent() {
         {page === "collection" && <CollectionPage homeKey={collectionHomeKey} onCollectionChange={refreshMatchCount} />}
         {page === "matches" && <MatchesPage onMatchesChange={setMatchCount} />}
         {page === "trades" && <TradesPage onPendingTradeCountChange={setPendingTradeCount} />}
-        {page === "share" && <SharePage sharedUserId={sharedUserId} />}
+        {page === "share" && <SharePage sharedUserId={sharedUserId} onOpenSharedUser={setSharedUserId} />}
         {page === "partners" && <PartnersPage />}
         {page === "support" && <SupportPage />}
         {page === "admin" && <AdminPage />}

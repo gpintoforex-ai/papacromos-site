@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Ban, BookOpen, Camera, KeyRound, PackagePlus, Pencil, RefreshCw, RotateCcw, Trash2, Users, X } from "lucide-react";
+import { ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, KeyRound, PackagePlus, Pencil, RefreshCw, RotateCcw, Settings, Trash2, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 
@@ -93,15 +93,34 @@ function buildMissingGeneratedStickers(
   });
 }
 
+function getWorldAlbumLocalNumber(stickerNumber: number) {
+  return ((stickerNumber - 1) % 20) + 1;
+}
+
+function formatAdminDate(dateValue: string | null | undefined) {
+  if (!dateValue) return "-";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("pt-PT");
+}
+
 export default function AdminPage() {
   const { user, profile } = useAuth();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [users, setUsers] = useState<RegisteredUser[]>([]);
   const [draft, setDraft] = useState(emptyCollection);
   const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
+  const [openCollectionSettingsId, setOpenCollectionSettingsId] = useState<string | null>(null);
+  const [openUserDetailsId, setOpenUserDetailsId] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [selectedCollectionUserId, setSelectedCollectionUserId] = useState<string | null>(null);
   const [selectedUserStickers, setSelectedUserStickers] = useState<UserSticker[]>([]);
+  const [imageSwapCollection, setImageSwapCollection] = useState<Collection | null>(null);
+  const [imageSwapStickers, setImageSwapStickers] = useState<Sticker[]>([]);
+  const [imageSwapTeamFilter, setImageSwapTeamFilter] = useState("");
+  const [loadingImageSwap, setLoadingImageSwap] = useState(false);
+  const [draggedStickerId, setDraggedStickerId] = useState<string | null>(null);
+  const [selectedSwapStickerId, setSelectedSwapStickerId] = useState<string | null>(null);
   const [loadingUserCollection, setLoadingUserCollection] = useState(false);
   const [userDraft, setUserDraft] = useState<UserDraft>({
     username: "",
@@ -281,6 +300,100 @@ export default function AdminPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const openImageSwap = async (collection: Collection) => {
+    setImageSwapCollection(collection);
+    setLoadingImageSwap(true);
+    setDraggedStickerId(null);
+    setSelectedSwapStickerId(null);
+    setImageSwapTeamFilter("");
+    setError(null);
+    setSuccess(null);
+    try {
+      const { data, error: stickersError } = await supabase
+        .from("stickers")
+        .select("id, number, name, image_url, rarity, collection_id")
+        .eq("collection_id", collection.id)
+        .order("number", { ascending: true });
+      if (stickersError) throw stickersError;
+      setImageSwapStickers((data || []) as Sticker[]);
+    } catch (err: any) {
+      setError(err.message || "Erro ao carregar cromos para troca de imagens.");
+      setImageSwapStickers([]);
+    } finally {
+      setLoadingImageSwap(false);
+    }
+  };
+
+  const reloadImageSwapStickers = async (collectionId = imageSwapCollection?.id) => {
+    if (!collectionId) return;
+
+    const { data, error: stickersError } = await supabase
+      .from("stickers")
+      .select("id, number, name, image_url, rarity, collection_id")
+      .eq("collection_id", collectionId)
+      .order("number", { ascending: true });
+    if (stickersError) throw stickersError;
+    setImageSwapStickers((data || []) as Sticker[]);
+  };
+
+  const closeImageSwap = () => {
+    setImageSwapCollection(null);
+    setImageSwapStickers([]);
+    setImageSwapTeamFilter("");
+    setDraggedStickerId(null);
+    setSelectedSwapStickerId(null);
+  };
+
+  const swapStickerImages = async (sourceStickerId: string | null, targetStickerId: string) => {
+    if (!sourceStickerId || sourceStickerId === targetStickerId) {
+      setDraggedStickerId(null);
+      setSelectedSwapStickerId(null);
+      return;
+    }
+
+    const sourceSticker = imageSwapStickers.find((sticker) => sticker.id === sourceStickerId);
+    const targetSticker = imageSwapStickers.find((sticker) => sticker.id === targetStickerId);
+    if (!sourceSticker || !targetSticker) {
+      setDraggedStickerId(null);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: sourceError } = await supabase
+        .from("stickers")
+        .update({ image_url: targetSticker.image_url || "" })
+        .eq("id", sourceSticker.id);
+      if (sourceError) throw sourceError;
+
+      const { error: targetError } = await supabase
+        .from("stickers")
+        .update({ image_url: sourceSticker.image_url || "" })
+        .eq("id", targetSticker.id);
+      if (targetError) throw targetError;
+
+      await reloadImageSwapStickers(sourceSticker.collection_id);
+      setSuccess(`Imagens trocadas entre #${sourceSticker.number} e #${targetSticker.number}.`);
+    } catch (err: any) {
+      setError(err.message || "Erro ao trocar imagens dos cromos.");
+    } finally {
+      setSaving(false);
+      setDraggedStickerId(null);
+      setSelectedSwapStickerId(null);
+    }
+  };
+
+  const selectStickerForImageSwap = (stickerId: string) => {
+    if (saving) return;
+    if (!selectedSwapStickerId) {
+      setSelectedSwapStickerId(stickerId);
+      return;
+    }
+    swapStickerImages(selectedSwapStickerId, stickerId);
   };
 
   const saveCollection = async () => {
@@ -570,6 +683,18 @@ export default function AdminPage() {
       progress,
     };
   });
+  const imageSwapIsWorldAlbum = imageSwapCollection?.name.toLowerCase().includes("mundial") || false;
+  const imageSwapTeams = Array.from(
+    new Set(
+      imageSwapStickers
+        .map((sticker) => sticker.name.split(" - ")[0]?.trim())
+        .filter(Boolean)
+    )
+  );
+  const filteredImageSwapStickers =
+    imageSwapIsWorldAlbum && imageSwapTeamFilter
+      ? imageSwapStickers.filter((sticker) => sticker.name.startsWith(`${imageSwapTeamFilter} - `))
+      : imageSwapStickers;
 
   if (!profile?.is_admin) {
     return (
@@ -687,61 +812,173 @@ export default function AdminPage() {
           </div>
 
           <div className="admin-list">
-            {collections.map((collection) => (
-              <div className="admin-list-row" key={collection.id}>
-                <div>
-                  <strong>{collection.name}</strong>
-                  <span>{collection.description || "Sem descricao"}</span>
+            {collections.map((collection) => {
+              const isSettingsOpen = openCollectionSettingsId === collection.id;
+              const settingsPanelId = `collection-settings-${collection.id}`;
+
+              return (
+                <div className="admin-list-row" key={collection.id}>
+                  <div>
+                    <strong>{collection.name}</strong>
+                    <span>{collection.description || "Sem descricao"}</span>
+                  </div>
+                  <div className="admin-list-actions admin-collection-actions">
+                    <em>{collection.total_stickers} cromos</em>
+                    <button
+                      className={`btn btn-ghost btn-xs admin-collection-settings-toggle ${isSettingsOpen ? "open" : ""}`}
+                      type="button"
+                      aria-expanded={isSettingsOpen}
+                      aria-controls={settingsPanelId}
+                      onClick={() => setOpenCollectionSettingsId((currentId) => currentId === collection.id ? null : collection.id)}
+                    >
+                      <Settings size={12} /> Definicoes <ChevronDown size={12} />
+                    </button>
+                    <div
+                      id={settingsPanelId}
+                      className={`admin-collection-settings-panel ${isSettingsOpen ? "open" : ""}`}
+                      aria-hidden={!isSettingsOpen}
+                    >
+                      <div className="admin-collection-action-grid">
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          type="button"
+                          onClick={() => startEditingCollection(collection)}
+                          disabled={saving || !isSettingsOpen}
+                        >
+                          <Pencil size={12} /> Editar
+                        </button>
+                        <button
+                          className="btn btn-danger-soft btn-xs"
+                          type="button"
+                          onClick={() => deleteCollection(collection)}
+                          disabled={saving || !isSettingsOpen}
+                        >
+                          <Trash2 size={12} /> Remover
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          type="button"
+                          onClick={() => clearCollectionStickerImages(collection)}
+                          disabled={saving || !isSettingsOpen}
+                        >
+                          <X size={12} /> Remover imagens
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          type="button"
+                          onClick={() => restoreCollectionStickerImages(collection, "cover")}
+                          disabled={saving || !collection.image_url || !isSettingsOpen}
+                        >
+                          <RefreshCw size={12} /> Repor capa
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          type="button"
+                          onClick={() => restoreCollectionStickerImages(collection, "logo")}
+                          disabled={saving || !isSettingsOpen}
+                        >
+                          <RefreshCw size={12} /> Repor logo
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          type="button"
+                          onClick={() => openImageSwap(collection)}
+                          disabled={saving || loadingImageSwap || !isSettingsOpen}
+                        >
+                          <ArrowRightLeft size={12} /> Trocar imagens
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="admin-list-actions">
-                  <em>{collection.total_stickers} cromos</em>
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    type="button"
-                    onClick={() => startEditingCollection(collection)}
-                    disabled={saving}
-                  >
-                    <Pencil size={12} /> Editar
-                  </button>
-                  <button
-                    className="btn btn-danger-soft btn-xs"
-                    type="button"
-                    onClick={() => deleteCollection(collection)}
-                    disabled={saving}
-                  >
-                    <Trash2 size={12} /> Remover
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    type="button"
-                    onClick={() => clearCollectionStickerImages(collection)}
-                    disabled={saving}
-                  >
-                    <X size={12} /> Remover imagens
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    type="button"
-                    onClick={() => restoreCollectionStickerImages(collection, "cover")}
-                    disabled={saving || !collection.image_url}
-                  >
-                    <RefreshCw size={12} /> Repor capa
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    type="button"
-                    onClick={() => restoreCollectionStickerImages(collection, "logo")}
-                    disabled={saving}
-                  >
-                    <RefreshCw size={12} /> Repor logo
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {collections.length === 0 && <p className="muted-text">Sem colecoes.</p>}
           </div>
         </section>
       </div>
+
+      {imageSwapCollection && (
+        <section className="admin-panel admin-image-swap-panel">
+          <div className="admin-panel-title admin-image-swap-title">
+            <span>
+              <ArrowRightLeft size={18} />
+              <h3>Trocar imagens - {imageSwapCollection.name}</h3>
+            </span>
+            <button className="btn btn-ghost btn-xs" type="button" onClick={closeImageSwap} disabled={saving}>
+              <X size={12} /> Fechar
+            </button>
+          </div>
+          <p className="muted-text">
+            Arrasta um cromo para cima de outro para trocar apenas as imagens. Os numeros, nomes e cromos dos utilizadores nao mudam.
+            {imageSwapIsWorldAlbum ? " No album Mundial, o numero grande corresponde a selecao e o numero global aparece abaixo." : ""}
+          </p>
+          {imageSwapIsWorldAlbum && (
+            <div className="admin-image-swap-filter">
+              <label>
+                Selecao
+                <select
+                  value={imageSwapTeamFilter}
+                  onChange={(event) => {
+                    setImageSwapTeamFilter(event.target.value);
+                    setDraggedStickerId(null);
+                    setSelectedSwapStickerId(null);
+                  }}
+                  disabled={saving || loadingImageSwap}
+                >
+                  <option value="">Todas</option>
+                  {imageSwapTeams.map((teamName) => (
+                    <option key={teamName} value={teamName}>
+                      {teamName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {imageSwapTeamFilter && <span>{filteredImageSwapStickers.length} cromos</span>}
+            </div>
+          )}
+
+          {loadingImageSwap ? (
+            <div className="loading admin-inline-loading">A carregar cromos...</div>
+          ) : (
+            <div className="admin-image-swap-grid">
+              {filteredImageSwapStickers.map((sticker) => (
+                <button
+                  key={sticker.id}
+                  className={`admin-image-swap-card ${draggedStickerId === sticker.id ? "dragging" : ""} ${selectedSwapStickerId === sticker.id ? "selected" : ""}`}
+                  type="button"
+                  draggable
+                  onClick={() => selectStickerForImageSwap(sticker.id)}
+                  onDragStart={(event) => {
+                    setDraggedStickerId(sticker.id);
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    swapStickerImages(draggedStickerId, sticker.id);
+                  }}
+                  onDragEnd={() => setDraggedStickerId(null)}
+                  disabled={saving}
+                  title={sticker.name}
+                >
+                  <span className="admin-image-swap-number">
+                    #{imageSwapIsWorldAlbum ? getWorldAlbumLocalNumber(sticker.number) : sticker.number}
+                  </span>
+                  <img src={sticker.image_url || appLogoUrl} alt={sticker.name} loading="lazy" />
+                  {imageSwapIsWorldAlbum && (
+                    <span className="admin-image-swap-global-number">Global #{sticker.number}</span>
+                  )}
+                  <strong>{sticker.name}</strong>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="admin-panel admin-maintenance-panel">
         <div className="admin-panel-title">
@@ -762,78 +999,119 @@ export default function AdminPage() {
           <h3>Utilizadores registados</h3>
         </div>
 
-        <div className="admin-table-wrap">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Utilizador</th>
-                <th>Email</th>
-                <th>Telefone</th>
-                <th>Cidade</th>
-                <th>Tipo</th>
-                <th>Estado</th>
-                <th>Acoes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((registeredUser) => (
-                <tr key={registeredUser.id}>
-                  <td>
-                    {editingUserId === registeredUser.id ? (
-                      <input
-                        className="admin-table-input"
-                        value={userDraft.username}
-                        onChange={(e) => setUserDraft((prev) => ({ ...prev, username: e.target.value }))}
-                      />
-                    ) : registeredUser.username}
-                  </td>
-                  <td>{registeredUser.email || "-"}</td>
-                  <td>
-                    {editingUserId === registeredUser.id ? (
-                      <input
-                        className="admin-table-input"
-                        value={userDraft.phone}
-                        onChange={(e) => setUserDraft((prev) => ({ ...prev, phone: e.target.value }))}
-                      />
-                    ) : registeredUser.phone || "-"}
-                  </td>
-                  <td>
-                    {editingUserId === registeredUser.id ? (
-                      <input
-                        className="admin-table-input"
-                        value={userDraft.city}
-                        onChange={(e) => setUserDraft((prev) => ({ ...prev, city: e.target.value }))}
-                      />
-                    ) : registeredUser.city || "-"}
-                  </td>
-                  <td>
-                    {editingUserId === registeredUser.id ? (
-                      <label className="admin-check">
-                        <input
-                          type="checkbox"
-                          checked={userDraft.is_admin}
-                          disabled={registeredUser.id === user?.id}
-                          onChange={(e) => setUserDraft((prev) => ({ ...prev, is_admin: e.target.checked }))}
-                        />
-                        Admin
-                      </label>
-                    ) : registeredUser.is_admin ? "Admin" : "Utilizador"}
-                  </td>
-                  <td>
-                    {editingUserId === registeredUser.id ? (
-                      <label className="admin-check">
-                        <input
-                          type="checkbox"
-                          checked={userDraft.is_blocked}
-                          disabled={registeredUser.id === user?.id}
-                          onChange={(e) => setUserDraft((prev) => ({ ...prev, is_blocked: e.target.checked }))}
-                        />
-                        Bloqueado
-                      </label>
-                    ) : registeredUser.is_blocked ? "Bloqueado" : "Ativo"}
-                  </td>
-                  <td>
-                    <div className="admin-table-actions">
+        <div className="admin-users-list">
+          {users.map((registeredUser) => {
+            const isDetailsOpen = openUserDetailsId === registeredUser.id || editingUserId === registeredUser.id;
+            const userDetailsPanelId = `user-details-${registeredUser.id}`;
+
+            return (
+              <article className="admin-user-card" key={registeredUser.id}>
+                <button
+                  className={`admin-user-card-summary ${isDetailsOpen ? "open" : ""}`}
+                  type="button"
+                  aria-expanded={isDetailsOpen}
+                  aria-controls={userDetailsPanelId}
+                  onClick={() => setOpenUserDetailsId((currentId) => currentId === registeredUser.id ? null : registeredUser.id)}
+                >
+                  <div className="admin-user-card-main">
+                    <div className="admin-user-field primary">
+                      <span>Utilizador</span>
+                      <strong>{registeredUser.username || "-"}</strong>
+                    </div>
+                  <div className="admin-user-field">
+                    <span>Cidade</span>
+                    <strong>{registeredUser.city || "-"}</strong>
+                  </div>
+                  <div className="admin-user-field compact">
+                    <span>Estado</span>
+                    <strong className={registeredUser.is_blocked ? "status-blocked" : "status-active"}>
+                      {registeredUser.is_blocked ? "Bloqueado" : "Ativo"}
+                    </strong>
+                  </div>
+                </div>
+                <ChevronDown size={16} />
+              </button>
+
+                <div
+                  id={userDetailsPanelId}
+                  className={`admin-user-details-panel ${isDetailsOpen ? "open" : ""}`}
+                  aria-hidden={!isDetailsOpen}
+                >
+                  <div className="admin-user-details-inner">
+                    <div className="admin-user-details-grid">
+                      {editingUserId === registeredUser.id && (
+                        <>
+                          <div className="admin-user-field primary">
+                            <span>Utilizador</span>
+                            <input
+                              className="admin-table-input"
+                              value={userDraft.username}
+                              onChange={(e) => setUserDraft((prev) => ({ ...prev, username: e.target.value }))}
+                            />
+                          </div>
+                          <div className="admin-user-field">
+                            <span>Cidade</span>
+                            <input
+                              className="admin-table-input"
+                              value={userDraft.city}
+                              onChange={(e) => setUserDraft((prev) => ({ ...prev, city: e.target.value }))}
+                            />
+                          </div>
+                        </>
+                      )}
+                      <div className="admin-user-field email">
+                        <span>Email</span>
+                        <strong>{registeredUser.email || "-"}</strong>
+                      </div>
+                      <div className="admin-user-field">
+                        <span>Telefone</span>
+                        {editingUserId === registeredUser.id ? (
+                          <input
+                            className="admin-table-input"
+                            value={userDraft.phone}
+                            onChange={(e) => setUserDraft((prev) => ({ ...prev, phone: e.target.value }))}
+                          />
+                        ) : (
+                          <strong>{registeredUser.phone || "-"}</strong>
+                        )}
+                      </div>
+                      <div className="admin-user-field compact">
+                        <span>Tipo</span>
+                        {editingUserId === registeredUser.id ? (
+                          <label className="admin-check">
+                            <input
+                              type="checkbox"
+                              checked={userDraft.is_admin}
+                              disabled={registeredUser.id === user?.id}
+                              onChange={(e) => setUserDraft((prev) => ({ ...prev, is_admin: e.target.checked }))}
+                            />
+                            Admin
+                          </label>
+                        ) : (
+                          <strong>{registeredUser.is_admin ? "Admin" : "Utilizador"}</strong>
+                        )}
+                      </div>
+                      {editingUserId === registeredUser.id && (
+                        <div className="admin-user-field compact">
+                          <span>Estado</span>
+                          <label className="admin-check">
+                            <input
+                              type="checkbox"
+                              checked={userDraft.is_blocked}
+                              disabled={registeredUser.id === user?.id}
+                              onChange={(e) => setUserDraft((prev) => ({ ...prev, is_blocked: e.target.checked }))}
+                            />
+                            Bloqueado
+                          </label>
+                        </div>
+                      )}
+                      <div className="admin-user-field compact">
+                        <span>Registo</span>
+                        <strong>{formatAdminDate(registeredUser.created_at)}</strong>
+                      </div>
+                    </div>
+
+                    <div className="admin-table-actions admin-user-card-actions">
                       {editingUserId === registeredUser.id ? (
                         <>
                           <button className="btn btn-primary btn-xs" onClick={() => saveUser(registeredUser.id)} disabled={saving}>
@@ -845,7 +1123,14 @@ export default function AdminPage() {
                         </>
                       ) : (
                         <>
-                          <button className="btn btn-ghost btn-xs" onClick={() => startEditingUser(registeredUser)} disabled={saving}>
+                          <button
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => {
+                              setOpenUserDetailsId(registeredUser.id);
+                              startEditingUser(registeredUser);
+                            }}
+                            disabled={saving}
+                          >
                             <Pencil size={12} /> Editar
                           </button>
                           <button
@@ -879,11 +1164,12 @@ export default function AdminPage() {
                         </>
                       )}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+          {users.length === 0 && <p className="muted-text">Sem utilizadores registados.</p>}
         </div>
       </section>
 

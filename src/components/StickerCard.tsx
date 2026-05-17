@@ -80,7 +80,7 @@ export default function StickerCard({
           {number}
         </span>
         {status && status !== "none" && (
-          <span className={`sticker-count-badge ${isHave ? "have" : "want"}`}>
+          <span className={`sticker-count-badge ${isHave ? "have" : "want"} ${isHave && (quantity || 1) > 1 ? "multi" : ""}`}>
             {isHave ? quantity || 1 : "0"}
           </span>
         )}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../lib/auth";
-import { Handshake, KeyRound, LifeBuoy, LogOut, QrCode, RefreshCw, Shield, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
+import { ChevronDown, Handshake, KeyRound, LifeBuoy, LogOut, QrCode, RefreshCw, Shield, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
 import LegalFooter from "./LegalFooter";
 import { supabase } from "../lib/supabase";
 
@@ -17,6 +17,7 @@ interface LayoutProps {
 export default function Layout({ currentPage, onNavigate, matchCount, pendingTradeCount, children }: LayoutProps) {
   const { user, profile, signOut } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileActionsOpen, setProfileActionsOpen] = useState(false);
   const [dataModalOpen, setDataModalOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -130,18 +131,36 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
           <div className="header-actions">
             <div className="profile-menu">
               <button
-                className="user-id"
+                className={`user-id user-menu-trigger ${profileOpen ? "open" : ""}`}
                 type="button"
                 title={displayName}
                 onClick={() => setProfileOpen((open) => !open)}
+                aria-expanded={profileOpen}
+                aria-label="Abrir opcoes de utilizador"
               >
-                {displayName}
+                <span className="user-menu-name">{displayName}</span>
+                <ChevronDown className="user-menu-chevron" size={14} />
+                <span className="user-menu-avatar">
+                  <UserRound size={15} />
+                </span>
               </button>
               {profileOpen && (
                 <div className="profile-popover">
                   <div className="profile-popover-header">
-                    <strong>{displayName}</strong>
-                    <span>{profile?.is_admin ? "Administrador" : "Utilizador"}</span>
+                    <div>
+                      <strong>{displayName}</strong>
+                      <span>{profile?.is_admin ? "Administrador" : "Utilizador"}</span>
+                    </div>
+                    <button
+                      className="btn btn-ghost btn-sm profile-logout-btn"
+                      type="button"
+                      onClick={() => {
+                        setProfileOpen(false);
+                        signOut();
+                      }}
+                    >
+                      <LogOut size={14} /> Sair
+                    </button>
                   </div>
                   <dl className="profile-details">
                     <div>
@@ -164,48 +183,52 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                       <dt>Registo</dt>
                       <dd>{createdLabel}</dd>
                     </div>
-                    <div>
-                      <dt>ID da conta</dt>
-                      <dd className="profile-account-id">{user?.id || "-"}</dd>
-                    </div>
                   </dl>
                   {accountError && <p className="profile-error">{accountError}</p>}
-                  <div className="profile-actions">
+                  <div className={`profile-actions ${profileActionsOpen ? "open" : ""}`}>
                     <button
-                      className="btn btn-ghost btn-sm"
+                      className="btn btn-ghost btn-sm profile-actions-toggle"
                       type="button"
-                      onClick={() => {
-                        setDataModalOpen(true);
-                        setProfileOpen(false);
-                      }}
+                      onClick={() => setProfileActionsOpen((open) => !open)}
+                      aria-expanded={profileActionsOpen}
+                      aria-controls="profile-actions-panel"
                     >
-                      <UserRound size={14} /> Os meus dados
+                      <UserRound size={14} /> Opcoes <ChevronDown size={14} />
                     </button>
-                    <button
-                      className="btn btn-password-soft btn-sm"
-                      type="button"
-                      onClick={() => {
-                        setPasswordModalOpen(true);
-                        setProfileOpen(false);
-                      }}
-                    >
-                      <KeyRound size={14} /> Alterar senha
-                    </button>
-                    <button
-                      className="btn btn-danger-soft btn-sm"
-                      type="button"
-                      onClick={deleteOwnAccount}
-                      disabled={deletingAccount}
-                    >
-                      <Trash2 size={14} /> {deletingAccount ? "A eliminar..." : "Eliminar conta"}
-                    </button>
+                    <div id="profile-actions-panel" className="profile-actions-panel" aria-hidden={!profileActionsOpen}>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        type="button"
+                        onClick={() => {
+                          setDataModalOpen(true);
+                          setProfileOpen(false);
+                        }}
+                      >
+                        <UserRound size={14} /> Os meus dados
+                      </button>
+                      <button
+                        className="btn btn-password-soft btn-sm"
+                        type="button"
+                        onClick={() => {
+                          setPasswordModalOpen(true);
+                          setProfileOpen(false);
+                        }}
+                      >
+                        <KeyRound size={14} /> Alterar senha
+                      </button>
+                      <button
+                        className="btn btn-danger-soft btn-sm"
+                        type="button"
+                        onClick={deleteOwnAccount}
+                        disabled={deletingAccount}
+                      >
+                        <Trash2 size={14} /> {deletingAccount ? "A eliminar..." : "Eliminar conta"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
-            <button className="header-icon-btn header-logout-btn" onClick={signOut} title="Sair">
-              <LogOut size={18} />
-            </button>
           </div>
         </div>
       </header>

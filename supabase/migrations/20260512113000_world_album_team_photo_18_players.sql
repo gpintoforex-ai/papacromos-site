@@ -61,7 +61,7 @@ WITH teams(team_order, team_name) AS (
     (39, 'Áustria'),
     (40, 'Jordânia'),
     (41, 'Portugal'),
-    (42, 'RD do Congo'),
+    (42, 'Jamaica'),
     (43, 'Uzbequistão'),
     (44, 'Colômbia'),
     (45, 'Inglaterra'),

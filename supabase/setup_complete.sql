@@ -413,9 +413,6 @@ UPDATE user_profiles
 SET is_admin = true
 WHERE lower(email) = 'admin@admin.pt';
 
-DELETE FROM stickers
-WHERE collection_id = 'b2026000-0000-4000-8000-000000000001';
-
 INSERT INTO collections (id, name, description, image_url, total_stickers)
 VALUES (
   'b2026000-0000-4000-8000-000000000001',
@@ -473,7 +470,7 @@ WITH teams(team_order, team_name) AS (
     (39, 'Áustria'),
     (40, 'Jordânia'),
     (41, 'Portugal'),
-    (42, 'RD do Congo'),
+    (42, 'Jamaica'),
     (43, 'Uzbequistão'),
     (44, 'Colômbia'),
     (45, 'Inglaterra'),
@@ -604,6 +601,16 @@ album_stickers AS (
     slots.rarity
   FROM teams
   CROSS JOIN slots
+),
+updated_stickers AS (
+  UPDATE stickers
+  SET
+    name = album_stickers.name,
+    rarity = album_stickers.rarity
+  FROM album_stickers
+  WHERE stickers.collection_id = album_stickers.collection_id
+    AND stickers.number = album_stickers.number
+  RETURNING stickers.number
 )
 INSERT INTO stickers (collection_id, number, name, image_url, rarity)
 SELECT collection_id, number, name, image_url, rarity
