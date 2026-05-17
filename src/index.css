@@ -5154,13 +5154,19 @@ textarea {
   grid-template-areas:
     "label label"
     "image number"
-    "image name";
+    "image name"
+    "notice notice";
   gap: 2px 8px;
   align-items: center;
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
+}
+
+.shared-mini-sticker.has-notice {
+  border-color: var(--warning);
+  background: var(--warning-bg);
 }
 
 .shared-mini-sticker em {
@@ -5194,6 +5200,13 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.shared-mini-sticker small {
+  grid-area: notice;
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .share-trade-panel {

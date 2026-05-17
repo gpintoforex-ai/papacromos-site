@@ -103,6 +103,10 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
     .filter((row) => row.status === "have" && row.quantity > 1)
     .map((row) => ({ ...getSticker(row), availableQuantity: row.quantity - 1 })), [friendRows]);
 
+  const myHaveStickerIds = useMemo(() => new Set(
+    myRows.filter((row) => row.status === "have").map((row) => row.sticker_id)
+  ), [myRows]);
+
   const friendWants = useMemo(() => friendRows
     .filter((row) => row.status === "want")
     .map((row) => getSticker(row)), [friendRows]);
@@ -440,7 +444,13 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
       {!loading && (
         <>
           <section className="shared-album-grid">
-            <SharedStickerSection title="Repetidos do amigo" stickers={friendExtras} emptyText="Este utilizador ainda nao marcou repetidos." />
+            <SharedStickerSection
+              title="Repetidos do amigo"
+              stickers={friendExtras}
+              emptyText="Este utilizador ainda nao marcou repetidos."
+              missingStickerIds={myHaveStickerIds}
+              missingNotice="Nao tens este cromo"
+            />
             <SharedStickerSection title="Cromos que procura" stickers={friendWants} emptyText="Este utilizador ainda nao marcou cromos procurados." />
           </section>
 
@@ -475,7 +485,19 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
   );
 }
 
-function SharedStickerSection({ title, stickers, emptyText }: { title: string; stickers: StickerInfo[]; emptyText: string }) {
+function SharedStickerSection({
+  title,
+  stickers,
+  emptyText,
+  missingStickerIds,
+  missingNotice,
+}: {
+  title: string;
+  stickers: StickerInfo[];
+  emptyText: string;
+  missingStickerIds?: Set<string>;
+  missingNotice?: string;
+}) {
   return (
     <section className="share-panel">
       <div className="share-section-heading">
@@ -486,16 +508,22 @@ function SharedStickerSection({ title, stickers, emptyText }: { title: string; s
         <p className="muted-text">{emptyText}</p>
       ) : (
         <div className="shared-sticker-grid">
-          {stickers.map((sticker) => <MiniSticker key={sticker.id} sticker={sticker} />)}
+          {stickers.map((sticker) => (
+            <MiniSticker
+              key={sticker.id}
+              sticker={sticker}
+              notice={missingStickerIds && !missingStickerIds.has(sticker.id) ? missingNotice : undefined}
+            />
+          ))}
         </div>
       )}
     </section>
   );
 }
 
-function MiniSticker({ sticker, label }: { sticker: StickerInfo; label?: string }) {
+function MiniSticker({ sticker, label, notice }: { sticker: StickerInfo; label?: string; notice?: string }) {
   return (
-    <div className="shared-mini-sticker">
+    <div className={`shared-mini-sticker ${notice ? "has-notice" : ""}`}>
       {label && <em>{label}</em>}
       <img
         src={sticker.image_url || "/logo.png"}
@@ -506,6 +534,7 @@ function MiniSticker({ sticker, label }: { sticker: StickerInfo; label?: string 
       />
       <strong>#{String(sticker.number).padStart(3, "0")}</strong>
       <span>{sticker.name}</span>
+      {notice && <small>{notice}</small>}
     </div>
   );
 }

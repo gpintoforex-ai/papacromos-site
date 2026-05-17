@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../lib/auth";
 import { ChevronDown, Handshake, KeyRound, LifeBuoy, LogOut, QrCode, RefreshCw, Shield, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
-import LegalFooter from "./LegalFooter";
 import { supabase } from "../lib/supabase";
 
 type Page = "collection" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
@@ -233,7 +232,6 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
         </div>
       </header>
       <main className="app-main">{children}</main>
-      <LegalFooter />
       {dataModalOpen && (
         <div className="account-data-overlay" role="dialog" aria-modal="true" aria-labelledby="account-data-title">
           <div className="account-data-modal">
