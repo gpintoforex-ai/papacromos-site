@@ -182,6 +182,10 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                       <dt>Registo</dt>
                       <dd>{createdLabel}</dd>
                     </div>
+                    <div>
+                      <dt>vr</dt>
+                      <dd>2026.01</dd>
+                    </div>
                   </dl>
                   {accountError && <p className="profile-error">{accountError}</p>}
                   <div className={`profile-actions ${profileActionsOpen ? "open" : ""}`}>
