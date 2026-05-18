@@ -299,6 +299,63 @@ function getAlbumLocalNumber(sticker: Sticker) {
   return slot;
 }
 
+function normalizeAbbrev(text: string) {
+  return text
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toUpperCase();
+}
+
+const abbrevToTeam: Record<string, string> = {
+  ALG: "Argélia",
+  POR: "Portugal",
+  BRA: "Brasil",
+  BRAZ: "Brasil",
+  SWE: "Suécia",
+  SUE: "Suécia",
+  SUI: "Suica",
+  CHE: "Suica",
+  MEX: "Mexico",
+  ARG: "Argentina",
+  ENG: "Inglaterra",
+  IRN: "Irã",
+  FRA: "Franca",
+  GER: "Alemanha",
+  DEU: "Alemanha",
+  GHA: "Gana",
+  COD: "RD do Congo",
+  USA: "Estados Unidos",
+  EUS: "Estados Unidos",
+};
+
+function levenshtein(a: string, b: string) {
+  const alen = a.length;
+  const blen = b.length;
+  if (alen === 0) return blen;
+  if (blen === 0) return alen;
+  const v0 = new Array(blen + 1).fill(0);
+  const v1 = new Array(blen + 1).fill(0);
+  for (let i = 0; i <= blen; i++) v0[i] = i;
+  for (let i = 0; i < alen; i++) {
+    v1[0] = i + 1;
+    for (let j = 0; j < blen; j++) {
+      const cost = a[i] === b[j] ? 0 : 1;
+      v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost);
+    }
+    for (let j = 0; j <= blen; j++) v0[j] = v1[j];
+  }
+  return v1[blen];
+}
+
+function isSimilarAbbrev(abbrev: string, teamNameNorm: string) {
+  if (teamNameNorm.startsWith(abbrev)) return true;
+  if (teamNameNorm.includes(abbrev)) return true;
+  // allow small typos (distance <= 1)
+  const dist = levenshtein(abbrev.slice(0, 4), teamNameNorm.slice(0, 4));
+  return dist <= 1;
+}
+
 function buildAlbumTeamPages(stickers: Sticker[]): AlbumTeamPage[] {
   const teams = new Map<string, Sticker[]>();
   stickers.forEach((sticker) => {
@@ -591,6 +648,14 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     return () => stopCodeScanner();
   }, []);
 
+  useEffect(() => {
+    if (codePanelOpen) {
+      startCodeScanner();
+    } else {
+      stopCodeScanner();
+    }
+  }, [codePanelOpen]);
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -868,19 +933,55 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       if (!selectedCollectionId) throw new Error("Abre uma colecao primeiro.");
 
       const spokenCounts = parseSpokenStickerCounts(text);
+
+      // Additional parsing for code-mode: detect patterns like "ALG 7" or "ALG-07"
+      const explicitStickerMatches: Map<string, number> = new Map();
       if (options?.codeMode) {
+        // numeric candidates from free text (fallback)
         getCodeNumberCandidates(text).forEach((number) => {
           if (!spokenCounts.has(number)) spokenCounts.set(number, 1);
         });
+
+        const collectionStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
+        // match letter+number combos
+        const re = /([A-Za-z]{1,4})\s*[-_\\/]?\s*0*([1-9][0-9]?)/g;
+        for (const m of text.matchAll(re)) {
+          const abbrev = normalizeAbbrev(m[1]);
+          const num = Number.parseInt(m[2], 10);
+          if (!Number.isFinite(num)) continue;
+
+          let found: Sticker | undefined;
+          const mappedTeam = abbrevToTeam[abbrev];
+          if (mappedTeam) {
+            found = collectionStickers.find((st) => normalizeAbbrev(getStickerTeamName(st.name)) === normalizeAbbrev(mappedTeam) && getAlbumLocalNumber(st) === num);
+          }
+
+          if (!found) {
+            // try to find sticker by matching start/include/fuzzy of normalized team name
+            found = collectionStickers.find((st) => isSimilarAbbrev(abbrev, normalizeAbbrev(getStickerTeamName(st.name))) && getAlbumLocalNumber(st) === num);
+          }
+
+          if (found) {
+            explicitStickerMatches.set(found.id, (explicitStickerMatches.get(found.id) || 0) + 1);
+          }
+        }
       }
 
       if (spokenCounts.size === 0) {
         throw new Error("Nao encontrei numeros de cromos no texto.");
       }
 
-      const matched = Array.from(spokenCounts.entries())
+      const matchedFromNumbers = Array.from(spokenCounts.entries())
         .map(([number, count]) => ({ number, count, sticker: getStickerBySpokenNumber(number) }))
         .filter((item): item is { number: number; count: number; sticker: Sticker } => Boolean(item.sticker));
+
+      const matchedFromExplicit = Array.from(explicitStickerMatches.entries()).map(([stickerId, count]) => ({
+        number: NaN,
+        count,
+        sticker: stickers.find((s) => s.id === stickerId) as Sticker,
+      }));
+
+      const matched = [...matchedFromNumbers, ...matchedFromExplicit];
       const missingNumbers = Array.from(spokenCounts.keys())
         .filter((number) => !matched.some((item) => item.number === number));
 
@@ -991,6 +1092,22 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   };
 
   const findStickerForScannedCode = (rawValue: string): Sticker | null => {
+    // try abbreviation+number first (e.g. ALG 7)
+    const abbrevMatch = rawValue.trim().match(/^([A-Za-z]{1,4})\s*[-_\\/]?\s*0*([1-9][0-9]?)$/);
+    if (abbrevMatch && selectedCollectionId) {
+      const collectionStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
+      const abbrev = normalizeAbbrev(abbrevMatch[1]);
+      const num = Number.parseInt(abbrevMatch[2], 10);
+      const mappedTeam = abbrevToTeam[abbrev];
+      if (mappedTeam) {
+        const found = collectionStickers.find((st) => normalizeAbbrev(getStickerTeamName(st.name)) === normalizeAbbrev(mappedTeam) && getAlbumLocalNumber(st) === num);
+        if (found) return found;
+      }
+
+      const found = collectionStickers.find((st) => isSimilarAbbrev(abbrev, normalizeAbbrev(getStickerTeamName(st.name))) && getAlbumLocalNumber(st) === num);
+      if (found) return found;
+    }
+
     const candidates = getCodeNumberCandidates(rawValue);
     const sticker = Array.from(candidates)
       .map((number) => getStickerBySpokenNumber(number))
@@ -1719,12 +1836,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           <button
             className="btn btn-code-toggle btn-sm"
             type="button"
-            onClick={() => {
-              setCodePanelOpen((open) => {
-                if (open) stopCodeScanner();
-                return !open;
-              });
-            }}
+            onClick={() => setCodePanelOpen((open) => !open)}
           >
             <ScanLine size={14} /> Ler codigo
           </button>
