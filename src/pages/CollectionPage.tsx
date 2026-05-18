@@ -4,7 +4,6 @@ import { useAuth } from "../lib/auth";
 import { getAvatarColor, getAvatarInitial } from "../lib/avatar";
 import StickerCard from "../components/StickerCard";
 import { Search, Camera, ArrowLeft, X, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, ChartNoAxesColumnIncreasing } from "lucide-react";
-import type { IScannerControls } from "@zxing/browser";
 
 interface Collection {
   id: string;
@@ -590,13 +589,16 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const [codePanelOpen, setCodePanelOpen] = useState(false);
   const [codeText, setCodeText] = useState("");
   const [codeScanning, setCodeScanning] = useState(false);
+  const [codeReading, setCodeReading] = useState(false);
   const [codeResult, setCodeResult] = useState<string | null>(null);
   const [scannedCodes, setScannedCodes] = useState<ScannedCodeItem[]>([]);
   const [albumSlideDirection, setAlbumSlideDirection] = useState<AlbumSlideDirection>(null);
   const collectionsSectionRef = useRef<HTMLElement | null>(null);
   const codeVideoRef = useRef<HTMLVideoElement | null>(null);
-  const codeScannerControlsRef = useRef<IScannerControls | null>(null);
-  const codeScanHandledRef = useRef(false);
+  const codeStreamRef = useRef<MediaStream | null>(null);
+  const codeOcrTimerRef = useRef<number | null>(null);
+  const codeOcrBusyRef = useRef(false);
+  const codeOcrWorkerRef = useRef<any | null>(null);
   const codeLastSeenAtRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
@@ -922,6 +924,40 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     return candidates;
   };
 
+  const normalizeOcrCodeText = (text: string) => {
+    return text
+      .toUpperCase()
+      .replace(/[|]/g, "I")
+      .replace(/[€£]/g, "E")
+      .replace(/[“”]/g, '"')
+      .replace(/[^\w\s/-]/g, " ")
+      .replace(/\b1RN\b/g, "IRN")
+      .replace(/\bIR[NM]\b/g, "IRN")
+      .replace(/\bA1G\b/g, "ALG")
+      .replace(/\bAL6\b/g, "ALG")
+      .replace(/\bEN6\b/g, "ENG")
+      .replace(/\b6HA\b/g, "GHA")
+      .replace(/\bC0D\b/g, "COD")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  const getStickerCodesFromOcrText = (text: string) => {
+    const normalizedText = normalizeOcrCodeText(text).replace(/\b([A-Z]{3})([0-9]{1,2})\b/g, "$1 $2");
+    const codes: string[] = [];
+    const re = /\b([A-Z0-9]{2,4})\s*[-_/]?\s*([0-9]{1,2})\b/g;
+
+    for (const match of normalizedText.matchAll(re)) {
+      const abbrev = normalizeAbbrev(match[1]);
+      const number = Number.parseInt(match[2], 10);
+      if (!Number.isFinite(number) || number < 1 || number > 20) continue;
+      if (!abbrevToTeam[abbrev]) continue;
+      codes.push(`${abbrev} ${number}`);
+    }
+
+    return Array.from(new Set(codes));
+  };
+
   const markStickerNumbersFromText = async (
     text: string,
     mode: VoiceMarkMode,
@@ -1162,14 +1198,79 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   };
 
   const stopCodeScanner = () => {
-    codeScannerControlsRef.current?.stop();
-    codeScannerControlsRef.current = null;
+    if (codeOcrTimerRef.current !== null) {
+      window.clearInterval(codeOcrTimerRef.current);
+      codeOcrTimerRef.current = null;
+    }
+    codeOcrBusyRef.current = false;
+    if (codeOcrWorkerRef.current) {
+      void codeOcrWorkerRef.current.terminate();
+      codeOcrWorkerRef.current = null;
+    }
     codeLastSeenAtRef.current.clear();
+    codeStreamRef.current?.getTracks().forEach((track) => track.stop());
+    codeStreamRef.current = null;
     if (codeVideoRef.current) {
       codeVideoRef.current.srcObject = null;
     }
-    codeScanHandledRef.current = false;
     setCodeScanning(false);
+    setCodeReading(false);
+  };
+
+  const addDetectedCode = (rawValue: string) => {
+    const now = Date.now();
+    const lastSeenAt = codeLastSeenAtRef.current.get(rawValue) || 0;
+    if (now - lastSeenAt < 1600) return;
+    codeLastSeenAtRef.current.set(rawValue, now);
+
+    setCodeText(rawValue);
+    setScannedCodes((current) => {
+      const existing = current.find((item) => item.rawValue === rawValue);
+      if (existing) {
+        return current.map((item) =>
+          item.rawValue === rawValue ? { ...item, count: item.count + 1 } : item
+        );
+      }
+      return [...current, { rawValue, sticker: findStickerForScannedCode(rawValue), count: 1 }];
+    });
+  };
+
+  const readCodeFrame = async () => {
+    if (codeOcrBusyRef.current) return;
+
+    const video = codeVideoRef.current;
+    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) {
+      return;
+    }
+
+    codeOcrBusyRef.current = true;
+    setCodeReading(true);
+    try {
+      const canvas = document.createElement("canvas");
+      const scale = Math.min(1, 1280 / video.videoWidth);
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return;
+
+      context.filter = "grayscale(1) contrast(1.8)";
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      if (!codeOcrWorkerRef.current) {
+        const { createWorker, OEM } = await import("tesseract.js");
+        codeOcrWorkerRef.current = await createWorker("eng", OEM.LSTM_ONLY, {}, {
+          tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_/",
+        } as any);
+      }
+      const result = await codeOcrWorkerRef.current.recognize(canvas);
+      const codes = getStickerCodesFromOcrText(result.data.text);
+      codes.forEach(addDetectedCode);
+    } catch (err) {
+      console.error("Erro ao ler texto da camara.", err);
+    } finally {
+      codeOcrBusyRef.current = false;
+      setCodeReading(false);
+    }
   };
 
   const startCodeScanner = async () => {
@@ -1185,41 +1286,23 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       const video = codeVideoRef.current;
       if (!video) throw new Error("Nao consegui abrir o leitor de codigos.");
 
-      const { BrowserMultiFormatReader } = await import("@zxing/browser");
-      const reader = new BrowserMultiFormatReader();
-      const controls = await reader.decodeFromConstraints(
-        {
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-          audio: false,
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
         },
-        video,
-        async (result) => {
-          const rawValue = result?.getText()?.trim();
-          if (!rawValue) return;
-
-          const now = Date.now();
-          const lastSeenAt = codeLastSeenAtRef.current.get(rawValue) || 0;
-          if (now - lastSeenAt < 1600) return;
-          codeLastSeenAtRef.current.set(rawValue, now);
-
-          setCodeText(rawValue);
-          setScannedCodes((current) => {
-            const existing = current.find((item) => item.rawValue === rawValue);
-            if (existing) {
-              return current.map((item) =>
-                item.rawValue === rawValue ? { ...item, count: item.count + 1 } : item
-              );
-            }
-            return [...current, { rawValue, sticker: findStickerForScannedCode(rawValue), count: 1 }];
-          });
-        }
-      );
-      codeScannerControlsRef.current = controls;
+        audio: false,
+      });
+      codeStreamRef.current = stream;
+      video.srcObject = stream;
+      await video.play();
       setCodeScanning(true);
+
+      window.setTimeout(() => {
+        readCodeFrame();
+        codeOcrTimerRef.current = window.setInterval(readCodeFrame, 2200);
+      }, 500);
     } catch (err: any) {
       stopCodeScanner();
       if (err?.name === "NotAllowedError") {
@@ -1930,6 +2013,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
             <video ref={codeVideoRef} muted playsInline />
             {!codeScanning && <span>Camara desligada</span>}
             {codeScanning && <div className="code-scan-line" />}
+            {codeReading && <span>A ler texto...</span>}
           </div>
           {scannedCodes.length > 0 && (
             <div className="code-scan-detected">
@@ -1952,7 +2036,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
               onChange={(event) => setCodeText(event.target.value)}
             />
             <button className="btn btn-code-toggle btn-sm" type="button" onClick={startCodeScanner} disabled={codeScanning}>
-              <ScanLine size={14} /> {codeScanning ? "Capturando..." : "Capturar"}
+              <ScanLine size={14} /> {codeScanning ? "A ler..." : "Ler com camara"}
             </button>
             {codeScanning && (
               <button className="btn btn-ghost btn-sm" type="button" onClick={stopCodeScanner}>
