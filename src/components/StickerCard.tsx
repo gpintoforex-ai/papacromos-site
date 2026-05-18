@@ -99,15 +99,11 @@ export default function StickerCard({
           </button>
         )}
       </div>
-      <div className="sticker-card-body">
-        <h3 className="sticker-name">{name}</h3>
-        <span className="sticker-rarity" style={{ color: r.text, background: r.bg }}>
-          {r.label}
-        </span>
-      </div>
-
       {children && (
         <div className="sticker-card-actions" onClick={(event) => event.stopPropagation()}>
+          <span className="sticker-rarity" style={{ color: r.text, background: r.bg }}>
+            {r.label}
+          </span>
           {children}
         </div>
       )}

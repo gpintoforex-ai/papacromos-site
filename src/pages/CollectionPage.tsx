@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
+import { getAvatarColor, getAvatarInitial } from "../lib/avatar";
 import StickerCard from "../components/StickerCard";
 import { Search, Camera, ArrowLeft, X, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, ChartNoAxesColumnIncreasing } from "lucide-react";
 import type { IScannerControls } from "@zxing/browser";
@@ -36,9 +37,18 @@ interface UserCollectionPreference {
   is_active: boolean;
 }
 
+interface NeededStickerHolder {
+  userId: string;
+  username: string;
+  avatarSeed: string;
+  count: number;
+  sampleStickers: Sticker[];
+}
+
 type FilterMode = "all" | "have" | "repeated" | "want" | "missing";
 type VoiceMarkMode = "have" | "want";
 type HomeResultMode = "collections" | "owned" | "complete";
+type AlbumSlideDirection = "previous" | "next" | null;
 
 interface AlbumTeamPage {
   teamName: string;
@@ -302,6 +312,15 @@ function buildAlbumTeamPages(stickers: Sticker[]): AlbumTeamPage[] {
 }
 
 const DATA_PAGE_SIZE = 1000;
+const QUERY_CHUNK_SIZE = 80;
+
+function chunkArray<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
 
 async function fetchAllStickers() {
   const allStickers: Sticker[] = [];
@@ -344,6 +363,74 @@ async function fetchUserStickers(userId: string) {
   }
 
   return allUserStickers;
+}
+
+async function fetchNeededStickerHolders(userId: string, missingStickers: Sticker[]) {
+  if (missingStickers.length === 0) return [];
+
+  const stickerById = new Map(missingStickers.map((sticker) => [sticker.id, sticker]));
+  const holders = new Map<string, Set<string>>();
+
+  for (const stickerIdChunk of chunkArray(Array.from(stickerById.keys()), QUERY_CHUNK_SIZE)) {
+    let from = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from("user_stickers")
+        .select("user_id, sticker_id")
+        .eq("status", "have")
+        .gt("quantity", 1)
+        .neq("user_id", userId)
+        .in("sticker_id", stickerIdChunk)
+        .range(from, from + DATA_PAGE_SIZE - 1);
+
+      if (error) throw error;
+
+      (data || []).forEach((row) => {
+        const existing = holders.get(row.user_id) || new Set<string>();
+        existing.add(row.sticker_id);
+        holders.set(row.user_id, existing);
+      });
+
+      if (!data || data.length < DATA_PAGE_SIZE) break;
+      from += DATA_PAGE_SIZE;
+    }
+  }
+
+  const rankedHolders = Array.from(holders.entries())
+    .map(([holderUserId, stickerIds]) => ({
+      userId: holderUserId,
+      stickerIds: Array.from(stickerIds),
+      count: stickerIds.size,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 12);
+
+  if (rankedHolders.length === 0) return [];
+
+  const { data: profiles, error: profilesError } = await supabase
+    .from("user_profiles")
+    .select("id, username, avatar_seed")
+    .in("id", rankedHolders.map((holder) => holder.userId));
+
+  if (profilesError) throw profilesError;
+
+  const profilesById = new Map((profiles || []).map((profile) => [profile.id, profile]));
+
+  return rankedHolders.map((holder): NeededStickerHolder => {
+    const profile = profilesById.get(holder.userId);
+
+    return {
+      userId: holder.userId,
+      username: profile?.username || "Colecionador",
+      avatarSeed: profile?.avatar_seed || holder.userId,
+      count: holder.count,
+      sampleStickers: holder.stickerIds
+        .map((stickerId) => stickerById.get(stickerId))
+        .filter((sticker): sticker is Sticker => Boolean(sticker))
+        .slice(0, 3),
+    };
+  });
 }
 
 function CollectionHomeCarousel({
@@ -411,9 +498,10 @@ function CollectionHomeCarousel({
 interface CollectionPageProps {
   homeKey: number;
   onCollectionChange?: () => void;
+  onOpenSharedUser?: (userId: string) => void;
 }
 
-export default function CollectionPage({ homeKey, onCollectionChange }: CollectionPageProps) {
+export default function CollectionPage({ homeKey, onCollectionChange, onOpenSharedUser }: CollectionPageProps) {
   const { user, profile } = useAuth();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collectionPreferences, setCollectionPreferences] = useState<UserCollectionPreference[]>([]);
@@ -433,11 +521,14 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceResult, setVoiceResult] = useState<string | null>(null);
   const [homeResultMode, setHomeResultMode] = useState<HomeResultMode>("collections");
+  const [neededStickerHolders, setNeededStickerHolders] = useState<NeededStickerHolder[]>([]);
+  const [neededStickerHoldersLoading, setNeededStickerHoldersLoading] = useState(false);
   const [statsPanelOpen, setStatsPanelOpen] = useState(false);
   const [codePanelOpen, setCodePanelOpen] = useState(false);
   const [codeText, setCodeText] = useState("");
   const [codeScanning, setCodeScanning] = useState(false);
   const [codeResult, setCodeResult] = useState<string | null>(null);
+  const [albumSlideDirection, setAlbumSlideDirection] = useState<AlbumSlideDirection>(null);
   const collectionsSectionRef = useRef<HTMLElement | null>(null);
   const codeVideoRef = useRef<HTMLVideoElement | null>(null);
   const codeScannerControlsRef = useRef<IScannerControls | null>(null);
@@ -503,6 +594,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
         setCollectionPreferences([]);
         setStickers([]);
         setUserStickers([]);
+        setNeededStickerHolders([]);
         return;
       }
 
@@ -528,11 +620,16 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
   };
 
   const getUserSticker = (stickerId: string) => {
-    return userStickers.find((us) => us.user_id === user?.id && us.sticker_id === stickerId && us.status === "have");
+    return userStickers.find((us) => us.user_id === user?.id && us.sticker_id === stickerId && us.status === "have" && (us.quantity || 0) > 0);
   };
 
   const hasUserStickerStatus = (stickerId: string, status: "have" | "want") => {
-    return userStickers.some((us) => us.user_id === user?.id && us.sticker_id === stickerId && us.status === status);
+    return userStickers.some((us) =>
+      us.user_id === user?.id &&
+      us.sticker_id === stickerId &&
+      us.status === status &&
+      (status === "want" || (us.quantity || 0) > 0)
+    );
   };
 
   const addSticker = async (stickerId: string, status: "have" | "want") => {
@@ -1119,10 +1216,16 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
   const activeCollectionIds = new Set(activeCollections.map((collection) => collection.id));
   const activeStickers = stickers.filter((sticker) => activeCollectionIds.has(sticker.collection_id));
   const activeStickerIds = new Set(activeStickers.map((sticker) => sticker.id));
-  const ownHaveStickers = userStickers.filter((us) => us.user_id === user?.id && us.status === "have" && activeStickerIds.has(us.sticker_id));
+  const ownHaveStickers = userStickers.filter((us) =>
+    us.user_id === user?.id &&
+    us.status === "have" &&
+    (us.quantity || 0) > 0 &&
+    activeStickerIds.has(us.sticker_id)
+  );
   const ownHaveStickerIds = new Set(ownHaveStickers.map((us) => us.sticker_id));
   const repeatedUserStickers = ownHaveStickers.filter((us) => (us.quantity || 0) > 1);
   const missingPreviewStickers = activeStickers.filter((sticker) => !ownHaveStickerIds.has(sticker.id));
+  const missingStickerKey = missingPreviewStickers.map((sticker) => sticker.id).join("|");
   const repeatedPreviewStickers = repeatedUserStickers
     .map((us) => ({ userSticker: us, sticker: stickers.find((sticker) => sticker.id === us.sticker_id) }))
     .filter((entry): entry is { userSticker: UserSticker; sticker: Sticker } => Boolean(entry.sticker));
@@ -1171,8 +1274,40 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
       : null;
   const showVoiceMarkControls = !isWorldAlbum || Boolean(selectedAlbumTeamName);
   const showCodeMarkControls = Boolean(selectedCollectionId);
+  const neededStickerHolderLoopItems =
+    neededStickerHolders.length > 1 ? [...neededStickerHolders, ...neededStickerHolders] : neededStickerHolders;
 
-  const openAlbumTeam = (teamName: string) => {
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadNeededStickerHolders = async () => {
+      if (!user?.id || selectedCollectionId || missingPreviewStickers.length === 0) {
+        setNeededStickerHolders([]);
+        setNeededStickerHoldersLoading(false);
+        return;
+      }
+
+      setNeededStickerHoldersLoading(true);
+      try {
+        const holders = await fetchNeededStickerHolders(user.id, missingPreviewStickers);
+        if (!cancelled) setNeededStickerHolders(holders);
+      } catch (err) {
+        console.error("Erro ao carregar utilizadores com cromos em falta.", err);
+        if (!cancelled) setNeededStickerHolders([]);
+      } finally {
+        if (!cancelled) setNeededStickerHoldersLoading(false);
+      }
+    };
+
+    loadNeededStickerHolders();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, selectedCollectionId, missingStickerKey]);
+
+  const openAlbumTeam = (teamName: string, direction: AlbumSlideDirection = null) => {
+    setAlbumSlideDirection(direction);
     setSelectedAlbumTeamName(teamName);
     setSearch("");
     setFilter("all");
@@ -1278,8 +1413,6 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
         <section className="collection-home-hero">
           <div>
             <span className="collection-home-kicker">A minha colecao</span>
-            <h2>Papa Cromos</h2>
-            <p>Resumo rapido das tuas cadernetas, faltas e repetidos.</p>
           </div>
           <div className="collection-home-stats">
             <button
@@ -1326,6 +1459,44 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
                 </button>
               ))}
             </CollectionHomeCarousel>
+          </section>
+        )}
+
+        {(neededStickerHoldersLoading || neededStickerHolders.length > 0) && (
+          <section className="needed-users-carousel" aria-label="Utilizadores com cromos que precisas">
+            {neededStickerHoldersLoading && neededStickerHolders.length === 0 ? (
+              <div className="needed-user-card loading-card">
+                <div className="needed-user-avatar skeleton-avatar" />
+                <div>
+                  <strong>A procurar...</strong>
+                  <span>A verificar quem tem cromos que precisas.</span>
+                </div>
+              </div>
+            ) : (
+              <div className={`needed-users-track ${neededStickerHolders.length > 1 ? "is-looping" : ""}`}>
+                {neededStickerHolderLoopItems.map((holder, index) => (
+                  <button
+                    className="needed-user-card"
+                    key={`${holder.userId}-${index}`}
+                    type="button"
+                    onClick={() => onOpenSharedUser?.(holder.userId)}
+                  >
+                    <div className="needed-user-avatar" style={{ background: getAvatarColor(holder.avatarSeed) }}>
+                      {getAvatarInitial(holder.username)}
+                    </div>
+                    <div className="needed-user-copy">
+                      <strong>{holder.username}</strong>
+                      <span>Tem {holder.count} {holder.count === 1 ? "cromo" : "cromos"} que precisas!</span>
+                      {holder.sampleStickers.length > 0 && (
+                        <small>
+                          {holder.sampleStickers.map((sticker) => `#${String(sticker.number).padStart(3, "0")}`).join(", ")}
+                        </small>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
@@ -1410,7 +1581,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
                     {active ? "Ativa" : "Desativada"}
                   </span>
                   <button
-                    className={`btn btn-xs ${active ? "btn-ghost" : "btn-primary"}`}
+                    className={`btn btn-xs ${active ? "btn-error" : "btn-primary"}`}
                     type="button"
                     onClick={() => toggleCollectionActive(collection.id, !active)}
                   >
@@ -1658,7 +1829,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
               <button
                 className="btn btn-album-nav"
                 type="button"
-                onClick={() => previousAlbumTeam && openAlbumTeam(previousAlbumTeam.teamName)}
+                onClick={() => previousAlbumTeam && openAlbumTeam(previousAlbumTeam.teamName, "previous")}
                 disabled={!previousAlbumTeam}
               >
                 <ArrowLeft size={14} /> Anterior
@@ -1666,7 +1837,7 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
               <button
                 className="btn btn-album-nav"
                 type="button"
-                onClick={() => nextAlbumTeam && openAlbumTeam(nextAlbumTeam.teamName)}
+                onClick={() => nextAlbumTeam && openAlbumTeam(nextAlbumTeam.teamName, "next")}
                 disabled={!nextAlbumTeam}
               >
                 Seguinte <ArrowLeft className="icon-flip-horizontal" size={14} />
@@ -1681,7 +1852,11 @@ export default function CollectionPage({ homeKey, onCollectionChange }: Collecti
             const playerStickers = teamPage.stickers.filter((sticker) => !sticker.name.includes("Foto de equipa"));
 
             return (
-              <section className="album-spread" key={teamPage.teamName}>
+              <section
+                className={`album-spread ${albumSlideDirection ? `album-spread-slide-${albumSlideDirection}` : ""}`}
+                key={teamPage.teamName}
+                onAnimationEnd={() => setAlbumSlideDirection(null)}
+              >
                 <div className="album-team-hero">
                   <span className="album-page-number">{String(pageIndex + 1).padStart(2, "0")}</span>
                   <div>

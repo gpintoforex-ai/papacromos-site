@@ -10,6 +10,8 @@ interface MatchesPageProps {
   onMatchesChange?: (count: number) => void;
 }
 
+type MatchDetailTab = "suggested" | "offer" | "receive";
+
 interface Partner {
   id: string;
   name: string;
@@ -73,6 +75,7 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
   const [tradeNotes, setTradeNotes] = useState<Record<string, string>>({});
   const [tradeErrors, setTradeErrors] = useState<Record<string, string>>({});
   const [tradeSuccesses, setTradeSuccesses] = useState<Record<string, string>>({});
+  const [activeMatchTabs, setActiveMatchTabs] = useState<Record<string, MatchDetailTab>>({});
 
   useEffect(() => {
     findMatches();
@@ -147,6 +150,7 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
       setOpenUserId(null);
       setOfferedQuantities({});
       setRequestedQuantities({});
+      setActiveMatchTabs({});
     } catch (err: any) {
       setMatches([]);
       onMatchesChange?.(0);
@@ -178,6 +182,57 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
     const qty = quantities[quantityKey(group.otherUserId, sticker.id)] || 0;
     return Array.from({ length: qty }, () => sticker);
   });
+
+  const countAvailableUnits = (stickers: MatchSticker[]) =>
+    stickers.reduce((total, sticker) => total + (sticker.available_quantity || 1), 0);
+
+  const buildSuggestedQuantities = (group: MatchUserGroup, stickers: MatchSticker[], targetUnits: number) => {
+    const next: Record<string, number> = {};
+    let remaining = targetUnits;
+
+    stickers.forEach((sticker) => {
+      if (remaining <= 0) return;
+      const max = sticker.available_quantity || 1;
+      const quantity = Math.min(max, remaining);
+      if (quantity > 0) {
+        next[quantityKey(group.otherUserId, sticker.id)] = quantity;
+        remaining -= quantity;
+      }
+    });
+
+    return next;
+  };
+
+  const applySuggestedTrade = (group: MatchUserGroup) => {
+    const suggestedCount = Math.min(
+      countAvailableUnits(group.offeredStickers),
+      countAvailableUnits(group.requestedStickers),
+    );
+    const groupStickerIds = new Set([
+      ...group.offeredStickers.map((sticker) => quantityKey(group.otherUserId, sticker.id)),
+      ...group.requestedStickers.map((sticker) => quantityKey(group.otherUserId, sticker.id)),
+    ]);
+
+    setOfferedQuantities((current) => ({
+      ...Object.fromEntries(Object.entries(current).filter(([key]) => !groupStickerIds.has(key))),
+      ...buildSuggestedQuantities(group, group.offeredStickers, suggestedCount),
+    }));
+    setRequestedQuantities((current) => ({
+      ...Object.fromEntries(Object.entries(current).filter(([key]) => !groupStickerIds.has(key))),
+      ...buildSuggestedQuantities(group, group.requestedStickers, suggestedCount),
+    }));
+    setActiveMatchTabs((current) => ({ ...current, [group.otherUserId]: "suggested" }));
+  };
+
+  const openMatchGroup = (group: MatchUserGroup, isOpen: boolean) => {
+    if (isOpen) {
+      setOpenUserId(null);
+      return;
+    }
+
+    setOpenUserId(group.otherUserId);
+    applySuggestedTrade(group);
+  };
 
   const proposeUserTrade = async (group: MatchUserGroup) => {
     const tradeKey = group.otherUserId;
@@ -294,7 +349,7 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
             const requestedTotal = group.requestedStickers.reduce((total, sticker) => total + (requestedQuantities[quantityKey(group.otherUserId, sticker.id)] || 0), 0);
             return (
               <div key={group.otherUserId} className="match-user-card">
-                <button className="match-user-summary" type="button" onClick={() => setOpenUserId(isOpen ? null : group.otherUserId)}>
+                <button className="match-user-summary" type="button" onClick={() => openMatchGroup(group, isOpen)}>
                   <div className="match-user-info">
                     <div className="match-avatar" style={{ background: getAvatarColor(group.otherAvatarSeed) }}>
                       {getAvatarInitial(group.otherUsername)}
@@ -313,49 +368,90 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
 
                 {isOpen && (
                   <div className="match-user-panel">
-                    <div className="match-selection-grid">
+                    <div className="match-detail-tabs" role="tablist" aria-label="Detalhe do match">
+                      {[
+                        { value: "suggested" as MatchDetailTab, label: "Troca sugerida" },
+                        { value: "offer" as MatchDetailTab, label: `Posso dar (${group.offeredStickers.length})` },
+                        { value: "receive" as MatchDetailTab, label: `Posso receber (${group.requestedStickers.length})` },
+                      ].map((tab) => (
+                        <button
+                          key={tab.value}
+                          type="button"
+                          className={`match-detail-tab ${((activeMatchTabs[tradeKey] || "suggested") === tab.value) ? "active" : ""}`}
+                          onClick={() => setActiveMatchTabs((current) => ({ ...current, [tradeKey]: tab.value }))}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {(activeMatchTabs[tradeKey] || "suggested") === "suggested" && (
+                      <div className="match-suggestion-panel">
+                        <div className="match-suggestion-header">
+                          <div>
+                            <strong>Proposta pronta</strong>
+                            <span>Revê as quantidades e envia quando estiver equilibrada.</span>
+                          </div>
+                          <button className="btn btn-ghost btn-sm" type="button" onClick={() => applySuggestedTrade(group)}>
+                            Sugerir outra vez
+                          </button>
+                        </div>
+                        <div className="match-suggestion-grid">
+                          <div className="match-suggestion-column">
+                            <span className="match-label">Tu das</span>
+                            <MatchStickerSelectorList
+                              group={group}
+                              stickers={group.offeredStickers.filter((sticker) => (offeredQuantities[quantityKey(group.otherUserId, sticker.id)] || 0) > 0)}
+                              quantities={offeredQuantities}
+                              onUpdate={setOfferedQuantities}
+                              quantityKey={quantityKey}
+                              updateQuantity={updateQuantity}
+                              emptyText="Sem cromos selecionados para entregar."
+                            />
+                          </div>
+                          <div className="match-suggestion-column">
+                            <span className="match-label">Tu recebes</span>
+                            <MatchStickerSelectorList
+                              group={group}
+                              stickers={group.requestedStickers.filter((sticker) => (requestedQuantities[quantityKey(group.otherUserId, sticker.id)] || 0) > 0)}
+                              quantities={requestedQuantities}
+                              onUpdate={setRequestedQuantities}
+                              quantityKey={quantityKey}
+                              updateQuantity={updateQuantity}
+                              emptyText="Sem cromos selecionados para receber."
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {(activeMatchTabs[tradeKey] || "suggested") === "offer" && (
                       <div>
                         <span className="match-label">Minhas repetidas procuradas</span>
-                        <div className="match-sticker-list">
-                          {group.offeredStickers.map((sticker) => {
-                            const key = quantityKey(group.otherUserId, sticker.id);
-                            const quantity = offeredQuantities[key] || 0;
-                            const max = sticker.available_quantity || 1;
-                            return (
-                              <MatchStickerSelector
-                                key={sticker.id}
-                                sticker={sticker}
-                                quantity={quantity}
-                                max={max}
-                                onMinus={() => updateQuantity(setOfferedQuantities, key, max, -1)}
-                                onPlus={() => updateQuantity(setOfferedQuantities, key, max, 1)}
-                              />
-                            );
-                          })}
-                        </div>
+                        <MatchStickerSelectorList
+                          group={group}
+                          stickers={group.offeredStickers}
+                          quantities={offeredQuantities}
+                          onUpdate={setOfferedQuantities}
+                          quantityKey={quantityKey}
+                          updateQuantity={updateQuantity}
+                        />
                       </div>
+                    )}
 
+                    {(activeMatchTabs[tradeKey] || "suggested") === "receive" && (
                       <div>
                         <span className="match-label">Cromos dele que eu procuro</span>
-                        <div className="match-sticker-list">
-                          {group.requestedStickers.map((sticker) => {
-                            const key = quantityKey(group.otherUserId, sticker.id);
-                            const quantity = requestedQuantities[key] || 0;
-                            const max = sticker.available_quantity || 1;
-                            return (
-                              <MatchStickerSelector
-                                key={sticker.id}
-                                sticker={sticker}
-                                quantity={quantity}
-                                max={max}
-                                onMinus={() => updateQuantity(setRequestedQuantities, key, max, -1)}
-                                onPlus={() => updateQuantity(setRequestedQuantities, key, max, 1)}
-                              />
-                            );
-                          })}
-                        </div>
+                        <MatchStickerSelectorList
+                          group={group}
+                          stickers={group.requestedStickers}
+                          quantities={requestedQuantities}
+                          onUpdate={setRequestedQuantities}
+                          quantityKey={quantityKey}
+                          updateQuantity={updateQuantity}
+                        />
                       </div>
-                    </div>
+                    )}
 
                     <div className="match-balance-row">
                       <span>Proponho: <strong>{offeredTotal}</strong></span>
@@ -458,6 +554,51 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function MatchStickerSelectorList({
+  group,
+  stickers,
+  quantities,
+  onUpdate,
+  quantityKey,
+  updateQuantity,
+  emptyText = "Sem cromos nesta lista.",
+}: {
+  group: MatchUserGroup;
+  stickers: MatchSticker[];
+  quantities: Record<string, number>;
+  onUpdate: Dispatch<SetStateAction<Record<string, number>>>;
+  quantityKey: (userId: string, stickerId: string) => string;
+  updateQuantity: (
+    setter: Dispatch<SetStateAction<Record<string, number>>>,
+    key: string,
+    max: number,
+    delta: number,
+  ) => void;
+  emptyText?: string;
+}) {
+  if (stickers.length === 0) return <p className="muted-text">{emptyText}</p>;
+
+  return (
+    <div className="match-sticker-list">
+      {stickers.map((sticker) => {
+        const key = quantityKey(group.otherUserId, sticker.id);
+        const quantity = quantities[key] || 0;
+        const max = sticker.available_quantity || 1;
+        return (
+          <MatchStickerSelector
+            key={sticker.id}
+            sticker={sticker}
+            quantity={quantity}
+            max={max}
+            onMinus={() => updateQuantity(onUpdate, key, max, -1)}
+            onPlus={() => updateQuantity(onUpdate, key, max, 1)}
+          />
+        );
+      })}
     </div>
   );
 }

@@ -26,8 +26,33 @@ export function countUniqueRequestedStickers(matches: Match[]) {
   return new Set(matches.map((match) => match.requestedSticker.id)).size;
 }
 
+function mapRpcMatches(rows: any[]): Match[] {
+  return rows.map((row) => ({
+    otherUserId: row.other_user_id,
+    otherUsername: row.other_username || "Utilizador",
+    otherAvatarSeed: row.other_avatar_seed || row.other_user_id,
+    offeredSticker: {
+      id: row.offered_sticker_id,
+      name: row.offered_sticker_name,
+      number: row.offered_sticker_number,
+      image_url: row.offered_sticker_image_url,
+      rarity: row.offered_sticker_rarity,
+      available_quantity: row.offered_available_quantity || 1,
+    },
+    requestedSticker: {
+      id: row.requested_sticker_id,
+      name: row.requested_sticker_name,
+      number: row.requested_sticker_number,
+      image_url: row.requested_sticker_image_url,
+      rarity: row.requested_sticker_rarity,
+      available_quantity: row.requested_available_quantity || 1,
+    },
+  }));
+}
+
 const userStickerSelect = "user_id, sticker_id, quantity, stickers(id, name, number, image_url, rarity, collection_id)";
 const queryChunkSize = 80;
+const dataPageSize = 1000;
 
 function chunkIds(ids: string[]) {
   const chunks: string[][] = [];
@@ -41,23 +66,124 @@ async function fetchUserStickersByStickerIds(stickerIds: string[], status: "have
   const rows: any[] = [];
 
   for (const chunk of chunkIds(stickerIds)) {
-    let query = supabase
-      .from("user_stickers")
-      .select(userStickerSelect)
-      .in("sticker_id", chunk)
-      .eq("status", status)
-      .neq("user_id", currentUserId);
+    let from = 0;
 
-    if (status === "have") {
-      query = query.gt("quantity", 1);
+    while (true) {
+      let query = supabase
+        .from("user_stickers")
+        .select(userStickerSelect)
+        .in("sticker_id", chunk)
+        .eq("status", status)
+        .neq("user_id", currentUserId)
+        .range(from, from + dataPageSize - 1);
+
+      if (status === "have") {
+        query = query.gt("quantity", 1);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      rows.push(...(data || []));
+
+      if (!data || data.length < dataPageSize) break;
+      from += dataPageSize;
     }
-
-    const { data, error } = await query;
-    if (error) throw error;
-    rows.push(...(data || []));
   }
 
   return rows;
+}
+
+async function fetchRowsByUser(userId: string, status: "have" | "want") {
+  const rows: any[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("user_stickers")
+      .select(userStickerSelect)
+      .eq("user_id", userId)
+      .eq("status", status)
+      .range(from, from + dataPageSize - 1);
+    if (error) throw error;
+
+    rows.push(...(data || []));
+
+    if (!data || data.length < dataPageSize) break;
+    from += dataPageSize;
+  }
+
+  return rows;
+}
+
+async function fetchActiveCollectionStickers(userId: string) {
+  const { data: collections, error: collectionsError } = await supabase
+    .from("collections")
+    .select("id");
+  if (collectionsError) throw collectionsError;
+
+  const { data: preferences, error: preferencesError } = await supabase
+    .from("user_collection_preferences")
+    .select("collection_id, is_active")
+    .eq("user_id", userId);
+  if (preferencesError) throw preferencesError;
+
+  const inactiveCollectionIds = new Set(
+    (preferences || [])
+      .filter((preference: any) => preference.is_active === false)
+      .map((preference: any) => preference.collection_id)
+  );
+  const activeCollectionIds = (collections || [])
+    .map((collection: any) => collection.id)
+    .filter((collectionId: string) => !inactiveCollectionIds.has(collectionId));
+
+  const stickers: any[] = [];
+  for (const chunk of chunkIds(activeCollectionIds)) {
+    let from = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from("stickers")
+        .select("id, name, number, image_url, rarity, collection_id")
+        .in("collection_id", chunk)
+        .range(from, from + dataPageSize - 1);
+      if (error) throw error;
+
+      stickers.push(...(data || []));
+
+      if (!data || data.length < dataPageSize) break;
+      from += dataPageSize;
+    }
+  }
+
+  return stickers;
+}
+
+async function fetchUsersWhoMissStickerIds(stickerIds: string[], currentUserId: string) {
+  const missingRows: any[] = [];
+  if (stickerIds.length === 0) return missingRows;
+
+  const { data: users, error: usersError } = await supabase
+    .from("user_profiles")
+    .select("id")
+    .neq("id", currentUserId);
+  if (usersError) throw usersError;
+
+  for (const otherUser of users || []) {
+    const [otherHaves, otherActiveStickers] = await Promise.all([
+      fetchRowsByUser(otherUser.id, "have"),
+      fetchActiveCollectionStickers(otherUser.id),
+    ]);
+    const otherHaveIds = new Set(otherHaves.filter((row: any) => (row.quantity || 0) > 0).map((row: any) => row.sticker_id));
+    const activeStickerIds = new Set(otherActiveStickers.map((sticker: any) => sticker.id));
+
+    stickerIds.forEach((stickerId) => {
+      if (activeStickerIds.has(stickerId) && !otherHaveIds.has(stickerId)) {
+        missingRows.push({ user_id: otherUser.id, sticker_id: stickerId });
+      }
+    });
+  }
+
+  return missingRows;
 }
 
 async function fetchProfilesByIds(userIds: string[]) {
@@ -113,30 +239,37 @@ function filterActiveCollectionRows(rows: any[], inactiveByUser: Map<string, Set
 }
 
 export async function findUserMatches(userId: string): Promise<Match[]> {
-  const { data: myHaves, error: myHavesError } = await supabase
-    .from("user_stickers")
-    .select(userStickerSelect)
-    .eq("user_id", userId)
-    .eq("status", "have");
-  if (myHavesError) throw myHavesError;
+  const { data: rpcMatches, error: rpcError } = await supabase.rpc("find_user_matches", {
+    p_user_id: userId,
+  });
 
-  const { data: myWants, error: myWantsError } = await supabase
-    .from("user_stickers")
-    .select(userStickerSelect)
-    .eq("user_id", userId)
-    .eq("status", "want");
-  if (myWantsError) throw myWantsError;
+  if (!rpcError && rpcMatches) {
+    return mapRpcMatches(rpcMatches as any[]);
+  }
+
+  const missingRpc =
+    rpcError?.code === "42883" ||
+    rpcError?.message?.toLowerCase().includes("function public.find_user_matches") ||
+    rpcError?.message?.toLowerCase().includes("could not find the function");
+
+  if (rpcError && !missingRpc) throw rpcError;
+
+  const [myHaves, myWants, activeStickers] = await Promise.all([
+    fetchRowsByUser(userId, "have"),
+    fetchRowsByUser(userId, "want"),
+    fetchActiveCollectionStickers(userId),
+  ]);
 
   const inactiveOwnCollections = await fetchInactiveCollectionIdsByUser([userId]);
   const ownHaves = filterActiveCollectionRows(
-    (myHaves || []).filter((item: any) => item.user_id === userId),
+    (myHaves || []).filter((item: any) => item.user_id === userId && (item.quantity || 0) > 0),
     inactiveOwnCollections
   );
   const ownWants = filterActiveCollectionRows(
     (myWants || []).filter((item: any) => item.user_id === userId),
     inactiveOwnCollections
   );
-  if (!ownHaves.length || !ownWants.length) return [];
+  if (!ownHaves.length) return [];
 
   const myHaveIds = ownHaves
     .filter((h: any) => h.quantity && h.quantity > 1)
@@ -147,10 +280,32 @@ export async function findUserMatches(userId: string): Promise<Match[]> {
     myHaveQuantities.set(h.sticker_id, Math.max(0, (h.quantity || 0) - 1));
   });
 
-  const myWantIds = ownWants.map((w: any) => w.sticker_id);
+  const ownHaveIds = new Set(ownHaves.map((h: any) => h.sticker_id));
+  const explicitWantIds = new Set(ownWants.map((w: any) => w.sticker_id));
+  const activeMissingIds = activeStickers
+    .filter((sticker: any) => !ownHaveIds.has(sticker.id))
+    .map((sticker: any) => sticker.id);
+  const myWantIds = Array.from(new Set([...explicitWantIds, ...activeMissingIds]));
+  if (!myWantIds.length) return [];
 
-  const otherUsersWantRows = await fetchUserStickersByStickerIds(myHaveIds, "want", userId);
+  const [explicitOtherUsersWantRows, inferredOtherUsersWantRows] = await Promise.all([
+    fetchUserStickersByStickerIds(myHaveIds, "want", userId),
+    fetchUsersWhoMissStickerIds(myHaveIds, userId),
+  ]);
   const otherUsersHaveRows = await fetchUserStickersByStickerIds(myWantIds, "have", userId);
+  const stickersById = new Map(activeStickers.map((sticker: any) => [sticker.id, sticker]));
+  const explicitOtherWantKeys = new Set(explicitOtherUsersWantRows.map((row: any) => `${row.user_id}:${row.sticker_id}`));
+  const otherUsersWantRows = [
+    ...explicitOtherUsersWantRows,
+    ...inferredOtherUsersWantRows
+      .filter((row: any) => !explicitOtherWantKeys.has(`${row.user_id}:${row.sticker_id}`))
+      .map((row: any) => ({
+        ...row,
+        quantity: 1,
+        stickers: stickersById.get(row.sticker_id),
+      }))
+      .filter((row: any) => row.stickers),
+  ];
 
   const otherUserIds = Array.from(new Set([
     ...otherUsersWantRows.map((item: any) => item.user_id),

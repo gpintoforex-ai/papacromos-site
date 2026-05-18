@@ -143,7 +143,16 @@ function AppContent() {
   return (
     <>
       <Layout currentPage={page} onNavigate={navigate} matchCount={matchCount} pendingTradeCount={pendingTradeCount}>
-        {page === "collection" && <CollectionPage homeKey={collectionHomeKey} onCollectionChange={refreshMatchCount} />}
+        {page === "collection" && (
+          <CollectionPage
+            homeKey={collectionHomeKey}
+            onCollectionChange={refreshMatchCount}
+            onOpenSharedUser={(userId) => {
+              setSharedUserId(userId);
+              setPage("share");
+            }}
+          />
+        )}
         {page === "matches" && <MatchesPage onMatchesChange={setMatchCount} />}
         {page === "trades" && <TradesPage onPendingTradeCountChange={setPendingTradeCount} />}
         {page === "share" && <SharePage sharedUserId={sharedUserId} onOpenSharedUser={setSharedUserId} />}
