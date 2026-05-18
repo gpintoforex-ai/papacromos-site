@@ -2419,6 +2419,33 @@ textarea {
   z-index: 1;
 }
 
+.code-scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(239, 68, 68, 0.95);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.65);
+  border-radius: 999px;
+  animation: scan-line 2.2s linear infinite;
+  z-index: 2;
+}
+
+@keyframes scan-line {
+  0% {
+    top: 4%;
+    opacity: 0.2;
+  }
+  50% {
+    top: 90%;
+    opacity: 0.95;
+  }
+  100% {
+    top: 4%;
+    opacity: 0.2;
+  }
+}
+
 .code-scan-actions {
   display: grid;
   gap: 10px;

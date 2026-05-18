@@ -1008,10 +1008,23 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   };
 
   const markScannedCodes = async () => {
-    if (scannedCodes.length === 0) return;
+    if (scannedCodes.length === 0) {
+      setError("Nenhum codigo detectado para adicionar.");
+      return;
+    }
+
     const text = scannedCodes.map((item) => item.rawValue).join(" ");
-    await markStickerNumbersFromText(text, "have", setCodeResult, { codeMode: true, selectFirstMatch: false });
-    setScannedCodes([]);
+    setError(null);
+    setCodeResult(null);
+
+    try {
+      await markStickerNumbersFromText(text, "have", setCodeResult, { codeMode: true, selectFirstMatch: false });
+      setScannedCodes([]);
+      stopCodeScanner();
+      setCodeText("");
+    } catch (err: any) {
+      setError(err.message || "Erro ao adicionar os codigos detectados.");
+    }
   };
 
   const stopCodeScanner = () => {
@@ -1776,6 +1789,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           <div className="code-scan-reader">
             <video ref={codeVideoRef} muted playsInline />
             {!codeScanning && <span>Camara desligada</span>}
+            {codeScanning && <div className="code-scan-line" />}
           </div>
           {scannedCodes.length > 0 && (
             <div className="code-scan-detected">
