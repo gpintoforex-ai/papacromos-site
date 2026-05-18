@@ -2653,14 +2653,51 @@ textarea {
   transform: translateY(-1px);
 }
 
+.scanner-review-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(5px);
+}
+
 .scanner-review-panel {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: min(760px, 100%);
+  max-height: min(82vh, 720px);
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+  overflow: auto;
+}
+
+.scanner-review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.scanner-review-header h3 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.scanner-review-header p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .scanner-review-grid {

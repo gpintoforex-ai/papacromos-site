@@ -809,13 +809,48 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
           </div>
         )}
 
-        {scanReviewOpen && (
+        <div className="code-scan-actions">
+          <input
+            type="text"
+            value={codeText}
+            placeholder="Ex.: CPV 10"
+            onChange={(event) => setCodeText(event.target.value)}
+          />
+          <button className="btn btn-code-toggle btn-sm" type="button" onClick={startCodeScanner} disabled={codeScanning || !selectedCollectionId}>
+            <ScanLine size={14} /> {codeScanning ? "Scanner ativo" : "Abrir scanner"}
+          </button>
+          <button className="btn btn-primary btn-sm" type="button" onClick={captureCodeFrame} disabled={!codeScanning || codeReading}>
+            <ScanLine size={14} /> Capturar agora
+          </button>
+          {codeScanning && (
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => stopCodeScanner()}>
+              Parar
+            </button>
+          )}
+          <button className="btn btn-primary btn-sm" type="button" onClick={openScannedCodesReview} disabled={scannedCodes.length === 0}>
+            <ClipboardCheck size={14} /> Adicionar detectadas ({scannedCodes.reduce((total, item) => total + item.count, 0)})
+          </button>
+        </div>
+      </section>
+
+      {scanReviewOpen && (
+        <div className="scanner-review-overlay" role="dialog" aria-modal="true" aria-labelledby="scanner-review-title">
           <div className="scanner-review-panel">
-            <div className="voice-mark-header">
+            <div className="scanner-review-header">
               <div>
-                <strong>Revisao antes de introduzir</strong>
-                <span>Confirma os cromos detectados antes de gravar na tua colecao.</span>
+                <h3 id="scanner-review-title">Revisao antes de introduzir</h3>
+                <p>Confirma os cromos detectados antes de gravar na tua colecao.</p>
               </div>
+              <button
+                className="code-scan-remove"
+                type="button"
+                onClick={() => setScanReviewOpen(false)}
+                title="Fechar revisao"
+                aria-label="Fechar revisao"
+                disabled={scanConfirming}
+              >
+                <X size={15} />
+              </button>
             </div>
 
             <div className="scanner-review-grid">
@@ -851,31 +886,8 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
               </button>
             </div>
           </div>
-        )}
-
-        <div className="code-scan-actions">
-          <input
-            type="text"
-            value={codeText}
-            placeholder="Ex.: CPV 10"
-            onChange={(event) => setCodeText(event.target.value)}
-          />
-          <button className="btn btn-code-toggle btn-sm" type="button" onClick={startCodeScanner} disabled={codeScanning || !selectedCollectionId}>
-            <ScanLine size={14} /> {codeScanning ? "Scanner ativo" : "Abrir scanner"}
-          </button>
-          <button className="btn btn-primary btn-sm" type="button" onClick={captureCodeFrame} disabled={!codeScanning || codeReading}>
-            <ScanLine size={14} /> Capturar agora
-          </button>
-          {codeScanning && (
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => stopCodeScanner()}>
-              Parar
-            </button>
-          )}
-          <button className="btn btn-primary btn-sm" type="button" onClick={openScannedCodesReview} disabled={scannedCodes.length === 0}>
-            <ClipboardCheck size={14} /> Adicionar detectadas ({scannedCodes.reduce((total, item) => total + item.count, 0)})
-          </button>
         </div>
-      </section>
+      )}
     </div>
   );
 }
