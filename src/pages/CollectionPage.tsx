@@ -312,6 +312,7 @@ const abbrevToTeam: Record<string, string> = {
   POR: "Portugal",
   BRA: "Brasil",
   BRAZ: "Brasil",
+  CPV: "Cabo Verde",
   SWE: "Suécia",
   SUE: "Suécia",
   SUI: "Suica",
@@ -325,8 +326,15 @@ const abbrevToTeam: Record<string, string> = {
   DEU: "Alemanha",
   GHA: "Gana",
   COD: "RD do Congo",
+  DRC: "RD do Congo",
   USA: "Estados Unidos",
   EUS: "Estados Unidos",
+  NZL: "Nova Zelândia",
+  SEN: "Senegal",
+  SCO: "Escócia",
+  ECU: "Equador",
+  UZB: "Uzbequistão",
+  TUN: "Tunísia",
 };
 
 function levenshtein(a: string, b: string) {
@@ -931,6 +939,24 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       .replace(/[€£]/g, "E")
       .replace(/[“”]/g, '"')
       .replace(/[^\w\s/-]/g, " ")
+      .replace(/\b0\s*([0-9]{1,2})\b/g, "O $1")
+      .replace(/\bA[1I]G\b/g, "ALG")
+      .replace(/\bAIG\b/g, "ALG")
+      .replace(/\bB8A\b/g, "BRA")
+      .replace(/\b8RA\b/g, "BRA")
+      .replace(/\bC[0O]D\b/g, "COD")
+      .replace(/\bC[O0]V\b/g, "CPV")
+      .replace(/\bCPY\b/g, "CPV")
+      .replace(/\bN[2Z]L\b/g, "NZL")
+      .replace(/\bNZI\b/g, "NZL")
+      .replace(/\b5EN\b/g, "SEN")
+      .replace(/\b5CO\b/g, "SCO")
+      .replace(/\bSC0\b/g, "SCO")
+      .replace(/\bEC[O0]\b/g, "ECU")
+      .replace(/\bE[CO]U\b/g, "ECU")
+      .replace(/\bU[2Z]8\b/g, "UZB")
+      .replace(/\bUZ8\b/g, "UZB")
+      .replace(/\bT[UO]M\b/g, "TUN")
       .replace(/\b1RN\b/g, "IRN")
       .replace(/\bIR[NM]\b/g, "IRN")
       .replace(/\bA1G\b/g, "ALG")
@@ -971,6 +997,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       if (!selectedCollectionId) throw new Error("Abre uma colecao primeiro.");
 
       const spokenCounts = options?.codeMode ? new Map<number, number>() : parseSpokenStickerCounts(text);
+      const parsedText = options?.codeMode ? normalizeOcrCodeText(text) : text;
 
       // Additional parsing for code-mode: detect patterns like "ALG 7" or "ALG-07"
       const explicitStickerMatches: Map<string, number> = new Map();
@@ -978,7 +1005,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         const collectionStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
         // match letter+number combos
         const re = /([A-Za-z]{1,4})\s*[-_\\/]?\s*0*([1-9][0-9]?)/g;
-        for (const m of text.matchAll(re)) {
+        for (const m of parsedText.matchAll(re)) {
           const abbrev = normalizeAbbrev(m[1]);
           const num = Number.parseInt(m[2], 10);
           if (!Number.isFinite(num)) continue;
@@ -1001,7 +1028,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
 
         // numeric candidates from free text (fallback), excluding the digits already
         // consumed by explicit team codes such as "POR-13".
-        const numericFallbackText = text.replace(re, " ");
+        const numericFallbackText = parsedText.replace(re, " ");
         getCodeNumberCandidates(numericFallbackText).forEach((number) => {
           if (!spokenCounts.has(number)) spokenCounts.set(number, 1);
         });
@@ -1218,6 +1245,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   };
 
   const addDetectedCode = (rawValue: string) => {
+    rawValue = getStickerCodesFromOcrText(rawValue)[0] || normalizeOcrCodeText(rawValue);
     const now = Date.now();
     const lastSeenAt = codeLastSeenAtRef.current.get(rawValue) || 0;
     if (now - lastSeenAt < 1600) return;
@@ -1235,6 +1263,55 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     });
   };
 
+  const createCodeOcrCanvas = (
+    video: HTMLVideoElement,
+    sourceX: number,
+    sourceY: number,
+    sourceWidth: number,
+    sourceHeight: number,
+    targetWidth = 1100,
+  ) => {
+    const scale = Math.min(1, targetWidth / sourceWidth);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return null;
+
+    context.imageSmoothingEnabled = true;
+    context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let index = 0; index < data.length; index += 4) {
+      const gray = 0.299 * data[index] + 0.587 * data[index + 1] + 0.114 * data[index + 2];
+      const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.9 + 128));
+      data[index] = contrasted;
+      data[index + 1] = contrasted;
+      data[index + 2] = contrasted;
+    }
+    context.putImageData(imageData, 0, 0);
+    return canvas;
+  };
+
+  const buildCodeOcrCanvases = (video: HTMLVideoElement) => {
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    const regions = [
+      [0, 0, width, height],
+      [0, 0, width, Math.round(height * 0.48)],
+      [Math.round(width * 0.48), 0, Math.round(width * 0.52), Math.round(height * 0.52)],
+      [0, 0, Math.round(width * 0.55), Math.round(height * 0.52)],
+      [Math.round(width * 0.15), Math.round(height * 0.12), Math.round(width * 0.7), Math.round(height * 0.72)],
+    ] as const;
+
+    return regions
+      .map(([sourceX, sourceY, sourceWidth, sourceHeight]) =>
+        createCodeOcrCanvas(video, sourceX, sourceY, sourceWidth, sourceHeight)
+      )
+      .filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas));
+  };
+
   const readCodeFrame = async () => {
     if (codeOcrBusyRef.current) return;
 
@@ -1246,15 +1323,8 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     codeOcrBusyRef.current = true;
     setCodeReading(true);
     try {
-      const canvas = document.createElement("canvas");
-      const scale = Math.min(1, 1280 / video.videoWidth);
-      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      if (!context) return;
-
-      context.filter = "grayscale(1) contrast(1.8)";
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const canvases = buildCodeOcrCanvases(video);
+      if (canvases.length === 0) return;
 
       if (!codeOcrWorkerRef.current) {
         const { createWorker, OEM } = await import("tesseract.js");
@@ -1262,9 +1332,12 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_/",
         } as any);
       }
-      const result = await codeOcrWorkerRef.current.recognize(canvas);
-      const codes = getStickerCodesFromOcrText(result.data.text);
-      codes.forEach(addDetectedCode);
+      for (const canvas of canvases) {
+        const result = await codeOcrWorkerRef.current.recognize(canvas);
+        const codes = getStickerCodesFromOcrText(result.data.text);
+        codes.forEach(addDetectedCode);
+        if (codes.length > 0) break;
+      }
     } catch (err) {
       console.error("Erro ao ler texto da camara.", err);
     } finally {
