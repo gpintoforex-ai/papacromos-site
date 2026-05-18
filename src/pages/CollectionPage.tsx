@@ -50,6 +50,11 @@ type VoiceMarkMode = "have" | "want";
 type HomeResultMode = "collections" | "owned" | "complete";
 type AlbumSlideDirection = "previous" | "next" | null;
 
+interface ScannedCodeItem {
+  rawValue: string;
+  sticker: Sticker | null;
+}
+
 interface AlbumTeamPage {
   teamName: string;
   groupName: string;
@@ -528,6 +533,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const [codeText, setCodeText] = useState("");
   const [codeScanning, setCodeScanning] = useState(false);
   const [codeResult, setCodeResult] = useState<string | null>(null);
+  const [scannedCodes, setScannedCodes] = useState<ScannedCodeItem[]>([]);
   const [albumSlideDirection, setAlbumSlideDirection] = useState<AlbumSlideDirection>(null);
   const collectionsSectionRef = useRef<HTMLElement | null>(null);
   const codeVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -984,8 +990,28 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     await markStickerNumbersFromText(voiceText, voiceMode, setVoiceResult);
   };
 
+  const findStickerForScannedCode = (rawValue: string): Sticker | null => {
+    const candidates = getCodeNumberCandidates(rawValue);
+    const sticker = Array.from(candidates)
+      .map((number) => getStickerBySpokenNumber(number))
+      .find(Boolean) || null;
+    return sticker;
+  };
+
+  const clearScannedCodes = () => {
+    setScannedCodes([]);
+    setCodeResult(null);
+  };
+
   const markCodeSticker = async (text = codeText) => {
     await markStickerNumbersFromText(text, "have", setCodeResult, { codeMode: true, selectFirstMatch: true });
+  };
+
+  const markScannedCodes = async () => {
+    if (scannedCodes.length === 0) return;
+    const text = scannedCodes.map((item) => item.rawValue).join(" ");
+    await markStickerNumbersFromText(text, "have", setCodeResult, { codeMode: true, selectFirstMatch: false });
+    setScannedCodes([]);
   };
 
   const stopCodeScanner = () => {
@@ -1024,13 +1050,14 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         },
         video,
         async (result) => {
-          const rawValue = result?.getText();
-          if (!rawValue || codeScanHandledRef.current) return;
+          const rawValue = result?.getText()?.trim();
+          if (!rawValue) return;
 
-          codeScanHandledRef.current = true;
           setCodeText(rawValue);
-          await markCodeSticker(rawValue);
-          stopCodeScanner();
+          setScannedCodes((current) => {
+            if (current.some((item) => item.rawValue === rawValue)) return current;
+            return [...current, { rawValue, sticker: findStickerForScannedCode(rawValue) }];
+          });
         }
       );
       codeScannerControlsRef.current = controls;
@@ -1743,13 +1770,26 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           <div className="voice-mark-header">
             <div>
               <strong>Ler codigo do cromo</strong>
-              <span>Aponta a camara ao codigo ou escreve o codigo/numero para marcar como Tenho.</span>
+              <span>Aponta a camara aos codigos dos cromos para detectar varios de uma vez e adiciona-los.</span>
             </div>
           </div>
           <div className="code-scan-reader">
             <video ref={codeVideoRef} muted playsInline />
             {!codeScanning && <span>Camara desligada</span>}
           </div>
+          {scannedCodes.length > 0 && (
+            <div className="code-scan-detected">
+              <strong>{scannedCodes.length} figurinhas detectadas</strong>
+              <ul>
+                {scannedCodes.map((item) => (
+                  <li key={item.rawValue}>
+                    <span>{item.rawValue}</span>
+                    {item.sticker ? <span> — {item.sticker.name}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="code-scan-actions">
             <input
               type="text"
@@ -1758,13 +1798,19 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
               onChange={(event) => setCodeText(event.target.value)}
             />
             <button className="btn btn-code-toggle btn-sm" type="button" onClick={startCodeScanner} disabled={codeScanning}>
-              <ScanLine size={14} /> {codeScanning ? "A ler..." : "Usar camara"}
+              <ScanLine size={14} /> {codeScanning ? "Capturando..." : "Capturar"}
             </button>
             {codeScanning && (
               <button className="btn btn-ghost btn-sm" type="button" onClick={stopCodeScanner}>
                 Parar
               </button>
             )}
+            <button className="btn btn-primary btn-sm" type="button" onClick={markScannedCodes} disabled={scannedCodes.length === 0}>
+              <ClipboardCheck size={14} /> Adicionar ({scannedCodes.length})
+            </button>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={clearScannedCodes} disabled={scannedCodes.length === 0}>
+              Limpar lista
+            </button>
             <button className="btn btn-primary btn-sm" type="button" onClick={() => markCodeSticker()} disabled={!codeText.trim()}>
               <ClipboardCheck size={14} /> Marcar
             </button>
