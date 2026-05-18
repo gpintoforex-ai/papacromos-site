@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ClipboardCheck, ScanLine } from "lucide-react";
+import { ClipboardCheck, ScanLine, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 
@@ -28,6 +28,22 @@ interface ScannedCodeItem {
   sticker: Sticker | null;
   count: number;
 }
+
+interface ScanReviewEntry {
+  key: string;
+  rawValues: string[];
+  sticker: Sticker | null;
+  count: number;
+  existingQuantity: number;
+}
+
+interface StickerCodeCandidate {
+  abbrev: string;
+  number: number;
+  code: string;
+}
+
+type CodeOcrCanvasMode = "normal" | "inverted";
 
 const DATA_PAGE_SIZE = 1000;
 
@@ -61,8 +77,75 @@ const abbrevToTeam: Record<string, string> = {
   TUN: "Tunisia",
 };
 
+const flagCodeByTeamNorm: Record<string, string> = {
+  AFRICADOSUL: "za",
+  ALEMANHA: "de",
+  ARGELIA: "dz",
+  ARGENTINA: "ar",
+  ARABIASAUDITA: "sa",
+  AUSTRALIA: "au",
+  AUSTRIA: "at",
+  BELGICA: "be",
+  BOSNIAEHERZEGOVINA: "ba",
+  BRASIL: "br",
+  CABOVERDE: "cv",
+  CANADA: "ca",
+  CATAR: "qa",
+  COLOMBIA: "co",
+  COREIADOSUL: "kr",
+  COSTADOMARFIM: "ci",
+  CROACIA: "hr",
+  CURACAO: "cw",
+  DINAMARCA: "dk",
+  EGITO: "eg",
+  EQUADOR: "ec",
+  ESCOCIA: "gb-sct",
+  ESPANHA: "es",
+  ESTADOSUNIDOS: "us",
+  FRANCA: "fr",
+  GANA: "gh",
+  HAITI: "ht",
+  HOLANDA: "nl",
+  INGLATERRA: "gb-eng",
+  IRA: "ir",
+  IRAQUE: "iq",
+  ITALIA: "it",
+  JAMAICA: "jm",
+  JAPAO: "jp",
+  JORDANIA: "jo",
+  MARROCOS: "ma",
+  MEXICO: "mx",
+  NORUEGA: "no",
+  NOVAZELANDIA: "nz",
+  PAISESBAIXOS: "nl",
+  PANAMA: "pa",
+  PARAGUAI: "py",
+  PORTUGAL: "pt",
+  QATAR: "qa",
+  RDDOCONGO: "cd",
+  CONGODR: "cd",
+  RIDOIRA: "ir",
+  SENEGAL: "sn",
+  SUECIA: "se",
+  SUICA: "ch",
+  TCHEQUIA: "cz",
+  TUNISIA: "tn",
+  TURQUIA: "tr",
+  URUGUAI: "uy",
+  UZBEQUISTAO: "uz",
+};
+
 function getStickerTeamName(stickerName: string) {
   return stickerName.includes(" - ") ? stickerName.split(" - ")[0].trim() : "Cromos";
+}
+
+function getStickerFlagCode(sticker: Sticker | null) {
+  if (!sticker) return "";
+  return flagCodeByTeamNorm[normalizeAbbrev(getStickerTeamName(sticker.name))] || "";
+}
+
+function getFlagUrl(flagCode: string) {
+  return `https://flagcdn.com/w40/${flagCode}.png`;
 }
 
 function getAlbumLocalNumber(sticker: Sticker) {
@@ -141,9 +224,9 @@ function normalizeOcrCodeText(text: string) {
     .trim();
 }
 
-function getStickerCodesFromOcrText(text: string) {
+function getStickerCodeCandidatesFromOcrText(text: string) {
   const normalizedText = normalizeOcrCodeText(text).replace(/\b([A-Z]{3})([0-9]{1,2})\b/g, "$1 $2");
-  const codes: string[] = [];
+  const candidates: StickerCodeCandidate[] = [];
   const re = /\b([A-Z0-9]{2,4})\s*[-_/]?\s*([0-9]{1,2})\b/g;
 
   for (const match of normalizedText.matchAll(re)) {
@@ -151,10 +234,30 @@ function getStickerCodesFromOcrText(text: string) {
     const number = Number.parseInt(match[2], 10);
     if (!Number.isFinite(number) || number < 1 || number > 20) continue;
     if (!abbrevToTeam[abbrev]) continue;
-    codes.push(`${abbrev} ${number}`);
+    candidates.push({ abbrev, number, code: `${abbrev} ${number}` });
   }
 
-  return Array.from(new Set(codes));
+  return candidates.filter((candidate, index, all) =>
+    all.findIndex((item) => item.code === candidate.code) === index
+  );
+}
+
+function resolveOcrCodeCandidates(candidates: StickerCodeCandidate[]) {
+  return candidates
+    .filter((candidate) => {
+      const digits = String(candidate.number);
+      return !candidates.some((other) =>
+        other.abbrev === candidate.abbrev &&
+        other.number !== candidate.number &&
+        String(other.number).startsWith(digits)
+      );
+    })
+    .map((candidate) => candidate.code)
+    .filter((code, index, all) => all.indexOf(code) === index);
+}
+
+function getStickerCodesFromOcrText(text: string) {
+  return resolveOcrCodeCandidates(getStickerCodeCandidatesFromOcrText(text));
 }
 
 async function fetchAllStickers() {
@@ -209,6 +312,8 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
   const [codeReading, setCodeReading] = useState(false);
   const [codeResult, setCodeResult] = useState<string | null>(null);
   const [scannedCodes, setScannedCodes] = useState<ScannedCodeItem[]>([]);
+  const [scanReviewOpen, setScanReviewOpen] = useState(false);
+  const [scanConfirming, setScanConfirming] = useState(false);
   const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -328,26 +433,30 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
     sourceY: number,
     sourceWidth: number,
     sourceHeight: number,
-    targetWidth = 900,
+    targetWidth = 1600,
+    mode: CodeOcrCanvasMode = "normal",
   ) => {
-    const scale = Math.min(1, targetWidth / sourceWidth);
+    const scale = Math.min(2.4, targetWidth / sourceWidth);
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(sourceWidth * scale));
     canvas.height = Math.max(1, Math.round(sourceHeight * scale));
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) return null;
 
-    context.imageSmoothingEnabled = true;
+    context.imageSmoothingEnabled = scale < 1;
     context.drawImage(source, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
 
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     for (let index = 0; index < data.length; index += 4) {
       const gray = 0.299 * data[index] + 0.587 * data[index + 1] + 0.114 * data[index + 2];
-      const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.9 + 128));
-      data[index] = contrasted;
-      data[index + 1] = contrasted;
-      data[index + 2] = contrasted;
+      const contrasted = Math.max(0, Math.min(255, (gray - 128) * 2.25 + 128));
+      const value = mode === "inverted"
+        ? (contrasted > 150 ? 0 : 255)
+        : contrasted;
+      data[index] = value;
+      data[index + 1] = value;
+      data[index + 2] = value;
     }
     context.putImageData(imageData, 0, 0);
     return canvas;
@@ -363,16 +472,21 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       [0, 0, width, height],
     ] as const;
     const exhaustiveRegions = [
+      [Math.round(width * 0.42), 0, Math.round(width * 0.56), Math.round(height * 0.26)],
+      [0, 0, width, Math.round(height * 0.34)],
       [0, 0, width, Math.round(height * 0.48)],
       [Math.round(width * 0.48), 0, Math.round(width * 0.52), Math.round(height * 0.52)],
       [0, 0, Math.round(width * 0.55), Math.round(height * 0.52)],
+      [Math.round(width * 0.33), 0, Math.round(width * 0.34), Math.round(height * 0.58)],
+      [Math.round(width * 0.32), Math.round(height * 0.18), Math.round(width * 0.66), Math.round(height * 0.42)],
       [Math.round(width * 0.15), Math.round(height * 0.12), Math.round(width * 0.7), Math.round(height * 0.72)],
     ] as const;
     const regions = exhaustive ? [...fastRegions, ...exhaustiveRegions] : fastRegions;
+    const modes: CodeOcrCanvasMode[] = exhaustive ? ["normal", "inverted"] : ["normal"];
 
     return regions
-      .map(([sourceX, sourceY, sourceWidth, sourceHeight]) =>
-        createCodeOcrCanvas(source, sourceX, sourceY, sourceWidth, sourceHeight)
+      .flatMap(([sourceX, sourceY, sourceWidth, sourceHeight]) =>
+        modes.map((mode) => createCodeOcrCanvas(source, sourceX, sourceY, sourceWidth, sourceHeight, 1600, mode))
       )
       .filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas));
   };
@@ -396,13 +510,14 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
   const recognizeCodeCanvases = async (canvases: HTMLCanvasElement[]) => {
     if (canvases.length === 0) return;
     const worker = await prepareCodeOcrWorker();
+    const candidates: StickerCodeCandidate[] = [];
 
     for (const canvas of canvases) {
       const result = await worker.recognize(canvas);
-      const codes = getStickerCodesFromOcrText(result.data.text);
-      codes.forEach(addDetectedCode);
-      if (codes.length > 0) break;
+      candidates.push(...getStickerCodeCandidatesFromOcrText(result.data.text));
     }
+
+    resolveOcrCodeCandidates(candidates).forEach(addDetectedCode);
   };
 
   const startCodeScanner = async () => {
@@ -481,10 +596,18 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
 
   const clearScannedCodes = () => {
     setScannedCodes([]);
+    setScanReviewOpen(false);
     codeLastSeenAtRef.current.clear();
     setCodeText("");
     setCodeResult(null);
     setCapturedImageUrl(null);
+  };
+
+  const removeScannedCode = (rawValue: string) => {
+    setScannedCodes((current) => current.filter((item) => item.rawValue !== rawValue));
+    codeLastSeenAtRef.current.delete(rawValue);
+    if (codeText === rawValue) setCodeText("");
+    setScanReviewOpen(false);
   };
 
   const markCodes = async (codes: string[]) => {
@@ -549,20 +672,56 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
     setCodeResult(`${countByStickerId.size} cromo${countByStickerId.size === 1 ? "" : "s"} marcado${countByStickerId.size === 1 ? "" : "s"}.`);
   };
 
-  const markManualCode = async () => {
-    setError(null);
-    setCodeResult(null);
-    try {
-      await markCodes([codeText]);
-      setCodeText("");
-    } catch (err: any) {
-      setError(err.message || "Erro ao marcar codigo.");
-    }
+  const getExistingHaveQuantity = (stickerId: string) => {
+    return userStickers.find((userSticker) =>
+      userSticker.user_id === user?.id &&
+      userSticker.sticker_id === stickerId &&
+      userSticker.status === "have"
+    )?.quantity || 0;
   };
 
-  const markScannedCodes = async () => {
+  const buildScanReviewEntries = () => {
+    const grouped = new Map<string, ScanReviewEntry>();
+
+    scannedCodes.forEach((item) => {
+      const sticker = item.sticker || findStickerForScannedCode(item.rawValue);
+      const key = sticker ? sticker.id : `unknown:${item.rawValue}`;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.count += item.count;
+        if (!existing.rawValues.includes(item.rawValue)) {
+          existing.rawValues.push(item.rawValue);
+        }
+        return;
+      }
+
+      grouped.set(key, {
+        key,
+        rawValues: [item.rawValue],
+        sticker,
+        count: item.count,
+        existingQuantity: sticker ? getExistingHaveQuantity(sticker.id) : 0,
+      });
+    });
+
+    return Array.from(grouped.values());
+  };
+
+  const openScannedCodesReview = () => {
+    if (scannedCodes.length === 0) {
+      setError("Nenhum codigo detectado para adicionar.");
+      return;
+    }
+
     setError(null);
     setCodeResult(null);
+    setScanReviewOpen(true);
+  };
+
+  const confirmScannedCodes = async () => {
+    setError(null);
+    setCodeResult(null);
+    setScanConfirming(true);
     try {
       const codes = scannedCodes.flatMap((item) => Array.from({ length: item.count }, () => item.rawValue));
       await markCodes(codes);
@@ -570,8 +729,15 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       stopCodeScanner();
     } catch (err: any) {
       setError(err.message || "Erro ao adicionar os codigos detectados.");
+    } finally {
+      setScanConfirming(false);
     }
   };
+
+  const scanReviewEntries = scanReviewOpen ? buildScanReviewEntries() : [];
+  const newScanReviewEntries = scanReviewEntries.filter((item) => item.sticker && item.existingQuantity <= 0);
+  const repeatedScanReviewEntries = scanReviewEntries.filter((item) => item.sticker && item.existingQuantity > 0);
+  const unknownScanReviewEntries = scanReviewEntries.filter((item) => !item.sticker);
 
   return (
     <div className="scanner-page">
@@ -618,10 +784,72 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
               {scannedCodes.map((item) => (
                 <li key={item.rawValue}>
                   <span className="code-scan-chip">{item.rawValue}{item.count > 1 ? ` x${item.count}` : ""}</span>
-                  {item.sticker ? <span>- {item.sticker.name}</span> : <span>Sem correspondencia</span>}
+                  {item.sticker ? (
+                    <span className="scanner-detected-name">
+                      {getStickerFlagCode(item.sticker) && (
+                        <img src={getFlagUrl(getStickerFlagCode(item.sticker))} alt="" loading="lazy" aria-hidden="true" />
+                      )}
+                      <span>- {item.sticker.name}</span>
+                    </span>
+                  ) : (
+                    <span className="scanner-detected-name">Sem correspondencia</span>
+                  )}
+                  <button
+                    className="code-scan-remove"
+                    type="button"
+                    onClick={() => removeScannedCode(item.rawValue)}
+                    title="Remover detectado"
+                    aria-label={`Remover ${item.rawValue}`}
+                  >
+                    <X size={14} />
+                  </button>
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {scanReviewOpen && (
+          <div className="scanner-review-panel">
+            <div className="voice-mark-header">
+              <div>
+                <strong>Revisao antes de introduzir</strong>
+                <span>Confirma os cromos detectados antes de gravar na tua colecao.</span>
+              </div>
+            </div>
+
+            <div className="scanner-review-grid">
+              <ScanReviewSection
+                title={`Novos (${newScanReviewEntries.reduce((total, item) => total + item.count, 0)})`}
+                emptyText="Nenhum cromo novo."
+                items={newScanReviewEntries}
+                tone="new"
+              />
+              <ScanReviewSection
+                title={`Repetidos (${repeatedScanReviewEntries.reduce((total, item) => total + item.count, 0)})`}
+                emptyText="Nenhum repetido."
+                items={repeatedScanReviewEntries}
+                tone="repeated"
+              />
+            </div>
+
+            {unknownScanReviewEntries.length > 0 && (
+              <ScanReviewSection
+                title={`Sem correspondencia (${unknownScanReviewEntries.reduce((total, item) => total + item.count, 0)})`}
+                emptyText=""
+                items={unknownScanReviewEntries}
+                tone="unknown"
+              />
+            )}
+
+            <div className="scanner-review-actions">
+              <button className="btn btn-primary btn-sm" type="button" onClick={confirmScannedCodes} disabled={scanConfirming}>
+                <ClipboardCheck size={14} /> {scanConfirming ? "A introduzir..." : "Confirmar introducao"}
+              </button>
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => setScanReviewOpen(false)} disabled={scanConfirming}>
+                Voltar
+              </button>
+            </div>
           </div>
         )}
 
@@ -643,17 +871,60 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
               Parar
             </button>
           )}
-          <button className="btn btn-primary btn-sm" type="button" onClick={markScannedCodes} disabled={scannedCodes.length === 0}>
+          <button className="btn btn-primary btn-sm" type="button" onClick={openScannedCodesReview} disabled={scannedCodes.length === 0}>
             <ClipboardCheck size={14} /> Adicionar detectadas ({scannedCodes.reduce((total, item) => total + item.count, 0)})
-          </button>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={clearScannedCodes} disabled={scannedCodes.length === 0}>
-            Limpar lista
-          </button>
-          <button className="btn btn-primary btn-sm" type="button" onClick={markManualCode} disabled={!codeText.trim() || !selectedCollectionId}>
-            <ClipboardCheck size={14} /> Marcar codigo
           </button>
         </div>
       </section>
     </div>
+  );
+}
+
+function ScanReviewSection({
+  title,
+  emptyText,
+  items,
+  tone,
+}: {
+  title: string;
+  emptyText: string;
+  items: ScanReviewEntry[];
+  tone: "new" | "repeated" | "unknown";
+}) {
+  return (
+    <section className={`scanner-review-section ${tone}`}>
+      <h3>{title}</h3>
+      {items.length === 0 ? (
+        <p>{emptyText}</p>
+      ) : (
+        <ul>
+          {items.map((item) => {
+            const flagCode = getStickerFlagCode(item.sticker);
+
+            return (
+              <li key={item.key}>
+                <span className="code-scan-chip">{item.rawValues.join(", ")}{item.count > 1 ? ` x${item.count}` : ""}</span>
+                <div>
+                  <span className="scanner-review-title-row">
+                    {flagCode && <img src={getFlagUrl(flagCode)} alt="" loading="lazy" aria-hidden="true" />}
+                    <strong>{item.sticker ? item.sticker.name : "Codigo sem correspondencia"}</strong>
+                  </span>
+                  {item.sticker ? (
+                    <small>
+                      #{String(item.sticker.number).padStart(3, "0")}
+                      {item.existingQuantity > 0
+                        ? ` · ja tens ${item.existingQuantity}, fica ${item.existingQuantity + item.count}`
+                        : ` · fica ${item.count}`}
+                    </small>
+                  ) : (
+                    <small>Confirma a colecao ou escreve o codigo manualmente.</small>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
