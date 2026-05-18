@@ -2723,6 +2723,12 @@ textarea {
   border-color: rgba(245, 158, 11, 0.36);
 }
 
+.scanner-review-section.repeated h3,
+.scanner-review-section.repeated strong,
+.scanner-review-section.repeated small {
+  color: #b45309;
+}
+
 .scanner-review-section.unknown {
   border-color: rgba(148, 163, 184, 0.42);
 }
