@@ -53,6 +53,7 @@ type AlbumSlideDirection = "previous" | "next" | null;
 interface ScannedCodeItem {
   rawValue: string;
   sticker: Sticker | null;
+  count: number;
 }
 
 interface AlbumTeamPage {
@@ -596,6 +597,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const codeVideoRef = useRef<HTMLVideoElement | null>(null);
   const codeScannerControlsRef = useRef<IScannerControls | null>(null);
   const codeScanHandledRef = useRef(false);
+  const codeLastSeenAtRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     loadData();
@@ -932,16 +934,11 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       if (!user?.id) throw new Error("Sessao expirada. Entra novamente.");
       if (!selectedCollectionId) throw new Error("Abre uma colecao primeiro.");
 
-      const spokenCounts = parseSpokenStickerCounts(text);
+      const spokenCounts = options?.codeMode ? new Map<number, number>() : parseSpokenStickerCounts(text);
 
       // Additional parsing for code-mode: detect patterns like "ALG 7" or "ALG-07"
       const explicitStickerMatches: Map<string, number> = new Map();
       if (options?.codeMode) {
-        // numeric candidates from free text (fallback)
-        getCodeNumberCandidates(text).forEach((number) => {
-          if (!spokenCounts.has(number)) spokenCounts.set(number, 1);
-        });
-
         const collectionStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
         // match letter+number combos
         const re = /([A-Za-z]{1,4})\s*[-_\\/]?\s*0*([1-9][0-9]?)/g;
@@ -965,9 +962,16 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
             explicitStickerMatches.set(found.id, (explicitStickerMatches.get(found.id) || 0) + 1);
           }
         }
+
+        // numeric candidates from free text (fallback), excluding the digits already
+        // consumed by explicit team codes such as "POR-13".
+        const numericFallbackText = text.replace(re, " ");
+        getCodeNumberCandidates(numericFallbackText).forEach((number) => {
+          if (!spokenCounts.has(number)) spokenCounts.set(number, 1);
+        });
       }
 
-      if (spokenCounts.size === 0) {
+      if (spokenCounts.size === 0 && explicitStickerMatches.size === 0) {
         throw new Error("Nao encontrei numeros de cromos no texto.");
       }
 
@@ -981,7 +985,17 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         sticker: stickers.find((s) => s.id === stickerId) as Sticker,
       }));
 
-      const matched = [...matchedFromNumbers, ...matchedFromExplicit];
+      const matchedByStickerId = new Map<string, { number: number; count: number; sticker: Sticker }>();
+      [...matchedFromNumbers, ...matchedFromExplicit].forEach((item) => {
+        const existing = matchedByStickerId.get(item.sticker.id);
+        if (existing) {
+          existing.count += item.count;
+          if (Number.isNaN(existing.number)) existing.number = item.number;
+          return;
+        }
+        matchedByStickerId.set(item.sticker.id, { ...item });
+      });
+      const matched = Array.from(matchedByStickerId.values());
       const missingNumbers = Array.from(spokenCounts.keys())
         .filter((number) => !matched.some((item) => item.number === number));
 
@@ -1001,7 +1015,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
             const existing = existingHaveByStickerId.get(item.sticker.id)!;
             return supabase
               .from("user_stickers")
-              .update({ quantity: Math.max(existing.quantity, item.count) })
+              .update({ quantity: Math.max(0, existing.quantity || 0) + item.count })
               .eq("id", existing.id);
           });
         const inserts = matched
@@ -1117,6 +1131,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
 
   const clearScannedCodes = () => {
     setScannedCodes([]);
+    codeLastSeenAtRef.current.clear();
     setCodeResult(null);
   };
 
@@ -1130,7 +1145,9 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       return;
     }
 
-    const text = scannedCodes.map((item) => item.rawValue).join(" ");
+    const text = scannedCodes
+      .flatMap((item) => Array.from({ length: item.count }, () => item.rawValue))
+      .join(" ");
     setError(null);
     setCodeResult(null);
 
@@ -1147,6 +1164,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const stopCodeScanner = () => {
     codeScannerControlsRef.current?.stop();
     codeScannerControlsRef.current = null;
+    codeLastSeenAtRef.current.clear();
     if (codeVideoRef.current) {
       codeVideoRef.current.srcObject = null;
     }
@@ -1183,10 +1201,20 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           const rawValue = result?.getText()?.trim();
           if (!rawValue) return;
 
+          const now = Date.now();
+          const lastSeenAt = codeLastSeenAtRef.current.get(rawValue) || 0;
+          if (now - lastSeenAt < 1600) return;
+          codeLastSeenAtRef.current.set(rawValue, now);
+
           setCodeText(rawValue);
           setScannedCodes((current) => {
-            if (current.some((item) => item.rawValue === rawValue)) return current;
-            return [...current, { rawValue, sticker: findStickerForScannedCode(rawValue) }];
+            const existing = current.find((item) => item.rawValue === rawValue);
+            if (existing) {
+              return current.map((item) =>
+                item.rawValue === rawValue ? { ...item, count: item.count + 1 } : item
+              );
+            }
+            return [...current, { rawValue, sticker: findStickerForScannedCode(rawValue), count: 1 }];
           });
         }
       );
@@ -1905,11 +1933,11 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           </div>
           {scannedCodes.length > 0 && (
             <div className="code-scan-detected">
-              <strong>{scannedCodes.length} figurinhas detectadas</strong>
+              <strong>{scannedCodes.reduce((total, item) => total + item.count, 0)} figurinhas detectadas</strong>
               <ul>
                 {scannedCodes.map((item) => (
                   <li key={item.rawValue}>
-                    <span>{item.rawValue}</span>
+                    <span>{item.rawValue}{item.count > 1 ? ` x${item.count}` : ""}</span>
                     {item.sticker ? <span> — {item.sticker.name}</span> : null}
                   </li>
                 ))}
@@ -1932,7 +1960,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
               </button>
             )}
             <button className="btn btn-primary btn-sm" type="button" onClick={markScannedCodes} disabled={scannedCodes.length === 0}>
-              <ClipboardCheck size={14} /> Adicionar ({scannedCodes.length})
+              <ClipboardCheck size={14} /> Adicionar ({scannedCodes.reduce((total, item) => total + item.count, 0)})
             </button>
             <button className="btn btn-ghost btn-sm" type="button" onClick={clearScannedCodes} disabled={scannedCodes.length === 0}>
               Limpar lista
