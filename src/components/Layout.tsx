@@ -185,7 +185,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                     </div>
                     <div>
                       <dt>vr</dt>
-                      <dd>2026.04</dd>
+                      <dd>2026.05</dd>
                     </div>
                   </dl>
                   {accountError && <p className="profile-error">{accountError}</p>}

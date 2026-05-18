@@ -214,7 +214,6 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
   const [error, setError] = useState<string | null>(null);
   const codeVideoRef = useRef<HTMLVideoElement | null>(null);
   const codeStreamRef = useRef<MediaStream | null>(null);
-  const codeOcrTimerRef = useRef<number | null>(null);
   const codeOcrBusyRef = useRef(false);
   const codeOcrWorkerRef = useRef<any | null>(null);
   const codeOcrWorkerPromiseRef = useRef<Promise<any> | null>(null);
@@ -287,10 +286,6 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
   };
 
   const stopCodeScanner = (options?: { keepWorker?: boolean }) => {
-    if (codeOcrTimerRef.current !== null) {
-      window.clearInterval(codeOcrTimerRef.current);
-      codeOcrTimerRef.current = null;
-    }
     if (!options?.keepWorker) {
       codeOcrBusyRef.current = false;
     }
@@ -382,10 +377,6 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       .filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas));
   };
 
-  const buildCodeOcrCanvases = (video: HTMLVideoElement, exhaustive = false) => {
-    return buildCodeOcrCanvasesFromSource(video, video.videoWidth, video.videoHeight, exhaustive);
-  };
-
   const prepareCodeOcrWorker = async () => {
     if (codeOcrWorkerRef.current) return codeOcrWorkerRef.current;
     if (codeOcrWorkerPromiseRef.current) return codeOcrWorkerPromiseRef.current;
@@ -411,26 +402,6 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       const codes = getStickerCodesFromOcrText(result.data.text);
       codes.forEach(addDetectedCode);
       if (codes.length > 0) break;
-    }
-  };
-
-  const readCodeFrame = async (options?: { exhaustive?: boolean }) => {
-    if (codeOcrBusyRef.current) return;
-    const video = codeVideoRef.current;
-    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) return;
-
-    codeOcrBusyRef.current = true;
-    setCodeReading(true);
-    try {
-      const canvases = buildCodeOcrCanvases(video, options?.exhaustive);
-      if (canvases.length === 0) return;
-
-      await recognizeCodeCanvases(canvases);
-    } catch (err) {
-      console.error("Erro ao ler texto da camara.", err);
-    } finally {
-      codeOcrBusyRef.current = false;
-      setCodeReading(false);
     }
   };
 
@@ -461,11 +432,6 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       video.srcObject = stream;
       await video.play();
       setCodeScanning(true);
-
-      window.setTimeout(() => {
-        readCodeFrame();
-        codeOcrTimerRef.current = window.setInterval(readCodeFrame, 850);
-      }, 250);
     } catch (err: any) {
       stopCodeScanner();
       if (err?.name === "NotAllowedError") {
