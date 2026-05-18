@@ -2005,23 +2005,23 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         <div className="code-scan-panel">
           <div className="voice-mark-header">
             <div>
-              <strong>Ler codigo do cromo</strong>
-              <span>Aponta a camara aos codigos dos cromos para detectar varios de uma vez e adiciona-los.</span>
+              <strong>Scanner OCR</strong>
+              <span>Aponta para os codigos das figurinhas. A app detecta varios de uma vez e adiciona-os em lote.</span>
             </div>
           </div>
           <div className="code-scan-reader">
             <video ref={codeVideoRef} muted playsInline />
-            {!codeScanning && <span>Camara desligada</span>}
+            {!codeScanning && <span className="code-scan-empty">Camara desligada</span>}
             {codeScanning && <div className="code-scan-line" />}
-            {codeReading && <span>A ler texto...</span>}
+            {codeReading && <span className="code-scan-status">A ler texto...</span>}
           </div>
           {scannedCodes.length > 0 && (
             <div className="code-scan-detected">
-              <strong>{scannedCodes.reduce((total, item) => total + item.count, 0)} figurinhas detectadas</strong>
+              <strong>{scannedCodes.reduce((total, item) => total + item.count, 0)} figurinha(s) detectada(s)</strong>
               <ul>
                 {scannedCodes.map((item) => (
                   <li key={item.rawValue}>
-                    <span>{item.rawValue}{item.count > 1 ? ` x${item.count}` : ""}</span>
+                    <span className="code-scan-chip">{item.rawValue}{item.count > 1 ? ` x${item.count}` : ""}</span>
                     {item.sticker ? <span> — {item.sticker.name}</span> : null}
                   </li>
                 ))}
@@ -2036,7 +2036,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
               onChange={(event) => setCodeText(event.target.value)}
             />
             <button className="btn btn-code-toggle btn-sm" type="button" onClick={startCodeScanner} disabled={codeScanning}>
-              <ScanLine size={14} /> {codeScanning ? "A ler..." : "Ler com camara"}
+              <ScanLine size={14} /> {codeScanning ? "Scanner ativo" : "Scanner OCR"}
             </button>
             {codeScanning && (
               <button className="btn btn-ghost btn-sm" type="button" onClick={stopCodeScanner}>
@@ -2044,7 +2044,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
               </button>
             )}
             <button className="btn btn-primary btn-sm" type="button" onClick={markScannedCodes} disabled={scannedCodes.length === 0}>
-              <ClipboardCheck size={14} /> Adicionar ({scannedCodes.reduce((total, item) => total + item.count, 0)})
+              <ClipboardCheck size={14} /> Adicionar detectadas ({scannedCodes.reduce((total, item) => total + item.count, 0)})
             </button>
             <button className="btn btn-ghost btn-sm" type="button" onClick={clearScannedCodes} disabled={scannedCodes.length === 0}>
               Limpar lista
