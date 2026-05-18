@@ -44,6 +44,7 @@ interface StickerCodeCandidate {
 }
 
 type CodeOcrCanvasMode = "normal" | "inverted";
+type CodeOcrRegion = readonly [number, number, number, number];
 
 const DATA_PAGE_SIZE = 1000;
 
@@ -225,7 +226,10 @@ function normalizeOcrCodeText(text: string) {
 }
 
 function getStickerCodeCandidatesFromOcrText(text: string) {
-  const normalizedText = normalizeOcrCodeText(text).replace(/\b([A-Z]{3})([0-9]{1,2})\b/g, "$1 $2");
+  const normalizedText = normalizeOcrCodeText(text)
+    .replace(/\b([A-Z]{3})\s*[IL]([0-9])\b/g, "$1 1$2")
+    .replace(/\b([A-Z]{3})\s*([0-9])B\b/g, "$1 $28")
+    .replace(/\b([A-Z]{3})([0-9]{1,2})\b/g, "$1 $2");
   const candidates: StickerCodeCandidate[] = [];
   const re = /\b([A-Z0-9]{2,4})\s*[-_/]?\s*([0-9]{1,2})\b/g;
 
@@ -436,7 +440,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
     targetWidth = 1600,
     mode: CodeOcrCanvasMode = "normal",
   ) => {
-    const scale = Math.min(2.4, targetWidth / sourceWidth);
+    const scale = Math.min(4, targetWidth / sourceWidth);
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(sourceWidth * scale));
     canvas.height = Math.max(1, Math.round(sourceHeight * scale));
@@ -462,8 +466,106 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
     return canvas;
   };
 
+  const detectCodeLabelRegions = (source: HTMLCanvasElement): CodeOcrRegion[] => {
+    const maxWidth = 720;
+    const scale = Math.min(1, maxWidth / source.width);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(source.width * scale));
+    canvas.height = Math.max(1, Math.round(source.height * scale));
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return [];
+
+    context.drawImage(source, 0, 0, canvas.width, canvas.height);
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+    const width = canvas.width;
+    const height = canvas.height;
+    const dark = new Uint8Array(width * height);
+    const visited = new Uint8Array(width * height);
+
+    for (let index = 0; index < width * height; index += 1) {
+      const offset = index * 4;
+      const red = data[offset];
+      const green = data[offset + 1];
+      const blue = data[offset + 2];
+      const gray = 0.299 * red + 0.587 * green + 0.114 * blue;
+      dark[index] = gray < 118 ? 1 : 0;
+    }
+
+    const regions: CodeOcrRegion[] = [];
+    const stack: number[] = [];
+
+    for (let start = 0; start < dark.length; start += 1) {
+      if (!dark[start] || visited[start]) continue;
+
+      let minX = width;
+      let minY = height;
+      let maxX = 0;
+      let maxY = 0;
+      let pixels = 0;
+      visited[start] = 1;
+      stack.push(start);
+
+      while (stack.length > 0) {
+        const current = stack.pop()!;
+        const x = current % width;
+        const y = Math.floor(current / width);
+        pixels += 1;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+
+        const neighbours = [current - 1, current + 1, current - width, current + width];
+        for (const next of neighbours) {
+          if (next < 0 || next >= dark.length || visited[next] || !dark[next]) continue;
+          const nextX = next % width;
+          if (Math.abs(nextX - x) > 1) continue;
+          visited[next] = 1;
+          stack.push(next);
+        }
+      }
+
+      const boxWidth = maxX - minX + 1;
+      const boxHeight = maxY - minY + 1;
+      const ratio = boxWidth / Math.max(1, boxHeight);
+      const density = pixels / Math.max(1, boxWidth * boxHeight);
+      const looksLikeCodePill =
+        boxWidth >= 34 &&
+        boxWidth <= width * 0.34 &&
+        boxHeight >= 10 &&
+        boxHeight <= height * 0.11 &&
+        ratio >= 1.8 &&
+        ratio <= 7.6 &&
+        density >= 0.34 &&
+        minY <= height * 0.72;
+
+      if (!looksLikeCodePill) continue;
+
+      const padX = Math.round(boxWidth * 0.18);
+      const padY = Math.round(boxHeight * 0.42);
+      const sourceX = Math.max(0, Math.round((minX - padX) / scale));
+      const sourceY = Math.max(0, Math.round((minY - padY) / scale));
+      const sourceRight = Math.min(source.width, Math.round((maxX + padX) / scale));
+      const sourceBottom = Math.min(source.height, Math.round((maxY + padY) / scale));
+      regions.push([sourceX, sourceY, Math.max(1, sourceRight - sourceX), Math.max(1, sourceBottom - sourceY)]);
+    }
+
+    return regions
+      .sort((a, b) => a[1] - b[1] || a[0] - b[0])
+      .filter((region, index, all) => {
+        return all.findIndex((other) => {
+          const xOverlap = Math.max(0, Math.min(region[0] + region[2], other[0] + other[2]) - Math.max(region[0], other[0]));
+          const yOverlap = Math.max(0, Math.min(region[1] + region[3], other[1] + other[3]) - Math.max(region[1], other[1]));
+          const overlap = xOverlap * yOverlap;
+          const smaller = Math.min(region[2] * region[3], other[2] * other[3]);
+          return overlap / Math.max(1, smaller) > 0.55;
+        }) === index;
+      })
+      .slice(0, 10);
+  };
+
   const buildCodeOcrCanvasesFromSource = (
-    source: CanvasImageSource,
+    source: HTMLCanvasElement,
     width: number,
     height: number,
     exhaustive = false,
@@ -481,8 +583,11 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       [Math.round(width * 0.32), Math.round(height * 0.18), Math.round(width * 0.66), Math.round(height * 0.42)],
       [Math.round(width * 0.15), Math.round(height * 0.12), Math.round(width * 0.7), Math.round(height * 0.72)],
     ] as const;
-    const regions = exhaustive ? [...fastRegions, ...exhaustiveRegions] : fastRegions;
-    const modes: CodeOcrCanvasMode[] = exhaustive ? ["normal", "inverted"] : ["normal"];
+    const detectedRegions = exhaustive ? detectCodeLabelRegions(source) : [];
+    const regions: CodeOcrRegion[] = detectedRegions.length > 0
+      ? detectedRegions
+      : exhaustive ? [...fastRegions, ...exhaustiveRegions] : [...fastRegions];
+    const modes: CodeOcrCanvasMode[] = exhaustive ? ["inverted", "normal"] : ["normal"];
 
     return regions
       .flatMap(([sourceX, sourceY, sourceWidth, sourceHeight]) =>
@@ -508,7 +613,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
   };
 
   const recognizeCodeCanvases = async (canvases: HTMLCanvasElement[]) => {
-    if (canvases.length === 0) return;
+    if (canvases.length === 0) return 0;
     const worker = await prepareCodeOcrWorker();
     const candidates: StickerCodeCandidate[] = [];
 
@@ -517,7 +622,9 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       candidates.push(...getStickerCodeCandidatesFromOcrText(result.data.text));
     }
 
-    resolveOcrCodeCandidates(candidates).forEach(addDetectedCode);
+    const codes = resolveOcrCodeCandidates(candidates);
+    codes.forEach(addDetectedCode);
+    return codes.length;
   };
 
   const startCodeScanner = async () => {
@@ -585,7 +692,10 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       stopCodeScanner({ keepWorker: true });
 
       const canvases = buildCodeOcrCanvasesFromSource(canvas, canvas.width, canvas.height, true);
-      await recognizeCodeCanvases(canvases);
+      const detectedCount = await recognizeCodeCanvases(canvases);
+      if (detectedCount === 0) {
+        setError("Nao encontrei codigos nesta captura. Aproxima mais os cantos com os codigos e evita reflexos.");
+      }
     } catch (err: any) {
       setError(err.message || "Erro ao ler a imagem capturada.");
     } finally {
