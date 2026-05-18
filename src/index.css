@@ -2450,7 +2450,8 @@ textarea {
   background: var(--bg-secondary);
 }
 
-.code-scan-reader video {
+.code-scan-reader video,
+.code-scan-capture {
   display: block;
   width: 100%;
   height: 100%;

@@ -209,6 +209,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
   const [codeReading, setCodeReading] = useState(false);
   const [codeResult, setCodeResult] = useState<string | null>(null);
   const [scannedCodes, setScannedCodes] = useState<ScannedCodeItem[]>([]);
+  const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const codeVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -285,22 +286,26 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
     return null;
   };
 
-  const stopCodeScanner = () => {
+  const stopCodeScanner = (options?: { keepWorker?: boolean }) => {
     if (codeOcrTimerRef.current !== null) {
       window.clearInterval(codeOcrTimerRef.current);
       codeOcrTimerRef.current = null;
     }
-    codeOcrBusyRef.current = false;
-    if (codeOcrWorkerRef.current) {
+    if (!options?.keepWorker) {
+      codeOcrBusyRef.current = false;
+    }
+    if (!options?.keepWorker && codeOcrWorkerRef.current) {
       void codeOcrWorkerRef.current.terminate();
       codeOcrWorkerRef.current = null;
+      codeOcrWorkerPromiseRef.current = null;
     }
-    codeOcrWorkerPromiseRef.current = null;
     codeStreamRef.current?.getTracks().forEach((track) => track.stop());
     codeStreamRef.current = null;
     if (codeVideoRef.current) codeVideoRef.current.srcObject = null;
     setCodeScanning(false);
-    setCodeReading(false);
+    if (!options?.keepWorker) {
+      setCodeReading(false);
+    }
   };
 
   const addDetectedCode = (rawValue: string) => {
@@ -323,7 +328,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
   };
 
   const createCodeOcrCanvas = (
-    video: HTMLVideoElement,
+    source: CanvasImageSource,
     sourceX: number,
     sourceY: number,
     sourceWidth: number,
@@ -338,7 +343,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
     if (!context) return null;
 
     context.imageSmoothingEnabled = true;
-    context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+    context.drawImage(source, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
 
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
@@ -353,9 +358,12 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
     return canvas;
   };
 
-  const buildCodeOcrCanvases = (video: HTMLVideoElement, exhaustive = false) => {
-    const width = video.videoWidth;
-    const height = video.videoHeight;
+  const buildCodeOcrCanvasesFromSource = (
+    source: CanvasImageSource,
+    width: number,
+    height: number,
+    exhaustive = false,
+  ) => {
     const fastRegions = [
       [0, 0, width, height],
     ] as const;
@@ -369,9 +377,13 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
 
     return regions
       .map(([sourceX, sourceY, sourceWidth, sourceHeight]) =>
-        createCodeOcrCanvas(video, sourceX, sourceY, sourceWidth, sourceHeight)
+        createCodeOcrCanvas(source, sourceX, sourceY, sourceWidth, sourceHeight)
       )
       .filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas));
+  };
+
+  const buildCodeOcrCanvases = (video: HTMLVideoElement, exhaustive = false) => {
+    return buildCodeOcrCanvasesFromSource(video, video.videoWidth, video.videoHeight, exhaustive);
   };
 
   const prepareCodeOcrWorker = async () => {
@@ -390,6 +402,18 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
     return codeOcrWorkerPromiseRef.current;
   };
 
+  const recognizeCodeCanvases = async (canvases: HTMLCanvasElement[]) => {
+    if (canvases.length === 0) return;
+    const worker = await prepareCodeOcrWorker();
+
+    for (const canvas of canvases) {
+      const result = await worker.recognize(canvas);
+      const codes = getStickerCodesFromOcrText(result.data.text);
+      codes.forEach(addDetectedCode);
+      if (codes.length > 0) break;
+    }
+  };
+
   const readCodeFrame = async (options?: { exhaustive?: boolean }) => {
     if (codeOcrBusyRef.current) return;
     const video = codeVideoRef.current;
@@ -401,14 +425,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       const canvases = buildCodeOcrCanvases(video, options?.exhaustive);
       if (canvases.length === 0) return;
 
-      const worker = await prepareCodeOcrWorker();
-
-      for (const canvas of canvases) {
-        const result = await worker.recognize(canvas);
-        const codes = getStickerCodesFromOcrText(result.data.text);
-        codes.forEach(addDetectedCode);
-        if (codes.length > 0) break;
-      }
+      await recognizeCodeCanvases(canvases);
     } catch (err) {
       console.error("Erro ao ler texto da camara.", err);
     } finally {
@@ -427,6 +444,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       }
 
       stopCodeScanner();
+      setCapturedImageUrl(null);
       void prepareCodeOcrWorker();
       const video = codeVideoRef.current;
       if (!video) throw new Error("Nao consegui abrir o leitor de codigos.");
@@ -463,9 +481,36 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
   };
 
   const captureCodeFrame = async () => {
+    if (codeOcrBusyRef.current) return;
     setError(null);
     setCodeResult(null);
-    await readCodeFrame({ exhaustive: true });
+    const video = codeVideoRef.current;
+    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) {
+      setError("Nao consegui capturar a imagem da camara.");
+      return;
+    }
+
+    codeOcrBusyRef.current = true;
+    setCodeReading(true);
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("Nao consegui preparar a imagem capturada.");
+
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      setCapturedImageUrl(canvas.toDataURL("image/jpeg", 0.86));
+      stopCodeScanner({ keepWorker: true });
+
+      const canvases = buildCodeOcrCanvasesFromSource(canvas, canvas.width, canvas.height, true);
+      await recognizeCodeCanvases(canvases);
+    } catch (err: any) {
+      setError(err.message || "Erro ao ler a imagem capturada.");
+    } finally {
+      codeOcrBusyRef.current = false;
+      setCodeReading(false);
+    }
   };
 
   const clearScannedCodes = () => {
@@ -473,6 +518,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
     codeLastSeenAtRef.current.clear();
     setCodeText("");
     setCodeResult(null);
+    setCapturedImageUrl(null);
   };
 
   const markCodes = async (codes: string[]) => {
@@ -589,8 +635,12 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
           </div>
         </div>
         <div className="code-scan-reader">
-          <video ref={codeVideoRef} muted playsInline />
-          {!codeScanning && <span className="code-scan-empty">Camara desligada</span>}
+          {capturedImageUrl && !codeScanning ? (
+            <img className="code-scan-capture" src={capturedImageUrl} alt="Imagem capturada para leitura" />
+          ) : (
+            <video ref={codeVideoRef} muted playsInline />
+          )}
+          {!codeScanning && !capturedImageUrl && <span className="code-scan-empty">Camara desligada</span>}
           {codeScanning && <div className="code-scan-line" />}
           {codeReading && <span className="code-scan-status">A ler texto...</span>}
         </div>
@@ -623,7 +673,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
             <ScanLine size={14} /> Capturar agora
           </button>
           {codeScanning && (
-            <button className="btn btn-ghost btn-sm" type="button" onClick={stopCodeScanner}>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => stopCodeScanner()}>
               Parar
             </button>
           )}
