@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useAuth } from "../lib/auth";
-import { ChevronDown, Handshake, KeyRound, LifeBuoy, LogOut, QrCode, RefreshCw, Shield, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
+import { ChevronDown, Handshake, KeyRound, LifeBuoy, LogOut, QrCode, RefreshCw, ScanLine, Shield, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
-type Page = "collection" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
+type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
 
 interface LayoutProps {
   currentPage: Page;
@@ -35,6 +35,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
 
   const navItems: { page: Page; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
     { page: "collection", label: "Colecao", icon: <Trophy size={18} /> },
+    { page: "scanner", label: "Scanner", icon: <ScanLine size={18} /> },
     { page: "matches", label: "Matches", icon: <RefreshCw size={18} />, badge: matchCount },
     { page: "trades", label: "Trocas", icon: <Users size={18} />, badge: pendingTradeCount, alert: pendingTradeCount > 0 },
     { page: "share", label: "Partilhar", icon: <QrCode size={18} /> },
@@ -184,7 +185,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                     </div>
                     <div>
                       <dt>vr</dt>
-                      <dd>2026.03</dd>
+                      <dd>2026.04</dd>
                     </div>
                   </dl>
                   {accountError && <p className="profile-error">{accountError}</p>}

@@ -2392,6 +2392,55 @@ textarea {
   box-shadow: var(--shadow-sm);
 }
 
+.scanner-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scanner-header {
+  align-items: stretch;
+}
+
+.scanner-collection-picker {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-width: min(100%, 280px);
+}
+
+.scanner-collection-picker span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.scanner-collection-picker select {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.scanner-collection-picker select:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+}
+
+.scanner-panel {
+  margin: 0;
+}
+
 .code-scan-reader {
   position: relative;
   min-height: 240px;

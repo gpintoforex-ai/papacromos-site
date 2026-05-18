@@ -8,6 +8,7 @@ import AdminPage from "./pages/AdminPage";
 import PartnersPage from "./pages/PartnersPage";
 import SharePage from "./pages/SharePage";
 import SupportPage from "./pages/SupportPage";
+import ScannerPage from "./pages/ScannerPage";
 import CookieConsent from "./components/CookieConsent";
 import InstallAppPrompt from "./components/InstallAppPrompt";
 import { useEffect, useState } from "react";
@@ -15,7 +16,7 @@ import { countUniqueRequestedStickers, findUserMatches } from "./lib/matches";
 import { supabase } from "./lib/supabase";
 import { setupPushNotifications } from "./lib/pushNotifications";
 
-type Page = "collection" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
+type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -153,6 +154,7 @@ function AppContent() {
             }}
           />
         )}
+        {page === "scanner" && <ScannerPage onCollectionChange={refreshMatchCount} />}
         {page === "matches" && <MatchesPage onMatchesChange={setMatchCount} />}
         {page === "trades" && <TradesPage onPendingTradeCountChange={setPendingTradeCount} />}
         {page === "share" && <SharePage sharedUserId={sharedUserId} onOpenSharedUser={setSharedUserId} />}
