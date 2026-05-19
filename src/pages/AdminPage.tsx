@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, KeyRound, PackagePlus, Pencil, RefreshCw, RotateCcw, Settings, Trash2, Users, X } from "lucide-react";
+import { ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, KeyRound, PackagePlus, Pencil, RefreshCw, RotateCcw, Send, Settings, Trash2, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 
@@ -125,6 +125,9 @@ export default function AdminPage() {
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [selectedCollectionUserId, setSelectedCollectionUserId] = useState<string | null>(null);
   const [selectedUserStickers, setSelectedUserStickers] = useState<UserSticker[]>([]);
+  const [pushUserId, setPushUserId] = useState<string | null>(null);
+  const [pushTitle, setPushTitle] = useState("Papa Cromos");
+  const [pushMessage, setPushMessage] = useState("");
   const [imageSwapCollection, setImageSwapCollection] = useState<Collection | null>(null);
   const [imageSwapStickers, setImageSwapStickers] = useState<Sticker[]>([]);
   const [imageSwapTeamFilter, setImageSwapTeamFilter] = useState("");
@@ -614,6 +617,65 @@ export default function AdminPage() {
       setSuccess(`Email de recuperacao de senha enviado para ${registeredUser.email}.`);
     } catch (err: any) {
       setError(err.message || "Erro ao enviar recuperacao de senha.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openPushComposer = (registeredUser: RegisteredUser) => {
+    setOpenUserDetailsId(registeredUser.id);
+    setPushUserId(registeredUser.id);
+    setPushTitle("Papa Cromos");
+    setPushMessage("");
+    setError(null);
+    setSuccess(null);
+  };
+
+  const closePushComposer = () => {
+    setPushUserId(null);
+    setPushTitle("Papa Cromos");
+    setPushMessage("");
+  };
+
+  const sendPushMessage = async (registeredUser: RegisteredUser) => {
+    const title = pushTitle.trim();
+    const body = pushMessage.trim();
+
+    if (!title) {
+      setError("Indica o titulo da notificacao.");
+      return;
+    }
+
+    if (!body) {
+      setError("Escreve a mensagem da notificacao.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { error: queueError } = await supabase.rpc("admin_queue_push_notification", {
+        p_user_id: registeredUser.id,
+        p_title: title,
+        p_body: body,
+        p_data: {
+          type: "admin_message",
+          sent_by: user?.id || null,
+        },
+      });
+      if (queueError) throw queueError;
+
+      const { error: invokeError } = await supabase.functions.invoke("send-push-notifications");
+      if (invokeError) {
+        setSuccess("Notificacao guardada na fila. A entrega sera tentada pelo servidor.");
+      } else {
+        setSuccess(`Push enviado para ${registeredUser.username || registeredUser.email || "utilizador"}.`);
+      }
+
+      closePushComposer();
+    } catch (err: any) {
+      setError(err.message || "Erro ao enviar push.");
     } finally {
       setSaving(false);
     }
@@ -1128,6 +1190,35 @@ export default function AdminPage() {
                       </div>
                     </div>
 
+                    {pushUserId === registeredUser.id && (
+                      <div className="admin-push-composer">
+                        <div className="admin-push-composer-title">
+                          <strong>Mensagem push</strong>
+                          <button className="btn btn-ghost btn-xs" type="button" onClick={closePushComposer} disabled={saving}>
+                            <X size={12} /> Fechar
+                          </button>
+                        </div>
+                        <input
+                          className="admin-table-input"
+                          type="text"
+                          value={pushTitle}
+                          onChange={(event) => setPushTitle(event.target.value)}
+                          placeholder="Titulo"
+                          disabled={saving}
+                        />
+                        <textarea
+                          className="admin-table-input"
+                          value={pushMessage}
+                          onChange={(event) => setPushMessage(event.target.value)}
+                          placeholder="Mensagem para o utilizador"
+                          disabled={saving}
+                        />
+                        <button className="btn btn-primary btn-xs" type="button" onClick={() => sendPushMessage(registeredUser)} disabled={saving}>
+                          <Send size={12} /> {saving ? "A enviar..." : "Enviar push"}
+                        </button>
+                      </div>
+                    )}
+
                     <div className="admin-table-actions admin-user-card-actions">
                       {editingUserId === registeredUser.id ? (
                         <>
@@ -1163,6 +1254,13 @@ export default function AdminPage() {
                             disabled={saving || !registeredUser.email}
                           >
                             <KeyRound size={12} /> Reset senha
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => openPushComposer(registeredUser)}
+                            disabled={saving}
+                          >
+                            <Send size={12} /> Push
                           </button>
                           <button
                             className="btn btn-ghost btn-xs"

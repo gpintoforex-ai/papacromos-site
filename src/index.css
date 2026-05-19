@@ -5260,6 +5260,32 @@ textarea {
   justify-content: flex-end;
 }
 
+.admin-push-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+}
+
+.admin-push-composer-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-push-composer-title strong {
+  color: var(--text-heading);
+}
+
+.admin-push-composer textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
 .status-active {
   color: var(--primary-700) !important;
 }
