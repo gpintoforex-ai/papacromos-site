@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { getAvatarColor, getAvatarInitial } from "../lib/avatar";
 import StickerCard from "../components/StickerCard";
-import { Search, Camera, ArrowLeft, X, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, ChartNoAxesColumnIncreasing } from "lucide-react";
+import { Search, Camera, ArrowLeft, X, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, CircleCheck, CircleHelp, CopyPlus, Album, Images, Trophy } from "lucide-react";
 
 interface Collection {
   id: string;
@@ -981,7 +981,6 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const [homeResultMode, setHomeResultMode] = useState<HomeResultMode>("collections");
   const [neededStickerHolders, setNeededStickerHolders] = useState<NeededStickerHolder[]>([]);
   const [neededStickerHoldersLoading, setNeededStickerHoldersLoading] = useState(false);
-  const [statsPanelOpen, setStatsPanelOpen] = useState(false);
   const [codePanelOpen, setCodePanelOpen] = useState(false);
   const [codeText, setCodeText] = useState("");
   const [codeScanning, setCodeScanning] = useState(false);
@@ -989,6 +988,9 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const [codeResult, setCodeResult] = useState<string | null>(null);
   const [scannedCodes, setScannedCodes] = useState<ScannedCodeItem[]>([]);
   const [albumSlideDirection, setAlbumSlideDirection] = useState<AlbumSlideDirection>(null);
+  const [collectionOnboardingOpen, setCollectionOnboardingOpen] = useState(false);
+  const [collectionOnboardingSelection, setCollectionOnboardingSelection] = useState<string[]>([]);
+  const [collectionOnboardingSaving, setCollectionOnboardingSaving] = useState(false);
   const collectionsSectionRef = useRef<HTMLElement | null>(null);
   const codeVideoRef = useRef<HTMLVideoElement | null>(null);
   const codeStreamRef = useRef<MediaStream | null>(null);
@@ -1079,10 +1081,18 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       if (collectionsRes.error) throw collectionsRes.error;
       if (preferencesRes.error) throw preferencesRes.error;
 
-      if (collectionsRes.data) setCollections(collectionsRes.data);
-      if (preferencesRes.data) setCollectionPreferences(preferencesRes.data as UserCollectionPreference[]);
+      const loadedCollections = (collectionsRes.data || []) as Collection[];
+      const loadedPreferences = (preferencesRes.data || []) as UserCollectionPreference[];
+      setCollections(loadedCollections);
+      setCollectionPreferences(loadedPreferences);
       setStickers(allStickers);
       setUserStickers(allUserStickers.filter((userSticker) => userSticker.user_id === user.id));
+
+      const onboardingKey = `papacromos:collection-onboarding:${user.id}`;
+      if (loadedCollections.length > 0 && loadedPreferences.length === 0 && !localStorage.getItem(onboardingKey)) {
+        setCollectionOnboardingSelection(loadedCollections.map((collection) => collection.id));
+        setCollectionOnboardingOpen(true);
+      }
     } catch (err: any) {
       setError(err.message || "Erro ao carregar caderneta.");
     } finally {
@@ -1817,6 +1827,48 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     }
   };
 
+  const toggleCollectionOnboardingSelection = (collectionId: string) => {
+    setCollectionOnboardingSelection((current) =>
+      current.includes(collectionId)
+        ? current.filter((id) => id !== collectionId)
+        : [...current, collectionId]
+    );
+  };
+
+  const saveCollectionOnboarding = async (activateAll = false) => {
+    if (!user?.id) return;
+    const activeIds = new Set(activateAll ? collections.map((collection) => collection.id) : collectionOnboardingSelection);
+
+    if (activeIds.size === 0) {
+      setError("Seleciona pelo menos uma colecao ativa.");
+      return;
+    }
+
+    setCollectionOnboardingSaving(true);
+    setError(null);
+    try {
+      const nextPreferences = collections.map((collection) => ({
+        user_id: user.id,
+        collection_id: collection.id,
+        is_active: activeIds.has(collection.id),
+      }));
+
+      const { error: upsertError } = await supabase.from("user_collection_preferences").upsert(nextPreferences, {
+        onConflict: "user_id,collection_id",
+      });
+      if (upsertError) throw upsertError;
+
+      setCollectionPreferences(nextPreferences.map(({ collection_id, is_active }) => ({ collection_id, is_active })));
+      localStorage.setItem(`papacromos:collection-onboarding:${user.id}`, "done");
+      setCollectionOnboardingOpen(false);
+      onCollectionChange?.();
+    } catch (err: any) {
+      setError(err.message || "Erro ao guardar colecoes ativas.");
+    } finally {
+      setCollectionOnboardingSaving(false);
+    }
+  };
+
   const startVoiceRecognition = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     setError(null);
@@ -1988,7 +2040,6 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     .filter((us) => us.status === "have")
     .reduce((total, us) => total + Math.max(0, (us.quantity || 0) - 1), 0);
   const totalCount = Math.max(selectedStickers.length, selectedCollection?.total_stickers || 0);
-  const wantCount = Math.max(0, totalCount - haveCount);
   const progress = totalCount > 0 ? Math.round((haveCount / totalCount) * 100) : 0;
   const isWorldAlbum = selectedCollection?.name.toLowerCase().includes("mundial") || false;
   const albumTeamButtons = isWorldAlbum ? buildAlbumTeamPages(selectedStickers) : [];
@@ -2125,6 +2176,50 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     );
   };
 
+  const collectionOnboardingModal = collectionOnboardingOpen ? (
+    <div className="collection-onboarding-backdrop" role="presentation">
+      <div className="collection-onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="collection-onboarding-title">
+        <div className="collection-onboarding-header">
+          <span className="collection-home-kicker">Primeira configuracao</span>
+          <h3 id="collection-onboarding-title">Escolhe as colecoes que queres ativar</h3>
+          <p>As colecoes ativas aparecem na tua caderneta, nos cromos em falta e nas sugestoes de troca.</p>
+        </div>
+        <div className="collection-onboarding-grid">
+          {collections.map((collection) => {
+            const selected = collectionOnboardingSelection.includes(collection.id);
+            return (
+              <button
+                className={`collection-onboarding-card ${selected ? "selected" : ""}`}
+                key={collection.id}
+                type="button"
+                onClick={() => toggleCollectionOnboardingSelection(collection.id)}
+              >
+                <img
+                  src={collection.image_url || collectionFallbackImage}
+                  alt=""
+                  onError={(event) => {
+                    event.currentTarget.src = collectionFallbackImage;
+                  }}
+                />
+                <span>{collection.name}</span>
+                <em>{selected ? "Ativa" : "Inativa"}</em>
+              </button>
+            );
+          })}
+        </div>
+        {error && <p className="error-text">{error}</p>}
+        <div className="collection-onboarding-actions">
+          <button className="btn btn-secondary" type="button" onClick={() => saveCollectionOnboarding(true)} disabled={collectionOnboardingSaving}>
+            Ativar todas
+          </button>
+          <button className="btn btn-primary" type="button" onClick={() => saveCollectionOnboarding()} disabled={collectionOnboardingSaving || collectionOnboardingSelection.length === 0}>
+            {collectionOnboardingSaving ? "A guardar..." : "Guardar selecao"}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   if (loading) return <div className="loading">A carregar colecao...</div>;
 
   if (collections.length === 0) {
@@ -2140,6 +2235,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   if (!selectedCollectionId || !selectedCollectionActive) {
     return (
       <div className="collection-page collection-home">
+        {collectionOnboardingModal}
         <section className="collection-home-hero">
           <div>
             <span className="collection-home-kicker">A minha colecao</span>
@@ -2150,6 +2246,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
               type="button"
               onClick={showHomeCollections}
             >
+              <span className="collection-quick-stat-icon collections"><Album size={18} /></span>
               <span>Colecoes</span>
               <strong>{activeCollections.length}</strong>
             </button>
@@ -2158,6 +2255,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
               type="button"
               onClick={() => setHomeResultMode("owned")}
             >
+              <span className="collection-quick-stat-icon stickers"><Images size={18} /></span>
               <span>Cromos</span>
               <strong>{ownHaveStickerIds.size}</strong>
             </button>
@@ -2166,6 +2264,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
               type="button"
               onClick={() => setHomeResultMode("complete")}
             >
+              <span className="collection-quick-stat-icon complete"><Trophy size={18} /></span>
               <span>Completas</span>
               <strong>{completedCollections}</strong>
             </button>
@@ -2332,11 +2431,29 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
 
   return (
     <div className="collection-page">
+      {collectionOnboardingModal}
       <section className="collection-detail-hero">
-        <div>
-          <span className="collection-home-kicker">Caderneta ativa</span>
-          <h2>{selectedCollection?.name || "Colecao"}</h2>
-          <p>{totalCount} cromos para colecionar</p>
+        <div className="collection-detail-main">
+          <div className="collection-detail-cover">
+            <img
+              src={selectedCollection?.image_url || collectionFallbackImage}
+              alt={selectedCollection?.name || "Colecao"}
+              onError={(event) => {
+                event.currentTarget.src = collectionFallbackImage;
+              }}
+            />
+          </div>
+          <div className="collection-detail-copy">
+            <span className="collection-home-kicker">Caderneta ativa</span>
+            <h2>{selectedCollection?.name || "Colecao"}</h2>
+            <div className="collection-detail-progress-copy">
+              <strong>{progress}%</strong>
+              <span>completa</span>
+            </div>
+            <div className="progress-bar collection-detail-progress-bar">
+              <div className="progress-fill" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
         </div>
         <div className="collection-header-side">
           <button
@@ -2351,44 +2468,25 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           >
             <ArrowLeft size={16} /> Coleções
           </button>
-          <button
-            className={`btn btn-collection-stats ${statsPanelOpen ? "active" : ""}`}
-            type="button"
-            onClick={() => setStatsPanelOpen((open) => !open)}
-            aria-expanded={statsPanelOpen}
-          >
-            <ChartNoAxesColumnIncreasing size={17} /> Estatisticas
+        </div>
+        <div className="collection-quick-stats">
+          <button className={`collection-quick-stat ${filter === "have" ? "active" : ""}`} type="button" onClick={() => setFilter("have")}>
+            <span className="collection-quick-stat-icon have"><CircleCheck size={18} /></span>
+            <span>Tenho</span>
+            <strong>{haveCount}</strong>
           </button>
-          {statsPanelOpen && (
-            <div className="collection-stats-panel">
-              <span>
-                <strong>{totalCount}</strong>
-                Todos
-              </span>
-              <span>
-                <strong>{haveCount}</strong>
-                Tenho
-              </span>
-              <span>
-                <strong>{repeatedCount}</strong>
-                Repetidos
-              </span>
-              <span>
-                <strong>{wantCount}</strong>
-                Procuro
-              </span>
-            </div>
-          )}
+          <button className={`collection-quick-stat ${filter === "missing" ? "active" : ""}`} type="button" onClick={() => setFilter("missing")}>
+            <span className="collection-quick-stat-icon missing"><CircleHelp size={18} /></span>
+            <span>Faltam</span>
+            <strong>{Math.max(totalCount - haveCount, 0)}</strong>
+          </button>
+          <button className={`collection-quick-stat ${filter === "repeated" ? "active" : ""}`} type="button" onClick={() => setFilter("repeated")}>
+            <span className="collection-quick-stat-icon repeated"><CopyPlus size={18} /></span>
+            <span>Repetidos</span>
+            <strong>{repeatedCount}</strong>
+          </button>
         </div>
       </section>
-
-      <div className="progress-label">
-        <strong>{progress}%</strong>
-        <span>Completa</span>
-      </div>
-      <div className="progress-bar">
-        <div className="progress-fill" style={{ width: `${progress}%` }} />
-      </div>
 
       <div className="collection-toolbar">
         <div className="search-box">

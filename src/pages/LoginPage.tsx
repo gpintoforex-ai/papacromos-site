@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BookOpen, Repeat2, ShieldCheck, Users } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import LegalFooter from "../components/LegalFooter";
 import { supabase } from "../lib/supabase";
@@ -182,21 +183,43 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
+      <div className="login-shell">
+        <section className="login-visual" aria-label="Papa Cromos">
+          <img className="login-visual-image" src="/login-hero-phone-screen.png" alt="" aria-hidden="true" />
+          <div className="login-visual-overlay">
+            <img className="login-logo" src="/logo-transparent.png" alt="Papa Cromos" />
+            <div className="login-visual-tagline">
+              <span>O app para</span>
+              <span>todos os</span>
+              <strong>colecionadores!</strong>
+            </div>
+            <div className="login-visual-stats">
+              <span><BookOpen size={16} /> Colecoes</span>
+              <span><Repeat2 size={16} /> Trocas</span>
+              <span><Users size={16} /> Amigos</span>
+            </div>
+          </div>
+        </section>
       <div className="login-card">
         <div className="login-hero">
-          <img className="login-logo" src="/logo.png" alt="Papa Cromos" />
+          <div>
+            <span className="login-kicker">{isSignUp ? "Nova conta" : "Acesso seguro"}</span>
+            <h1>{isSignUp ? "Criar conta" : "Entrar"}</h1>
+            <p>{isSignUp ? "Preenche os dados para comecar a gerir a tua caderneta." : "Continua para a tua colecao e propostas de troca."}</p>
+          </div>
+          <ShieldCheck size={24} />
         </div>
         <div className="login-features">
           <div className="login-feature">
-            <span className="feature-icon">&#x1F4D6;</span>
+            <BookOpen size={18} />
             <span>Organiza a tua colecao</span>
           </div>
           <div className="login-feature">
-            <span className="feature-icon">&#x1F504;</span>
+            <Repeat2 size={18} />
             <span>Encontra matches automaticos</span>
           </div>
           <div className="login-feature">
-            <span className="feature-icon">&#x1F91D;</span>
+            <Users size={18} />
             <span>Troca cromos com outros</span>
           </div>
         </div>
@@ -371,6 +394,7 @@ export default function LoginPage() {
           </button>
         )}
 
+      </div>
       </div>
       <LegalFooter />
     </div>
