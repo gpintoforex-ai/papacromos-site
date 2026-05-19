@@ -61,6 +61,16 @@ const defaultStickerImage =
 
 const appLogoUrl = "https://hwqexlticbsokpqpqdvk.supabase.co/storage/v1/object/public/sticker-images/collections/new-1760223165876-105a2aec-9f65-47f0-adf1-b44b781e9ae6.png";
 
+function getStickerPreviewImageUrl(imageUrl: string) {
+  const match = imageUrl.match(/^\/stickers\/([^/]+)\/([^/.]+)\.(png|jpe?g|webp)$/i);
+  if (!match) return "";
+  return `/sticker-previews/${match[1]}/${match[2]}.jpg`;
+}
+
+function getAdminStickerImageUrl(imageUrl: string) {
+  return getStickerPreviewImageUrl(imageUrl) || imageUrl || appLogoUrl;
+}
+
 function buildGeneratedStickers(collectionId: string, collectionName: string, total: number, imageUrl: string) {
   return Array.from({ length: total }, (_, index) => {
     const number = index + 1;
@@ -968,7 +978,14 @@ export default function AdminPage() {
                   <span className="admin-image-swap-number">
                     #{imageSwapIsWorldAlbum ? getWorldAlbumLocalNumber(sticker.number) : sticker.number}
                   </span>
-                  <img src={sticker.image_url || appLogoUrl} alt={sticker.name} loading="lazy" />
+                  <img
+                    src={getAdminStickerImageUrl(sticker.image_url)}
+                    alt={sticker.name}
+                    loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.src = appLogoUrl;
+                    }}
+                  />
                   {imageSwapIsWorldAlbum && (
                     <span className="admin-image-swap-global-number">Global #{sticker.number}</span>
                   )}
