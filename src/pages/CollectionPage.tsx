@@ -128,6 +128,201 @@ const stickerCodeByTeamNorm: Record<string, string> = {
   CONGODR: "COD",
 };
 
+const knownWorldPlayerNames: Record<string, Record<number, string>> = {
+  ALEMANHA: {
+    2: "Marc-Andre ter Stegen",
+    4: "Felix Nmecha",
+    5: "Jonathan Tah",
+    7: "Nico Schlotterbeck",
+    8: "Antonio Rudiger",
+    9: "Leon Goretzka",
+    10: "Jamal Musiala",
+    12: "Ilkay Gundogan",
+    15: "Ridle Baku",
+    16: "Maximilian Mittelstadt",
+    17: "Joshua Kimmich",
+    18: "Leroy Sane",
+  },
+  BOSNIAEHERZEGOVINA: {
+    3: "Sanjin Prcic",
+    4: "Caid Hamulic",
+    6: "Amar Dedic",
+    7: "Sead Kolasinac",
+    9: "Haris Hajradinovic",
+    11: "Emir Sahitarevic",
+    14: "Nicola Vasilj",
+    18: "Edin Dzeko",
+    19: "Samed Bazdar",
+  },
+  BRASIL: {
+    2: "Joao Pedro",
+    3: "Matheus Cunha",
+    5: "Wesley",
+    6: "Lucas Paqueta",
+    7: "Casemiro",
+    8: "Gabriel Martinelli",
+    9: "Raphinha",
+    10: "Estevao",
+    12: "Alisson",
+    14: "Luiz Henrique",
+    16: "Bento",
+    17: "Marquinhos",
+    19: "Gabriel Magalhaes",
+  },
+  CURACAO: {
+    2: "Kenji Gorre",
+    3: "Jearl Margaritha",
+    4: "Jurgen Locadia",
+    5: "Richon van Eijma",
+    6: "Shurandy Sambo",
+    7: "Livano Comenencia",
+    8: "Clifford Roemeratoe",
+    9: "Jeremy Antonisse",
+    11: "Chritz Hansen",
+    14: "Juninho Bacuna",
+    16: "Armando Obispo",
+    17: "Sherel Floranus",
+    19: "Joshua Brenet",
+  },
+  EQUADOR: {
+    3: "Kendry Paez",
+    5: "Gonzalo Valle",
+    6: "Piero Hincapie",
+    12: "Nilson Angulo",
+    15: "Joel Ordonez",
+    18: "Alan Minda",
+    19: "Kevin Rodriguez",
+    20: "Enner Valencia",
+  },
+  ESCOCIA: {
+    2: "Angus Gunn",
+    3: "Scott McTominay",
+    6: "Jack Hendry",
+    7: "Kieran Tierney",
+    8: "Aaron Hickey",
+    9: "Andrew Robertson",
+    10: "Lewis Ferguson",
+    14: "Scott McKenna",
+    16: "Anthony Ralston",
+    19: "Che Adams",
+  },
+  ESTADOSUNIDOS: {
+    4: "Timothy Weah",
+    6: "Chris Richards",
+    7: "Tim Ream",
+    9: "Alex Freeman",
+    10: "Diego Luna",
+    16: "Malik Tillman",
+    17: "Christian Pulisic",
+    18: "Brenden Aaronson",
+    19: "Antonee Robinson",
+  },
+  HAITI: {
+    2: "Johny Placide",
+    3: "Danley Jean Jacques",
+    12: "Jose Casimir",
+    20: "Frantzdy Pierrot",
+  },
+  HOLANDA: {
+    3: "Justin Kluivert",
+    6: "Cody Gakpo",
+    7: "Jeremie Frimpong",
+    10: "Donyell Malen",
+    12: "Virgil van Dijk",
+    14: "Micky van de Ven",
+    15: "Jurrien Timber",
+    16: "Denzel Dumfries",
+    17: "Bart Verbruggen",
+    18: "Teun Koopmeiners",
+    19: "Frenkie de Jong",
+    20: "Justin Kluivert",
+  },
+  MARROCOS: {
+    2: "Youssef En-Nesyri",
+    4: "Romain Saiss",
+    6: "Adam Masina",
+    8: "Soufiane Rahimi",
+    10: "Ayoub El Kaabi",
+    11: "Yassine Bounou",
+    18: "Noussair Mazraoui",
+  },
+  MEXICO: {
+    6: "Jorge Sanchez",
+    8: "Jesus Gallardo",
+    10: "Hirving Lozano",
+    11: "Santiago Gimenez",
+    12: "Jesus Gallardo",
+    14: "Raul Reyes",
+    20: "Alexis Vega",
+  },
+  PARAGUAI: {
+    6: "Orlando Gill",
+    10: "Gerardo Gill",
+    11: "Gustavo Gomez",
+    14: "Juan Jose Caceres",
+    15: "Matias Galarza Fonda",
+    16: "Julio Enciso",
+    17: "Alejandro Romero Gamarra",
+    19: "Omar Alderete",
+    20: "Junior Alonso",
+  },
+  QATAR: {
+    7: "Pedro Miguel",
+    9: "Mohamed Mannai",
+    10: "Assim Madibo",
+    11: "Akram Afif",
+    18: "Akram Hassan Afif",
+    20: "Ahmed Alaaeldin",
+  },
+  REPUBLICADACOREIA: {
+    8: "Seung-ho Paik",
+    15: "Tae-seok Lee",
+    17: "Heung-min Son",
+    20: "Hwang Hee-chan",
+  },
+  SUICA: {
+    17: "Denis Zakaria",
+    18: "Ruben Vargas",
+  },
+  TCHEQUIA: {
+    2: "Matej Kovar",
+    3: "Tomas Chory",
+    6: "Ladislav Krejci",
+    9: "Pavel Sulc",
+    11: "Adam Hlozek",
+    15: "David Zima",
+    16: "Michal Sadilek",
+    17: "Lukas Provod",
+    18: "Lukas Cerv",
+  },
+  TURQUIA: {
+    2: "Ugurcan Cakir",
+    6: "Mert Muldur",
+    8: "Abdulkerim Bardakci",
+    10: "Irfan Can Kahveci",
+    11: "Yunus Akgun",
+    12: "Can Uzun",
+    14: "Merih Demiral",
+    15: "Ferdi Kadioglu",
+    16: "Kaan Ayhan",
+    17: "Ismail Yuksek",
+    19: "Kerem Akturkoglu",
+    20: "Kenan Yildiz",
+  },
+};
+
+function getKnownWorldPlayerName(sticker: Sticker) {
+  const teamName = getStickerTeamName(sticker.name);
+  const localNumber = getAlbumLocalNumber(sticker);
+  return knownWorldPlayerNames[normalizeAbbrev(teamName)]?.[localNumber] || "";
+}
+
+function getStickerDisplayName(sticker: Sticker) {
+  const knownName = getKnownWorldPlayerName(sticker);
+  if (!knownName) return sticker.name;
+  return `${getStickerTeamName(sticker.name)} - ${knownName}`;
+}
+
 function escapeSvgText(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -165,7 +360,8 @@ function getStickerFallbackImage(sticker: Sticker) {
   const teamNorm = normalizeAbbrev(teamName);
   const teamCode = stickerCodeByTeamNorm[teamNorm];
   const codeLabel = teamCode ? `${teamCode} ${localNumber}` : `#${String(sticker.number).padStart(3, "0")}`;
-  const detail = sticker.name.includes(" - ") ? sticker.name.split(" - ").slice(1).join(" - ").trim() : sticker.name;
+  const knownName = getKnownWorldPlayerName(sticker);
+  const detail = knownName || (sticker.name.includes(" - ") ? sticker.name.split(" - ").slice(1).join(" - ").trim() : sticker.name);
   const titleLines = splitSvgText(teamName === "Cromos" ? sticker.name : teamName, 17);
   const detailLines = splitSvgText(detail || "Cromo", 18);
   const svg = `
@@ -1857,7 +2053,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       <StickerCard
         key={sticker.id}
         number={isWorldAlbum ? getAlbumLocalNumber(sticker) : sticker.number}
-        name={sticker.name}
+        name={getStickerDisplayName(sticker)}
         imageUrl={sticker.image_url}
         fallbackImageUrl={getStickerFallbackImage(sticker)}
         rarity={sticker.rarity}
@@ -1959,8 +2155,8 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
             <CollectionHomeCarousel itemCount={ownedPreviewStickers.length} emptyText="Ainda nao marcaste cromos como teus.">
               {ownedPreviewStickers.map(({ userSticker, sticker }) => (
                 <button className="collection-home-mini-card" key={userSticker.id} type="button" onClick={() => openStickerCollection(sticker)}>
-                  <img src={getStickerImageSource(sticker)} alt={sticker.name} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
-                  <strong>{sticker.name}</strong>
+                  <img src={getStickerImageSource(sticker)} alt={getStickerDisplayName(sticker)} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
+                  <strong>{getStickerDisplayName(sticker)}</strong>
                   {userSticker.quantity > 1 && <em>{userSticker.quantity}</em>}
                 </button>
               ))}
@@ -2014,8 +2210,8 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           <CollectionHomeCarousel itemCount={missingPreviewStickers.length} emptyText="Sem cromos em falta nas colecoes ativas.">
             {missingPreviewStickers.map((sticker) => (
               <button className="collection-home-mini-card" key={sticker.id} type="button" onClick={() => openMissingStickerCollection(sticker)}>
-                <img src={getStickerImageSource(sticker)} alt={sticker.name} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
-                <strong>{sticker.name}</strong>
+                <img src={getStickerImageSource(sticker)} alt={getStickerDisplayName(sticker)} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
+                <strong>{getStickerDisplayName(sticker)}</strong>
               </button>
             ))}
           </CollectionHomeCarousel>
@@ -2029,8 +2225,8 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           <CollectionHomeCarousel itemCount={repeatedPreviewStickers.length} emptyText="Ainda nao tens repetidos.">
             {repeatedPreviewStickers.map(({ userSticker, sticker }) => (
               <button className="collection-home-mini-card repeated" key={userSticker.id} type="button" onClick={() => openRepeatedStickerCollection(sticker)}>
-                <img src={getStickerImageSource(sticker)} alt={sticker.name} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
-                <strong>{sticker.name}</strong>
+                <img src={getStickerImageSource(sticker)} alt={getStickerDisplayName(sticker)} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
+                <strong>{getStickerDisplayName(sticker)}</strong>
                 <em>{Math.max(0, (userSticker.quantity || 0) - 1)}</em>
               </button>
             ))}
@@ -2260,7 +2456,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
                 {scannedCodes.map((item) => (
                   <li key={item.rawValue}>
                     <span className="code-scan-chip">{item.rawValue}{item.count > 1 ? ` x${item.count}` : ""}</span>
-                    {item.sticker ? <span> — {item.sticker.name}</span> : null}
+                    {item.sticker ? <span> — {getStickerDisplayName(item.sticker)}</span> : null}
                   </li>
                 ))}
               </ul>

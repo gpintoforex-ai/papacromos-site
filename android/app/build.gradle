@@ -7,8 +7,8 @@ android {
         applicationId "com.papacromos.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 202607
-        versionName "2026.07"
+        versionCode 202608
+        versionName "2026.08"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
