@@ -7407,6 +7407,10 @@ textarea {
     text-align: center;
   }
 
+  .app-main {
+    padding: 12px 10px 20px;
+  }
+
   .header-inner {
     padding: 0 12px;
   }
@@ -7465,6 +7469,7 @@ textarea {
 
   .login-card {
     gap: 22px;
+    padding: 24px 18px;
   }
 
   .login-shell {
@@ -7513,6 +7518,43 @@ textarea {
     gap: 8px;
   }
 
+  .sticker-card {
+    border-radius: var(--radius);
+  }
+
+  .sticker-card-body {
+    padding: 8px;
+  }
+
+  .sticker-name {
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .sticker-number {
+    top: 6px;
+    left: 6px;
+    padding: 3px 7px;
+    font-size: 12px;
+  }
+
+  .sticker-status {
+    top: 6px;
+    right: 6px;
+    padding-inline: 6px;
+    font-size: 9px;
+  }
+
+  .sticker-count-badge {
+    top: -10px;
+    right: -8px;
+    min-width: 30px;
+    height: 30px;
+    padding-inline: 7px;
+    border-width: 2px;
+    font-size: 12px;
+  }
+
   .album-team-hero {
     grid-template-columns: auto minmax(0, 1fr);
     gap: 12px;
@@ -7537,13 +7579,60 @@ textarea {
     gap: 8px;
   }
 
+  .collection-header {
+    margin-bottom: 12px;
+  }
+
+  .collection-header h2 {
+    font-size: 20px;
+  }
+
+  .collection-header p {
+    font-size: 13px;
+  }
+
   .collection-toolbar {
     flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .collection-toolbar .btn,
+  .collection-toolbar .search-box {
+    width: 100%;
   }
 
   .collection-home-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .collection-home-hero,
+  .collection-detail-hero {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .collection-home-hero h2 {
+    font-size: 26px;
+  }
+
+  .collection-home-hero p {
+    font-size: 13px;
+  }
+
+  .collection-home-strip {
+    grid-auto-columns: 124px;
+    gap: 9px;
+    padding-inline: 34px;
+  }
+
+  .collection-home-mini-card {
+    padding: 7px;
+  }
+
+  .collection-home-section-title h3 {
+    font-size: 19px;
   }
 
   .collection-detail-main {
@@ -7587,12 +7676,44 @@ textarea {
     text-align: center;
   }
 
+  .collection-quick-stat span:not(.collection-quick-stat-icon),
+  .collection-home-stat span:not(.collection-quick-stat-icon) {
+    font-size: 10px;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
   .collection-home-stat span {
     font-size: 11px;
   }
 
+  .collection-quick-stat strong,
   .collection-home-stat strong {
-    font-size: 22px;
+    font-size: 20px;
+  }
+
+  .collection-onboarding-backdrop {
+    align-items: start;
+    padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
+  }
+
+  .collection-onboarding-modal {
+    max-height: calc(100dvh - 20px);
+    gap: 12px;
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .collection-onboarding-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .collection-onboarding-card {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .collection-onboarding-card img {
+    width: 42px;
   }
 
   .collection-onboarding-actions .btn {
@@ -7706,11 +7827,33 @@ textarea {
   }
 
   .share-actions .btn,
+  .share-friend-actions .btn,
   .trade-card-actions .btn,
   .partner-card-actions .btn,
   .admin-list-actions .btn,
   .account-password-actions .btn {
     width: 100%;
+  }
+
+  .share-panel,
+  .share-friends-page-header,
+  .share-friend-card {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .share-friend-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .share-add-friend-backdrop {
+    padding-inline: 10px;
+  }
+
+  .share-add-friend-modal {
+    max-height: calc(100dvh - 20px);
+    overflow-y: auto;
+    padding: 14px;
   }
 
   .admin-collection-action-grid .btn {
@@ -7752,11 +7895,15 @@ textarea {
   .sticker-grid,
   .collection-cover-grid,
   .album-sticker-grid {
-    grid-template-columns: 1fr;
+    gap: 7px;
   }
 
   .sticker-card-image {
     max-height: 70dvh;
+  }
+
+  .sticker-card-actions {
+    padding: 0 7px 8px;
   }
 
   .album-team-hero {
@@ -7766,5 +7913,34 @@ textarea {
   .album-page-number {
     width: 36px;
     height: 36px;
+  }
+
+  .collection-home-stats,
+  .collection-quick-stats {
+    gap: 6px;
+  }
+
+  .collection-home-stat,
+  .collection-quick-stat {
+    min-height: 64px;
+    padding: 8px 5px;
+  }
+
+  .collection-quick-stat-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .collection-home-strip {
+    grid-auto-columns: 116px;
+    padding-inline: 30px;
+  }
+
+  .collection-cover-body {
+    padding: 9px;
+  }
+
+  .collection-cover-actions {
+    padding: 0 9px 9px;
   }
 }
