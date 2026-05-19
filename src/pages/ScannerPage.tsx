@@ -47,6 +47,7 @@ type CodeOcrCanvasMode = "normal" | "inverted";
 type CodeOcrRegion = readonly [number, number, number, number];
 
 const DATA_PAGE_SIZE = 1000;
+const WORLD_ALBUM_COLLECTION_ID = "b2026000-0000-4000-8000-000000000001";
 
 const abbrevToTeam: Record<string, string> = {
   AFS: "Africa do Sul",
@@ -175,9 +176,21 @@ function getStickerTeamName(stickerName: string) {
   return stickerName.includes(" - ") ? stickerName.split(" - ")[0].trim() : "Cromos";
 }
 
+function getAlbumTeamOrder(sticker: Sticker) {
+  return Math.floor((sticker.number - 1) / 20) + 1;
+}
+
+function getStickerEffectiveTeamName(sticker: Sticker) {
+  if (sticker.collection_id === WORLD_ALBUM_COLLECTION_ID && getAlbumTeamOrder(sticker) === 42) {
+    return "RD do Congo";
+  }
+
+  return getStickerTeamName(sticker.name);
+}
+
 function getStickerFlagCode(sticker: Sticker | null) {
   if (!sticker) return "";
-  return flagCodeByTeamNorm[normalizeAbbrev(getStickerTeamName(sticker.name))] || "";
+  return flagCodeByTeamNorm[normalizeAbbrev(getStickerEffectiveTeamName(sticker))] || "";
 }
 
 function getFlagUrl(flagCode: string) {
@@ -189,6 +202,14 @@ function getAlbumLocalNumber(sticker: Sticker) {
   if (sticker.name.includes("Escudo")) return 1;
   if (sticker.name.includes("Foto de equipa")) return 13;
   return slot;
+}
+
+function getStickerDisplayName(sticker: Sticker) {
+  const teamName = getStickerEffectiveTeamName(sticker);
+  const localNumber = getAlbumLocalNumber(sticker);
+  if (localNumber === 1) return `${teamName} - Escudo`;
+  if (localNumber === 13) return `${teamName} - Foto de equipa`;
+  return sticker.name.startsWith(`${teamName} - `) ? sticker.name : `${teamName} - ${sticker.name.split(" - ").slice(1).join(" - ") || sticker.name}`;
 }
 
 function normalizeAbbrev(text: string) {
@@ -410,14 +431,14 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       if (mappedTeam) {
         const mappedTeamNorm = normalizeAbbrev(mappedTeam);
         const found = collectionStickers.find((sticker) =>
-          normalizeAbbrev(getStickerTeamName(sticker.name)) === mappedTeamNorm &&
+          normalizeAbbrev(getStickerEffectiveTeamName(sticker)) === mappedTeamNorm &&
           getAlbumLocalNumber(sticker) === num
         );
         if (found) return found;
       }
 
       const found = collectionStickers.find((sticker) =>
-        isSimilarAbbrev(abbrev, normalizeAbbrev(getStickerTeamName(sticker.name))) &&
+        isSimilarAbbrev(abbrev, normalizeAbbrev(getStickerEffectiveTeamName(sticker))) &&
         getAlbumLocalNumber(sticker) === num
       );
       if (found) return found;
@@ -972,7 +993,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
                       {getStickerFlagCode(item.sticker) && (
                         <img src={getFlagUrl(getStickerFlagCode(item.sticker))} alt="" loading="lazy" aria-hidden="true" />
                       )}
-                      <span>- {item.sticker.name}</span>
+                      <span>- {getStickerDisplayName(item.sticker)}</span>
                     </span>
                   ) : (
                     <span className="scanner-detected-name">Sem correspondencia</span>
@@ -1102,7 +1123,7 @@ function ScanReviewSection({
                 <div>
                   <span className="scanner-review-title-row">
                     {flagCode && <img src={getFlagUrl(flagCode)} alt="" loading="lazy" aria-hidden="true" />}
-                    <strong>{item.sticker ? item.sticker.name : "Codigo sem correspondencia"}</strong>
+                    <strong>{item.sticker ? getStickerDisplayName(item.sticker) : "Codigo sem correspondencia"}</strong>
                   </span>
                   {item.sticker ? (
                     <small>

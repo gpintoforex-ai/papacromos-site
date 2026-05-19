@@ -49,6 +49,8 @@ type VoiceMarkMode = "have" | "want";
 type HomeResultMode = "collections" | "owned" | "complete";
 type AlbumSlideDirection = "previous" | "next" | null;
 
+const WORLD_ALBUM_COLLECTION_ID = "b2026000-0000-4000-8000-000000000001";
+
 interface ScannedCodeItem {
   rawValue: string;
   sticker: Sticker | null;
@@ -312,15 +314,23 @@ const knownWorldPlayerNames: Record<string, Record<number, string>> = {
 };
 
 function getKnownWorldPlayerName(sticker: Sticker) {
-  const teamName = getStickerTeamName(sticker.name);
+  const teamName = getStickerEffectiveTeamName(sticker);
   const localNumber = getAlbumLocalNumber(sticker);
   return knownWorldPlayerNames[normalizeAbbrev(teamName)]?.[localNumber] || "";
 }
 
 function getStickerDisplayName(sticker: Sticker) {
+  const teamName = getStickerEffectiveTeamName(sticker);
+  const localNumber = getAlbumLocalNumber(sticker);
+  if (localNumber === 1) return `${teamName} - Escudo`;
+  if (localNumber === 13) return `${teamName} - Foto de equipa`;
+
   const knownName = getKnownWorldPlayerName(sticker);
-  if (!knownName) return sticker.name;
-  return `${getStickerTeamName(sticker.name)} - ${knownName}`;
+  if (!knownName) {
+    const detail = sticker.name.includes(" - ") ? sticker.name.split(" - ").slice(1).join(" - ").trim() : sticker.name;
+    return `${teamName} - ${detail}`;
+  }
+  return `${teamName} - ${knownName}`;
 }
 
 function escapeSvgText(value: string) {
@@ -355,7 +365,7 @@ function splitSvgText(value: string, maxLength: number) {
 }
 
 function getStickerFallbackImage(sticker: Sticker) {
-  const teamName = getStickerTeamName(sticker.name);
+  const teamName = getStickerEffectiveTeamName(sticker);
   const localNumber = getAlbumLocalNumber(sticker);
   const teamNorm = normalizeAbbrev(teamName);
   const teamCode = stickerCodeByTeamNorm[teamNorm];
@@ -609,7 +619,6 @@ const groupByTeam: Record<string, string> = {
   Portugal: "Grupo K",
   "RD do Congo": "Grupo K",
   "Congo DR": "Grupo K",
-  Jamaica: "Grupo K",
   Uzbequistão: "Grupo K",
   Colômbia: "Grupo K",
   Colombia: "Grupo K",
@@ -623,6 +632,18 @@ const groupByTeam: Record<string, string> = {
 
 function getStickerTeamName(stickerName: string) {
   return stickerName.includes(" - ") ? stickerName.split(" - ")[0].trim() : "Cromos";
+}
+
+function getAlbumTeamOrder(sticker: Sticker) {
+  return Math.floor((sticker.number - 1) / 20) + 1;
+}
+
+function getStickerEffectiveTeamName(sticker: Sticker) {
+  if (sticker.collection_id === WORLD_ALBUM_COLLECTION_ID && getAlbumTeamOrder(sticker) === 42) {
+    return "RD do Congo";
+  }
+
+  return getStickerTeamName(sticker.name);
 }
 
 function getAlbumLocalNumber(sticker: Sticker) {
@@ -734,7 +755,7 @@ function isSimilarAbbrev(abbrev: string, teamNameNorm: string) {
 function buildAlbumTeamPages(stickers: Sticker[]): AlbumTeamPage[] {
   const teams = new Map<string, Sticker[]>();
   stickers.forEach((sticker) => {
-    const teamName = getStickerTeamName(sticker.name);
+    const teamName = getStickerEffectiveTeamName(sticker);
     teams.set(teamName, [...(teams.get(teamName) || []), sticker]);
   });
 
@@ -1259,7 +1280,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     const collectionStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
     if (isWorldAlbum && selectedAlbumTeamName && number >= 1 && number <= 20) {
       const teamSticker = collectionStickers.find(
-        (sticker) => getStickerTeamName(sticker.name) === selectedAlbumTeamName && getAlbumLocalNumber(sticker) === number
+        (sticker) => getStickerEffectiveTeamName(sticker) === selectedAlbumTeamName && getAlbumLocalNumber(sticker) === number
       );
       if (teamSticker) return teamSticker;
     }
@@ -1380,12 +1401,12 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           let found: Sticker | undefined;
           const mappedTeam = abbrevToTeam[abbrev];
           if (mappedTeam) {
-            found = collectionStickers.find((st) => normalizeAbbrev(getStickerTeamName(st.name)) === normalizeAbbrev(mappedTeam) && getAlbumLocalNumber(st) === num);
+            found = collectionStickers.find((st) => normalizeAbbrev(getStickerEffectiveTeamName(st)) === normalizeAbbrev(mappedTeam) && getAlbumLocalNumber(st) === num);
           }
 
           if (!found) {
             // try to find sticker by matching start/include/fuzzy of normalized team name
-            found = collectionStickers.find((st) => isSimilarAbbrev(abbrev, normalizeAbbrev(getStickerTeamName(st.name))) && getAlbumLocalNumber(st) === num);
+            found = collectionStickers.find((st) => isSimilarAbbrev(abbrev, normalizeAbbrev(getStickerEffectiveTeamName(st))) && getAlbumLocalNumber(st) === num);
           }
 
           if (found) {
@@ -1519,7 +1540,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         setFilter("all");
         setSelectedStickerId(matched[0].sticker.id);
         if (isWorldAlbum) {
-          setSelectedAlbumTeamName(getStickerTeamName(matched[0].sticker.name));
+          setSelectedAlbumTeamName(getStickerEffectiveTeamName(matched[0].sticker));
         }
       }
 
@@ -1544,11 +1565,11 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       const num = Number.parseInt(abbrevMatch[2], 10);
       const mappedTeam = abbrevToTeam[abbrev];
       if (mappedTeam) {
-        const found = collectionStickers.find((st) => normalizeAbbrev(getStickerTeamName(st.name)) === normalizeAbbrev(mappedTeam) && getAlbumLocalNumber(st) === num);
+        const found = collectionStickers.find((st) => normalizeAbbrev(getStickerEffectiveTeamName(st)) === normalizeAbbrev(mappedTeam) && getAlbumLocalNumber(st) === num);
         if (found) return found;
       }
 
-      const found = collectionStickers.find((st) => isSimilarAbbrev(abbrev, normalizeAbbrev(getStickerTeamName(st.name))) && getAlbumLocalNumber(st) === num);
+      const found = collectionStickers.find((st) => isSimilarAbbrev(abbrev, normalizeAbbrev(getStickerEffectiveTeamName(st))) && getAlbumLocalNumber(st) === num);
       if (found) return found;
     }
 
@@ -2038,7 +2059,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     setSearch("");
     setFilter("want");
     setSelectedStickerId(sticker.id);
-    setSelectedAlbumTeamName(isStickerWorldAlbum ? getStickerTeamName(sticker.name) : null);
+    setSelectedAlbumTeamName(isStickerWorldAlbum ? getStickerEffectiveTeamName(sticker) : null);
   };
 
   const openRepeatedStickerCollection = (sticker: Sticker) => {
@@ -2049,7 +2070,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     setSearch("");
     setFilter("repeated");
     setSelectedStickerId(sticker.id);
-    setSelectedAlbumTeamName(isStickerWorldAlbum ? getStickerTeamName(sticker.name) : null);
+    setSelectedAlbumTeamName(isStickerWorldAlbum ? getStickerEffectiveTeamName(sticker) : null);
   };
 
   const renderSticker = (sticker: Sticker, compact = false) => {
