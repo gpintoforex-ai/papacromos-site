@@ -389,8 +389,15 @@ function getStickerFallbackImage(sticker: Sticker) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+function getStickerPreviewImageUrl(imageUrl: string) {
+  const match = imageUrl.match(/^\/stickers\/([^/]+)\/([^/.]+)\.(png|jpe?g|webp)$/i);
+  if (!match) return "";
+  return `/sticker-previews/${match[1]}/${match[2]}.jpg`;
+}
+
 function getStickerImageSource(sticker: Sticker) {
-  return sticker.image_url || getStickerFallbackImage(sticker);
+  if (!sticker.image_url) return getStickerFallbackImage(sticker);
+  return getStickerPreviewImageUrl(sticker.image_url) || sticker.image_url;
 }
 
 const teamFlags: Record<string, string> = {
@@ -2054,7 +2061,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         key={sticker.id}
         number={isWorldAlbum ? getAlbumLocalNumber(sticker) : sticker.number}
         name={getStickerDisplayName(sticker)}
-        imageUrl={sticker.image_url}
+        imageUrl={getStickerImageSource(sticker)}
         fallbackImageUrl={getStickerFallbackImage(sticker)}
         rarity={sticker.rarity}
         status={us ? "have" : "want"}
