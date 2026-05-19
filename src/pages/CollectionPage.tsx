@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { getAvatarColor, getAvatarInitial } from "../lib/avatar";
@@ -66,6 +66,136 @@ interface AlbumTeamPage {
 
 const collectionFallbackImage =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23f3f4f6'/%3E%3Crect x='92' y='70' width='216' height='260' rx='18' fill='%23ffffff' stroke='%23d1d5db' stroke-width='10'/%3E%3Cpath d='M132 132h136v24H132zm0 58h136v24H132zm0 58h92v24h-92z' fill='%239ca3af'/%3E%3C/svg%3E";
+
+function applyFallbackImage(event: SyntheticEvent<HTMLImageElement>, sticker?: Sticker) {
+  event.currentTarget.src = sticker ? getStickerFallbackImage(sticker) : collectionFallbackImage;
+  event.currentTarget.classList.add("sticker-fallback-logo");
+}
+
+const stickerCodeByTeamNorm: Record<string, string> = {
+  MEXICO: "MEX",
+  AFRICADOSUL: "RSA",
+  REPUBLICADACOREIA: "KOR",
+  COREIADOSUL: "KOR",
+  TCHEQUIA: "CZE",
+  CANADA: "CAN",
+  BOSNIAEHERZEGOVINA: "BIH",
+  CATAR: "QAT",
+  QATAR: "QAT",
+  SUICA: "SUI",
+  BRASIL: "BRA",
+  MARROCOS: "MAR",
+  HAITI: "HAI",
+  ESCOCIA: "SCO",
+  ESTADOSUNIDOS: "USA",
+  AUSTRALIA: "AUS",
+  PARAGUAI: "PAR",
+  TURQUIA: "TUR",
+  ALEMANHA: "GER",
+  CURACAO: "CUW",
+  COSTADOMARFIM: "CIV",
+  EQUADOR: "ECU",
+  HOLANDA: "NED",
+  PAISESBAIXOS: "NED",
+  JAPAO: "JPN",
+  SUECIA: "SWE",
+  TUNISIA: "TUN",
+  BELGICA: "BEL",
+  EGITO: "EGY",
+  RIDOIRA: "IRN",
+  NOVAZELANDIA: "NZL",
+  ESPANHA: "ESP",
+  CABOVERDE: "CPV",
+  ARABIASAUDITA: "KSA",
+  URUGUAI: "URU",
+  FRANCA: "FRA",
+  IRAQUE: "IRQ",
+  NORUEGA: "NOR",
+  SENEGAL: "SEN",
+  ARGENTINA: "ARG",
+  ARGELIA: "ALG",
+  AUSTRIA: "AUT",
+  JORDANIA: "JOR",
+  PORTUGAL: "POR",
+  JAMAICA: "JAM",
+  UZBEQUISTAO: "UZB",
+  COLOMBIA: "COL",
+  INGLATERRA: "ENG",
+  CROACIA: "CRO",
+  GANA: "GHA",
+  PANAMA: "PAN",
+  RDDOCONGO: "COD",
+  CONGODR: "COD",
+};
+
+function escapeSvgText(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function splitSvgText(value: string, maxLength: number) {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+
+  words.forEach((word) => {
+    const current = lines[lines.length - 1] || "";
+    if (!current) {
+      lines.push(word);
+      return;
+    }
+
+    if (`${current} ${word}`.length <= maxLength) {
+      lines[lines.length - 1] = `${current} ${word}`;
+    } else if (lines.length < 2) {
+      lines.push(word);
+    }
+  });
+
+  if (lines.length === 0) return [value.slice(0, maxLength)];
+  if (lines.length > 2) lines.length = 2;
+  return lines.map((line) => (line.length > maxLength + 3 ? `${line.slice(0, maxLength)}...` : line));
+}
+
+function getStickerFallbackImage(sticker: Sticker) {
+  const teamName = getStickerTeamName(sticker.name);
+  const localNumber = getAlbumLocalNumber(sticker);
+  const teamNorm = normalizeAbbrev(teamName);
+  const teamCode = stickerCodeByTeamNorm[teamNorm];
+  const codeLabel = teamCode ? `${teamCode} ${localNumber}` : `#${String(sticker.number).padStart(3, "0")}`;
+  const detail = sticker.name.includes(" - ") ? sticker.name.split(" - ").slice(1).join(" - ").trim() : sticker.name;
+  const titleLines = splitSvgText(teamName === "Cromos" ? sticker.name : teamName, 17);
+  const detailLines = splitSvgText(detail || "Cromo", 18);
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="360" height="480" viewBox="0 0 360 480">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f8fafc"/>
+          <stop offset="1" stop-color="#e5e7eb"/>
+        </linearGradient>
+      </defs>
+      <rect width="360" height="480" fill="#f3f4f6"/>
+      <rect x="28" y="24" width="304" height="432" rx="24" fill="url(#bg)" stroke="#d1d5db" stroke-width="8"/>
+      <rect x="52" y="52" width="256" height="58" rx="18" fill="#111827"/>
+      <text x="180" y="91" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="900" fill="#ffffff">${escapeSvgText(codeLabel)}</text>
+      <rect x="82" y="144" width="196" height="180" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="8"/>
+      <path d="M132 216h96v22h-96zm0 52h96v22h-96z" fill="#94a3b8"/>
+      <circle cx="180" cy="180" r="24" fill="#94a3b8"/>
+      <path d="M138 302c9-34 26-50 42-50s33 16 42 50" fill="#94a3b8"/>
+      <text x="180" y="366" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="900" fill="#0f172a">${escapeSvgText(titleLines[0] || "")}</text>
+      ${titleLines[1] ? `<text x="180" y="398" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="900" fill="#0f172a">${escapeSvgText(titleLines[1])}</text>` : ""}
+      <text x="180" y="${titleLines[1] ? 428 : 408}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#475569">${escapeSvgText(detailLines[0] || "Sem imagem")}</text>
+    </svg>
+  `;
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function getStickerImageSource(sticker: Sticker) {
+  return sticker.image_url || getStickerFallbackImage(sticker);
+}
 
 const teamFlags: Record<string, string> = {
   Portugal: "🇵🇹",
@@ -308,19 +438,53 @@ function normalizeAbbrev(text: string) {
 }
 
 const abbrevToTeam: Record<string, string> = {
+  AFS: "Africa do Sul",
   ALG: "Argélia",
+  AUS: "Australia",
+  AUT: "Austria",
+  BEL: "Belgica",
+  BIH: "Bosnia e Herzegovina",
   POR: "Portugal",
   BRA: "Brasil",
   BRAZ: "Brasil",
+  CAN: "Canada",
   CPV: "Cabo Verde",
   SWE: "Suécia",
   SUE: "Suécia",
   SUI: "Suica",
   CHE: "Suica",
+  CIV: "Costa do Marfim",
+  COL: "Colombia",
+  CRO: "Croacia",
+  CUW: "Curacao",
+  CZE: "Tchequia",
   MEX: "Mexico",
   ARG: "Argentina",
   ENG: "Inglaterra",
-  IRN: "Irã",
+  EGY: "Egito",
+  ESP: "Espanha",
+  HAI: "Haiti",
+  HOL: "Holanda",
+  HRV: "Croacia",
+  IRN: "RI do Ira",
+  IRQ: "Iraque",
+  JAM: "Jamaica",
+  JOR: "Jordania",
+  JPN: "Japao",
+  KOR: "Republica da Coreia",
+  KSA: "Arabia Saudita",
+  MAR: "Marrocos",
+  NED: "Holanda",
+  NLD: "Holanda",
+  NOR: "Noruega",
+  PAN: "Panama",
+  PAR: "Paraguai",
+  QAT: "Catar",
+  RSA: "Africa do Sul",
+  SAU: "Arabia Saudita",
+  TUR: "Turquia",
+  URU: "Uruguai",
+  ZAF: "Africa do Sul",
   FRA: "Franca",
   GER: "Alemanha",
   DEU: "Alemanha",
@@ -1695,6 +1859,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         number={isWorldAlbum ? getAlbumLocalNumber(sticker) : sticker.number}
         name={sticker.name}
         imageUrl={sticker.image_url}
+        fallbackImageUrl={getStickerFallbackImage(sticker)}
         rarity={sticker.rarity}
         status={us ? "have" : "want"}
         quantity={us?.quantity}
@@ -1794,7 +1959,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
             <CollectionHomeCarousel itemCount={ownedPreviewStickers.length} emptyText="Ainda nao marcaste cromos como teus.">
               {ownedPreviewStickers.map(({ userSticker, sticker }) => (
                 <button className="collection-home-mini-card" key={userSticker.id} type="button" onClick={() => openStickerCollection(sticker)}>
-                  <img src={sticker.image_url || collectionFallbackImage} alt={sticker.name} loading="lazy" />
+                  <img src={getStickerImageSource(sticker)} alt={sticker.name} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
                   <strong>{sticker.name}</strong>
                   {userSticker.quantity > 1 && <em>{userSticker.quantity}</em>}
                 </button>
@@ -1849,7 +2014,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           <CollectionHomeCarousel itemCount={missingPreviewStickers.length} emptyText="Sem cromos em falta nas colecoes ativas.">
             {missingPreviewStickers.map((sticker) => (
               <button className="collection-home-mini-card" key={sticker.id} type="button" onClick={() => openMissingStickerCollection(sticker)}>
-                <img src={sticker.image_url || collectionFallbackImage} alt={sticker.name} loading="lazy" />
+                <img src={getStickerImageSource(sticker)} alt={sticker.name} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
                 <strong>{sticker.name}</strong>
               </button>
             ))}
@@ -1864,7 +2029,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           <CollectionHomeCarousel itemCount={repeatedPreviewStickers.length} emptyText="Ainda nao tens repetidos.">
             {repeatedPreviewStickers.map(({ userSticker, sticker }) => (
               <button className="collection-home-mini-card repeated" key={userSticker.id} type="button" onClick={() => openRepeatedStickerCollection(sticker)}>
-                <img src={sticker.image_url || collectionFallbackImage} alt={sticker.name} loading="lazy" />
+                <img src={getStickerImageSource(sticker)} alt={sticker.name} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
                 <strong>{sticker.name}</strong>
                 <em>{Math.max(0, (userSticker.quantity || 0) - 1)}</em>
               </button>

@@ -5,6 +5,7 @@ interface StickerCardProps {
   number: number;
   name: string;
   imageUrl: string;
+  fallbackImageUrl?: string;
   rarity: string;
   status?: "have" | "want" | "none";
   quantity?: number;
@@ -35,6 +36,7 @@ export default function StickerCard({
   number,
   name,
   imageUrl,
+  fallbackImageUrl,
   rarity,
   status,
   quantity,
@@ -47,7 +49,8 @@ export default function StickerCard({
 }: StickerCardProps) {
   const r = rarityConfig[rarity] || rarityConfig.common;
   const isHave = status === "have";
-  const displayImage = imageUrl || fallbackImage;
+  const fallbackDisplayImage = fallbackImageUrl || fallbackImage;
+  const displayImage = imageUrl || fallbackDisplayImage;
   const isFallbackImage = !imageUrl;
   const isTeamPhoto = name.includes("Foto de equipa");
 
@@ -72,7 +75,7 @@ export default function StickerCard({
           alt={name}
           loading="lazy"
           onError={(event) => {
-            event.currentTarget.src = fallbackImage;
+            event.currentTarget.src = fallbackDisplayImage;
             event.currentTarget.classList.add("sticker-fallback-logo");
           }}
         />
