@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, Repeat2, ShieldCheck, Users } from "lucide-react";
+import { BookOpen, Repeat2, ShieldCheck, UserRound, Users } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import LegalFooter from "../components/LegalFooter";
 import { supabase } from "../lib/supabase";
@@ -181,10 +181,17 @@ export default function LoginPage() {
     }
   };
 
+  const scrollToLoginForm = () => {
+    document.querySelector(".login-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <div className="login-page">
       <div className="login-shell">
         <section className="login-visual" aria-label="Papa Cromos">
+          <button className="login-scroll-hint" type="button" onClick={scrollToLoginForm} aria-label="Ir para entrar ou registar">
+            <UserRound size={20} />
+          </button>
           <img className="login-visual-image" src="/login-hero-phone-screen.png" alt="" aria-hidden="true" />
           <div className="login-visual-overlay">
             <img className="login-logo" src="/logo-transparent.png" alt="Papa Cromos" />

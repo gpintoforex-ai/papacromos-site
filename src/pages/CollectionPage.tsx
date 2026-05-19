@@ -48,6 +48,7 @@ type FilterMode = "all" | "have" | "repeated" | "want" | "missing";
 type VoiceMarkMode = "have" | "want";
 type HomeResultMode = "collections" | "owned" | "complete";
 type AlbumSlideDirection = "previous" | "next" | null;
+type CodeOcrCanvasMode = "normal" | "inverted";
 
 const WORLD_ALBUM_COLLECTION_ID = "b2026000-0000-4000-8000-000000000001";
 
@@ -1343,6 +1344,8 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       .replace(/\bB8A\b/g, "BRA")
       .replace(/\b8RA\b/g, "BRA")
       .replace(/\bC[0O]D\b/g, "COD")
+      .replace(/\bC[O0][D0O]\b/g, "COD")
+      .replace(/\bC0[DO]\b/g, "COD")
       .replace(/\bC[O0]V\b/g, "CPV")
       .replace(/\bCPY\b/g, "CPV")
       .replace(/\bN[2Z]L\b/g, "NZL")
@@ -1350,13 +1353,20 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       .replace(/\b5EN\b/g, "SEN")
       .replace(/\b5CO\b/g, "SCO")
       .replace(/\bSC0\b/g, "SCO")
+      .replace(/\b5C[O0]\b/g, "SCO")
+      .replace(/\bSC[O0Q]\b/g, "SCO")
       .replace(/\bEC[O0]\b/g, "ECU")
       .replace(/\bE[CO]U\b/g, "ECU")
       .replace(/\bU[2Z]8\b/g, "UZB")
       .replace(/\bUZ8\b/g, "UZB")
       .replace(/\bT[UO]M\b/g, "TUN")
+      .replace(/\bT[UO][NM]\b/g, "TUN")
+      .replace(/\bT[UV][NM]\b/g, "TUN")
+      .replace(/\bT[JY]N\b/g, "TUN")
       .replace(/\b1RN\b/g, "IRN")
+      .replace(/\b[1I]R[NM]\b/g, "IRN")
       .replace(/\bIR[NM]\b/g, "IRN")
+      .replace(/\bIR[HNM]\b/g, "IRN")
       .replace(/\bA1G\b/g, "ALG")
       .replace(/\bAL6\b/g, "ALG")
       .replace(/\bEN6\b/g, "ENG")
@@ -1367,7 +1377,12 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   };
 
   const getStickerCodesFromOcrText = (text: string) => {
-    const normalizedText = normalizeOcrCodeText(text).replace(/\b([A-Z]{3})([0-9]{1,2})\b/g, "$1 $2");
+    const normalizedText = normalizeOcrCodeText(text)
+      .replace(/\b([A-Z]{3})\s*[IL|]\s*[B8]\b/g, "$1 18")
+      .replace(/\b([A-Z]{3})\s*[IL|][ZT]\b/g, "$1 17")
+      .replace(/\b([A-Z]{3})\s*[IL|]\s*([0-9])\b/g, "$1 1$2")
+      .replace(/\b([A-Z]{3})\s*([0-9])\s*[B8]\b/g, "$1 $28")
+      .replace(/\b([A-Z]{3})([0-9]{1,2})\b/g, "$1 $2");
     const codes: string[] = [];
     const re = /\b([A-Z0-9]{2,4})\s*[-_/]?\s*([0-9]{1,2})\b/g;
 
@@ -1667,26 +1682,28 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     sourceY: number,
     sourceWidth: number,
     sourceHeight: number,
-    targetWidth = 1100,
+    targetWidth = 1600,
+    mode: CodeOcrCanvasMode = "normal",
   ) => {
-    const scale = Math.min(1, targetWidth / sourceWidth);
+    const scale = Math.min(4, targetWidth / sourceWidth);
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(sourceWidth * scale));
     canvas.height = Math.max(1, Math.round(sourceHeight * scale));
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) return null;
 
-    context.imageSmoothingEnabled = true;
+    context.imageSmoothingEnabled = scale < 1;
     context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
 
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     for (let index = 0; index < data.length; index += 4) {
       const gray = 0.299 * data[index] + 0.587 * data[index + 1] + 0.114 * data[index + 2];
-      const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.9 + 128));
-      data[index] = contrasted;
-      data[index + 1] = contrasted;
-      data[index + 2] = contrasted;
+      const contrasted = Math.max(0, Math.min(255, (gray - 128) * 2.35 + 128));
+      const value = mode === "inverted" ? (contrasted > 150 ? 0 : 255) : contrasted;
+      data[index] = value;
+      data[index + 1] = value;
+      data[index + 2] = value;
     }
     context.putImageData(imageData, 0, 0);
     return canvas;
@@ -1697,15 +1714,23 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     const height = video.videoHeight;
     const regions = [
       [0, 0, width, height],
+      [0, 0, width, Math.round(height * 0.36)],
       [0, 0, width, Math.round(height * 0.48)],
+      [Math.round(width * 0.34), 0, Math.round(width * 0.64), Math.round(height * 0.34)],
       [Math.round(width * 0.48), 0, Math.round(width * 0.52), Math.round(height * 0.52)],
+      [Math.round(width * 0.38), 0, Math.round(width * 0.62), Math.round(height * 0.46)],
       [0, 0, Math.round(width * 0.55), Math.round(height * 0.52)],
+      [Math.round(width * 0.18), Math.round(height * 0.04), Math.round(width * 0.78), Math.round(height * 0.36)],
+      [Math.round(width * 0.28), Math.round(height * 0.08), Math.round(width * 0.68), Math.round(height * 0.34)],
       [Math.round(width * 0.15), Math.round(height * 0.12), Math.round(width * 0.7), Math.round(height * 0.72)],
     ] as const;
+    const modes: CodeOcrCanvasMode[] = ["inverted", "normal"];
 
-    return regions
-      .map(([sourceX, sourceY, sourceWidth, sourceHeight]) =>
-        createCodeOcrCanvas(video, sourceX, sourceY, sourceWidth, sourceHeight)
+    return modes
+      .flatMap((mode) =>
+        regions.map(([sourceX, sourceY, sourceWidth, sourceHeight]) =>
+          createCodeOcrCanvas(video, sourceX, sourceY, sourceWidth, sourceHeight, 1600, mode)
+        )
       )
       .filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas));
   };
@@ -1728,9 +1753,13 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         const { createWorker, OEM } = await import("tesseract.js");
         codeOcrWorkerRef.current = await createWorker("eng", OEM.LSTM_ONLY, {}, {
           tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_/",
+          tessedit_pageseg_mode: "6",
         } as any);
       }
       for (const canvas of canvases) {
+        if (typeof codeOcrWorkerRef.current.setParameters === "function") {
+          await codeOcrWorkerRef.current.setParameters({ tessedit_pageseg_mode: "6" } as any);
+        }
         const result = await codeOcrWorkerRef.current.recognize(canvas);
         const codes = getStickerCodesFromOcrText(result.data.text);
         codes.forEach(addDetectedCode);

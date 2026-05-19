@@ -258,6 +258,8 @@ function normalizeOcrCodeText(text: string) {
     .replace(/\bB8A\b/g, "BRA")
     .replace(/\b8RA\b/g, "BRA")
     .replace(/\bC[0O]D\b/g, "COD")
+    .replace(/\bC[O0][D0O]\b/g, "COD")
+    .replace(/\bC0[DO]\b/g, "COD")
     .replace(/\bC[O0]V\b/g, "CPV")
     .replace(/\bCPY\b/g, "CPV")
     .replace(/\bN[2Z]L\b/g, "NZL")
@@ -265,13 +267,20 @@ function normalizeOcrCodeText(text: string) {
     .replace(/\b5EN\b/g, "SEN")
     .replace(/\b5CO\b/g, "SCO")
     .replace(/\bSC0\b/g, "SCO")
+    .replace(/\b5C[O0]\b/g, "SCO")
+    .replace(/\bSC[O0Q]\b/g, "SCO")
     .replace(/\bEC[O0]\b/g, "ECU")
     .replace(/\bE[CO]U\b/g, "ECU")
     .replace(/\bU[2Z]8\b/g, "UZB")
     .replace(/\bUZ8\b/g, "UZB")
     .replace(/\bT[UO]M\b/g, "TUN")
+    .replace(/\bT[UO][NM]\b/g, "TUN")
+    .replace(/\bT[UV][NM]\b/g, "TUN")
+    .replace(/\bT[JY]N\b/g, "TUN")
     .replace(/\b1RN\b/g, "IRN")
+    .replace(/\b[1I]R[NM]\b/g, "IRN")
     .replace(/\bIR[NM]\b/g, "IRN")
+    .replace(/\bIR[HNM]\b/g, "IRN")
     .replace(/\bA1G\b/g, "ALG")
     .replace(/\bAL6\b/g, "ALG")
     .replace(/\bEN6\b/g, "ENG")
@@ -283,10 +292,10 @@ function normalizeOcrCodeText(text: string) {
 
 function getStickerCodeCandidatesFromOcrText(text: string) {
   const normalizedText = normalizeOcrCodeText(text)
-    .replace(/\b([A-Z]{3})\s*[IL]B\b/g, "$1 18")
-    .replace(/\b([A-Z]{3})\s*[IL][ZT]\b/g, "$1 17")
-    .replace(/\b([A-Z]{3})\s*[IL]([0-9])\b/g, "$1 1$2")
-    .replace(/\b([A-Z]{3})\s*([0-9])B\b/g, "$1 $28")
+    .replace(/\b([A-Z]{3})\s*[IL|]\s*[B8]\b/g, "$1 18")
+    .replace(/\b([A-Z]{3})\s*[IL|][ZT]\b/g, "$1 17")
+    .replace(/\b([A-Z]{3})\s*[IL|]\s*([0-9])\b/g, "$1 1$2")
+    .replace(/\b([A-Z]{3})\s*([0-9])\s*[B8]\b/g, "$1 $28")
     .replace(/\b([A-Z]{3})([0-9]{1,2})\b/g, "$1 $2");
   const candidates: StickerCodeCandidate[] = [];
   const re = /\b([A-Z0-9]{2,4})\s*[-_/]?\s*([0-9]{1,2})\b/g;
@@ -385,6 +394,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
   const codeOcrWorkerRef = useRef<any | null>(null);
   const codeOcrWorkerPromiseRef = useRef<Promise<any> | null>(null);
   const codeLastSeenAtRef = useRef<Map<string, number>>(new Map());
+  const autoStartedScannerRef = useRef(false);
 
   const collectionStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
 
@@ -579,7 +589,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       const green = data[offset + 1];
       const blue = data[offset + 2];
       const gray = 0.299 * red + 0.587 * green + 0.114 * blue;
-      dark[index] = gray < 148 ? 1 : 0;
+      dark[index] = gray < 168 ? 1 : 0;
     }
 
     const regions: CodeOcrRegion[] = [];
@@ -622,18 +632,18 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       const density = pixels / Math.max(1, boxWidth * boxHeight);
       const looksLikeCodePill =
         boxWidth >= 26 &&
-        boxWidth <= width * 0.38 &&
+        boxWidth <= width * 0.46 &&
         boxHeight >= 8 &&
-        boxHeight <= height * 0.13 &&
+        boxHeight <= height * 0.17 &&
         ratio >= 1.8 &&
-        ratio <= 8.5 &&
-        density >= 0.28 &&
-        minY <= height * 0.72;
+        ratio <= 10.5 &&
+        density >= 0.22 &&
+        minY <= height * 0.82;
 
       if (!looksLikeCodePill) continue;
 
-      const padX = Math.round(boxWidth * 0.08);
-      const padY = Math.round(boxHeight * 0.12);
+      const padX = Math.round(boxWidth * 0.12);
+      const padY = Math.round(boxHeight * 0.24);
       const sourceX = Math.max(0, Math.round((minX - padX) / scale));
       const sourceY = Math.max(0, Math.round((minY - padY) / scale));
       const sourceRight = Math.min(source.width, Math.round((maxX + padX) / scale));
@@ -761,6 +771,12 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       setError(err.message || "Erro ao iniciar leitura de codigos.");
     }
   };
+
+  useEffect(() => {
+    if (autoStartedScannerRef.current || loading || !selectedCollectionId || codeScanning) return;
+    autoStartedScannerRef.current = true;
+    void startCodeScanner();
+  }, [loading, selectedCollectionId, codeScanning]);
 
   const captureCodeFrame = async () => {
     if (codeOcrBusyRef.current) return;

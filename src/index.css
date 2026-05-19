@@ -1229,6 +1229,38 @@ textarea {
   background: #0f172a;
 }
 
+.login-scroll-hint {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  z-index: 2;
+  display: none;
+  width: 50px;
+  height: 50px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  background: var(--primary-600);
+  color: white;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.32), 0 0 0 5px rgba(13, 148, 136, 0.22);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: transform var(--transition), background var(--transition), box-shadow var(--transition);
+}
+
+.login-scroll-hint:hover {
+  background: var(--primary-700);
+  transform: translateY(-1px);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.36), 0 0 0 6px rgba(13, 148, 136, 0.28);
+}
+
+.login-scroll-hint svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2.6;
+}
+
 .login-visual-image {
   width: 100%;
   height: 100%;
@@ -6069,6 +6101,16 @@ textarea {
 
 .share-main-friends-btn {
   min-width: 132px;
+  border-color: var(--primary-600);
+  background: var(--primary-600);
+  color: white;
+  font-weight: 800;
+}
+
+.share-main-friends-btn:hover:not(:disabled) {
+  border-color: var(--primary-700);
+  background: var(--primary-700);
+  color: white;
 }
 
 .share-shared-title-row {
@@ -7478,6 +7520,10 @@ textarea {
 
   .login-visual {
     min-height: 230px;
+  }
+
+  .login-scroll-hint {
+    display: inline-flex;
   }
 
   .login-visual-overlay {
