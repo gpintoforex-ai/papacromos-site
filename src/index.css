@@ -3302,8 +3302,8 @@ textarea {
 }
 
 .scanner-review-quantity input {
-  width: 58px;
-  min-height: 36px;
+  width: 64px;
+  min-height: 42px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
@@ -3312,6 +3312,9 @@ textarea {
   font-size: 15px;
   font-weight: 900;
   text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+  touch-action: manipulation;
 }
 
 .scanner-review-actions {
@@ -3579,6 +3582,7 @@ textarea {
 }
 
 .scanner-live-capture,
+.scanner-live-advanced,
 .scanner-live-add,
 .scanner-live-manual {
   min-height: 54px;
@@ -3603,6 +3607,13 @@ textarea {
   box-shadow: var(--shadow-sm);
 }
 
+.scanner-live-advanced {
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  background: var(--rarity-uncommon-bg);
+  color: #1d4ed8;
+  box-shadow: var(--shadow-sm);
+}
+
 .scanner-live-add {
   background: var(--primary-600);
   color: #ffffff;
@@ -3617,6 +3628,7 @@ textarea {
 }
 
 .scanner-live-capture:disabled,
+.scanner-live-advanced:disabled,
 .scanner-live-add:disabled,
 .scanner-live-manual:disabled {
   cursor: not-allowed;
@@ -3715,6 +3727,7 @@ textarea {
   }
 
   .scanner-live-capture,
+  .scanner-live-advanced,
   .scanner-live-add,
   .scanner-live-manual {
     min-height: 52px;

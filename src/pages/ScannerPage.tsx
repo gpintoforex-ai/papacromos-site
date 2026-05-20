@@ -51,8 +51,16 @@ interface CodeOcrCanvasInput {
   pageSegMode: "6" | "7" | "11";
 }
 
+interface OcrSpaceResponse {
+  IsErroredOnProcessing?: boolean;
+  ErrorMessage?: string | string[];
+  ParsedResults?: Array<{ ParsedText?: string }>;
+}
+
 const DATA_PAGE_SIZE = 1000;
 const WORLD_ALBUM_COLLECTION_ID = "b2026000-0000-4000-8000-000000000001";
+const OCR_SPACE_ENDPOINT = "https://api.ocr.space/parse/image";
+const OCR_SPACE_API_KEY = (import.meta.env.VITE_OCR_SPACE_API_KEY || "helloworld").trim();
 
 const abbrevToTeam: Record<string, string> = {
   AFS: "Africa do Sul",
@@ -484,6 +492,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   const [codeText, setCodeText] = useState("");
   const [codeScanning, setCodeScanning] = useState(false);
   const [codeReading, setCodeReading] = useState(false);
+  const [advancedReading, setAdvancedReading] = useState(false);
   const [codeResult, setCodeResult] = useState<string | null>(null);
   const [scannedCodes, setScannedCodes] = useState<ScannedCodeItem[]>([]);
   const [scanConfirming, setScanConfirming] = useState(false);
@@ -859,6 +868,66 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     return codes.length;
   };
 
+  const captureCameraCanvas = () => {
+    const video = codeVideoRef.current;
+    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) {
+      throw new Error("Nao consegui capturar a imagem da camara.");
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) throw new Error("Nao consegui preparar a imagem capturada.");
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  };
+
+  const createExternalOcrImage = (source: HTMLCanvasElement) => {
+    const targetWidth = Math.min(1400, source.width);
+    const scale = targetWidth / source.width;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(source.width * scale));
+    canvas.height = Math.max(1, Math.round(source.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return source.toDataURL("image/jpeg", 0.82);
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.imageSmoothingEnabled = true;
+    context.drawImage(source, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.82);
+  };
+
+  const recognizeWithExternalOcr = async (source: HTMLCanvasElement) => {
+    const formData = new FormData();
+    formData.append("apikey", OCR_SPACE_API_KEY);
+    formData.append("base64Image", createExternalOcrImage(source));
+    formData.append("language", "eng");
+    formData.append("scale", "true");
+    formData.append("isOverlayRequired", "false");
+    formData.append("OCREngine", "2");
+
+    const response = await fetch(OCR_SPACE_ENDPOINT, {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) throw new Error("OCR avancado indisponivel neste momento.");
+
+    const payload = await response.json() as OcrSpaceResponse;
+    if (payload.IsErroredOnProcessing) {
+      const message = Array.isArray(payload.ErrorMessage) ? payload.ErrorMessage.join(" ") : payload.ErrorMessage;
+      throw new Error(message || "OCR avancado nao conseguiu processar a imagem.");
+    }
+
+    const text = (payload.ParsedResults || [])
+      .map((result) => result.ParsedText || "")
+      .join("\n");
+    const codes = getStickerCodesFromOcrText(text);
+    codes.forEach(addDetectedCode);
+    return codes.length;
+  };
+
   const startCodeScanner = async () => {
     setError(null);
     setCodeResult(null);
@@ -910,22 +979,11 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     if (options.showError !== false) setError(null);
     setCodeResult(null);
     if (options.audible) playScannerBeep();
-    const video = codeVideoRef.current;
-    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) {
-      if (options.showError !== false) setError("Nao consegui capturar a imagem da camara.");
-      return;
-    }
 
     codeOcrBusyRef.current = true;
     setCodeReading(true);
     try {
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      if (!context) throw new Error("Nao consegui preparar a imagem capturada.");
-
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const canvas = captureCameraCanvas();
       const canvases = buildCodeOcrCanvasesFromSource(canvas, canvas.width, canvas.height, true);
       const detectedCount = await recognizeCodeCanvases(canvases);
       setLastReadAt(new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
@@ -946,6 +1004,27 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
 
   const captureCodeFrame = async () => {
     await readCodeFrame({ audible: true, showError: true });
+  };
+
+  const captureAdvancedOcr = async () => {
+    if (advancedReading || codeOcrBusyRef.current) return;
+    setError(null);
+    setCodeResult(null);
+    playScannerBeep();
+    setAdvancedReading(true);
+    try {
+      const detectedCount = await recognizeWithExternalOcr(captureCameraCanvas());
+      setLastReadAt(new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+      if (detectedCount === 0) {
+        setError("OCR avancado nao encontrou codigos nesta captura.");
+      } else {
+        setCodeResult(`${detectedCount} codigo${detectedCount === 1 ? "" : "s"} encontrado${detectedCount === 1 ? "" : "s"} pelo OCR avancado.`);
+      }
+    } catch (err: any) {
+      setError(err.message || "Erro no OCR avancado.");
+    } finally {
+      setAdvancedReading(false);
+    }
   };
 
   useEffect(() => {
@@ -1200,6 +1279,9 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
           <button className="scanner-live-capture" type="button" onClick={captureCodeFrame} disabled={!codeScanning || codeReading}>
             <Camera size={24} /> {codeReading ? "A ler..." : "Capturar e Ler"}
           </button>
+          <button className="scanner-live-advanced" type="button" onClick={captureAdvancedOcr} disabled={!codeScanning || codeReading || advancedReading}>
+            <Camera size={22} /> {advancedReading ? "A analisar..." : "Leitura avancada"}
+          </button>
           <button className="scanner-live-add" type="button" onClick={confirmScannedCodes} disabled={scannedCodes.length === 0 || scanConfirming}>
             <Plus size={26} /> {scanConfirming ? "A adicionar..." : `Adicionar (${detectedTotal}) detectadas`}
           </button>
@@ -1382,11 +1464,17 @@ export function ScanReviewSection({
                   <label className="scanner-review-quantity">
                     <span>Qtd</span>
                     <input
-                      type="number"
-                      min="1"
-                      max="99"
+                      type="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       value={item.count}
-                      onChange={(event) => onQuantityChange?.(item.key, Number(event.target.value))}
+                      onFocus={(event) => event.currentTarget.select()}
+                      onClick={(event) => event.currentTarget.select()}
+                      onChange={(event) => {
+                        const digits = event.target.value.replace(/\D/g, "").slice(0, 2);
+                        onQuantityChange?.(item.key, Number(digits || "1"));
+                      }}
+                      aria-label={`Quantidade de ${item.rawValues.join(", ")}`}
                     />
                   </label>
                 )}
