@@ -418,6 +418,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   const [codeResult, setCodeResult] = useState<string | null>(null);
   const [scannedCodes, setScannedCodes] = useState<ScannedCodeItem[]>([]);
   const [scanConfirming, setScanConfirming] = useState(false);
+  const [scanReviewItems, setScanReviewItems] = useState<ScanReviewEntry[]>([]);
   const [scannerHelpOpen, setScannerHelpOpen] = useState(false);
   const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -963,6 +964,22 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     setCodeResult(`${countByStickerId.size} cromo${countByStickerId.size === 1 ? "" : "s"} marcado${countByStickerId.size === 1 ? "" : "s"}.`);
   };
 
+  const buildScanReviewEntries = () => {
+    const existingHaveByStickerId = new Map(
+      userStickers
+        .filter((userSticker) => userSticker.user_id === user?.id && userSticker.status === "have")
+        .map((userSticker) => [userSticker.sticker_id, userSticker.quantity || 0])
+    );
+
+    return scannedCodes.map((item) => ({
+      key: item.rawValue,
+      rawValues: [item.rawValue],
+      sticker: item.sticker,
+      count: item.count,
+      existingQuantity: item.sticker ? existingHaveByStickerId.get(item.sticker.id) || 0 : 0,
+    }));
+  };
+
   const confirmScannedCodes = async () => {
     if (scannedCodes.length === 0) {
       setError("Nenhum codigo detectado para adicionar.");
@@ -973,8 +990,10 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     setCodeResult(null);
     setScanConfirming(true);
     try {
+      const reviewEntries = buildScanReviewEntries();
       const codes = scannedCodes.flatMap((item) => Array.from({ length: item.count }, () => item.rawValue));
       await markCodes(codes);
+      setScanReviewItems(reviewEntries);
       clearScannedCodes();
     } catch (err: any) {
       setError(err.message || "Erro ao adicionar os codigos detectados.");
@@ -984,6 +1003,10 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   };
 
   const detectedTotal = scannedCodes.reduce((total, item) => total + item.count, 0);
+  const scanReviewNew = scanReviewItems.filter((item) => item.sticker && item.existingQuantity === 0);
+  const scanReviewRepeated = scanReviewItems.filter((item) => item.sticker && item.existingQuantity > 0);
+  const scanReviewUnknown = scanReviewItems.filter((item) => !item.sticker);
+  const scanReviewTotal = scanReviewItems.reduce((total, item) => total + item.count, 0);
   const handleClose = () => {
     stopCodeScanner();
     onClose?.();
@@ -1066,6 +1089,51 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
         </div>
       </section>
 
+      {scanReviewItems.length > 0 && (
+        <div className="scanner-review-overlay" role="dialog" aria-modal="true" aria-labelledby="scanner-review-title">
+          <div className="scanner-review-panel">
+            <header className="scanner-review-header">
+              <div>
+                <h3 id="scanner-review-title">Cromos adicionados</h3>
+                <p>{scanReviewTotal} cromo{scanReviewTotal === 1 ? "" : "s"} processado{scanReviewTotal === 1 ? "" : "s"}.</p>
+              </div>
+              <button className="scanner-live-close" type="button" onClick={() => setScanReviewItems([])} aria-label="Fechar resumo">
+                <X size={24} />
+              </button>
+            </header>
+
+            <div className="scanner-review-grid">
+              <ScanReviewSection
+                title="Novos"
+                emptyText="Nenhum cromo novo nesta leitura."
+                items={scanReviewNew}
+                tone="new"
+              />
+              <ScanReviewSection
+                title="Repetidos"
+                emptyText="Nenhum repetido nesta leitura."
+                items={scanReviewRepeated}
+                tone="repeated"
+              />
+              {scanReviewUnknown.length > 0 && (
+                <ScanReviewSection
+                  title="Sem correspondencia"
+                  emptyText="Todos os codigos foram encontrados."
+                  items={scanReviewUnknown}
+                  tone="unknown"
+                />
+              )}
+            </div>
+
+            <div className="scanner-review-actions">
+              <button className="btn btn-primary" type="button" onClick={() => setScanReviewItems([])}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {scannerHelpOpen && (
         <div className="scanner-help-overlay" role="dialog" aria-modal="true" aria-labelledby="scanner-help-title">
           <div className="scanner-help-panel">
@@ -1120,8 +1188,8 @@ export function ScanReviewSection({
                     <small>
                       #{String(item.sticker.number).padStart(3, "0")}
                       {item.existingQuantity > 0
-                        ? ` · ja tens ${item.existingQuantity}, fica ${item.existingQuantity + item.count}`
-                        : ` · fica ${item.count}`}
+                        ? ` - ja tens ${item.existingQuantity}, fica ${item.existingQuantity + item.count}`
+                        : ` - fica ${item.count}`}
                     </small>
                   ) : (
                     <small>Confirma a colecao ou escreve o codigo manualmente.</small>
