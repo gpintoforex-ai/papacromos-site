@@ -432,9 +432,11 @@ const numericOcrNoiseWords = [
   "SUPERGOLACO",
 ];
 
-function scoreNumericOcrMatch(line: string, value: string, maxStickerNumber: number) {
+function scoreNumericOcrMatch(line: string, value: string, maxStickerNumber: number, validMatchesOnLine: number) {
   const compactLine = line.replace(/\s+/g, " ").trim();
   const lineWithoutValue = compactLine.replace(value, "").trim();
+  const hasNoiseWord = numericOcrNoiseWords.some((word) => compactLine.includes(word));
+  const hasSeason = /\b20[0-9]{2}\b/.test(compactLine) || /\b[0-9]{2}\s*[-_/]\s*[0-9]{2}\b/.test(compactLine);
   let score = 0;
 
   if (/^[0-9]{1,4}$/.test(compactLine)) score += 18;
@@ -442,8 +444,9 @@ function scoreNumericOcrMatch(line: string, value: string, maxStickerNumber: num
   if (value.length === String(maxStickerNumber).length) score += 4;
   if (value.length <= 2 && maxStickerNumber >= 100) score -= 5;
   if (lineWithoutValue.length <= 8) score += 4;
-  if (numericOcrNoiseWords.some((word) => compactLine.includes(word))) score -= 10;
-  if (/\b20[0-9]{2}\b/.test(compactLine) || /\b[0-9]{2}\s*[-_/]\s*[0-9]{2}\b/.test(compactLine)) score -= 14;
+  if (validMatchesOnLine >= 2 && !hasNoiseWord && !hasSeason) score += 8;
+  if (hasNoiseWord) score -= 10;
+  if (hasSeason) score -= 14;
 
   return score;
 }
@@ -458,23 +461,21 @@ function getStickerNumbersFromOcrText(text: string, candidates: Sticker[]) {
 
   for (const rawLine of text.split(/\r?\n/)) {
     const normalizedLine = normalizeOcrCodeText(rawLine);
-    for (const match of normalizedLine.matchAll(/\b[0-9]{1,4}\b/g)) {
-      const number = Number.parseInt(match[0], 10);
-      if (!Number.isFinite(number) || !validNumbers.has(number)) continue;
+    const matches = [...normalizedLine.matchAll(/\b[0-9]{1,4}\b/g)]
+      .map((match) => ({ value: match[0], number: Number.parseInt(match[0], 10) }))
+      .filter((match) => Number.isFinite(match.number) && validNumbers.has(match.number));
 
-      const score = scoreNumericOcrMatch(normalizedLine, match[0], maxStickerNumber);
+    for (const match of matches) {
+      const score = scoreNumericOcrMatch(normalizedLine, match.value, maxStickerNumber, matches.length);
       if (score < 10) continue;
 
-      const code = String(number);
+      const code = String(match.number);
       scoredCodes.set(code, Math.max(scoredCodes.get(code) || 0, score));
     }
   }
 
   const rankedCodes = [...scoredCodes.entries()].sort((a, b) => b[1] - a[1]);
-  if (rankedCodes.length === 0) return [];
-  if (rankedCodes.length > 1 && rankedCodes[0][1] - rankedCodes[1][1] < 8) return [];
-
-  return [rankedCodes[0][0]];
+  return rankedCodes.slice(0, 24).map(([code]) => code);
 }
 
 function playScannerBeep() {
