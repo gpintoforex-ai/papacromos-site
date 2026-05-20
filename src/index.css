@@ -3434,6 +3434,16 @@ textarea {
   object-fit: cover;
 }
 
+.scanner-live-video-paused {
+  visibility: hidden;
+}
+
+.scanner-captured-preview {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
 .scanner-help-btn {
   position: absolute;
   right: 28px;

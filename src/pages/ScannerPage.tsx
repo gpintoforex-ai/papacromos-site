@@ -579,6 +579,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   };
 
   const stopCodeScanner = (options?: { keepWorker?: boolean }) => {
+    setCapturedPreview(null);
     if (!options?.keepWorker) {
       codeOcrBusyRef.current = false;
     }
@@ -931,6 +932,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   const startCodeScanner = async () => {
     setError(null);
     setCodeResult(null);
+    setCapturedPreview(null);
     try {
       if (!selectedCollectionId) throw new Error("Escolhe uma colecao primeiro.");
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -1017,12 +1019,11 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       const detectedCount = await recognizeWithExternalOcr(canvas);
       if (detectedCount === 0) {
         setError("OCR avancado nao encontrou codigos nesta captura.");
-      } else {
-        setCapturedPreview(null);
       }
     } catch (err: any) {
       setError(err.message || "Erro no OCR avancado.");
     } finally {
+      setCapturedPreview(null);
       setAdvancedReading(false);
     }
   };
@@ -1205,10 +1206,9 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       </header>
 
       <section className="scanner-live-camera">
-        {capturedPreview ? (
+        <video className={capturedPreview ? "scanner-live-video-paused" : undefined} ref={codeVideoRef} muted playsInline />
+        {capturedPreview && (
           <img className="scanner-captured-preview" src={capturedPreview} alt="Captura analisada" />
-        ) : (
-          <video ref={codeVideoRef} muted playsInline />
         )}
         {!codeScanning && <span className="code-scan-empty">Camara desligada</span>}
         {codeScanning && !capturedPreview && <div className="code-scan-line" />}
