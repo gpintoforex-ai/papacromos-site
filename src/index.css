@@ -3369,6 +3369,10 @@ textarea {
   color: var(--text);
 }
 
+.scanner-live-page.has-detections {
+  grid-template-rows: auto minmax(150px, 24dvh) minmax(0, 1fr);
+}
+
 .scanner-live-header {
   min-height: calc(88px + env(safe-area-inset-top));
   display: flex;
@@ -3393,6 +3397,15 @@ textarea {
   font-weight: 900;
   line-height: 1.02;
   text-transform: none;
+}
+
+.scanner-live-page.has-detections .scanner-live-header {
+  min-height: calc(64px + env(safe-area-inset-top));
+  padding-bottom: 10px;
+}
+
+.scanner-live-page.has-detections .scanner-live-header strong {
+  font-size: clamp(20px, 5vw, 30px);
 }
 
 .scanner-live-header span {
@@ -3458,6 +3471,13 @@ textarea {
   cursor: pointer;
 }
 
+.scanner-live-page.has-detections .scanner-help-btn {
+  right: 18px;
+  bottom: 18px;
+  width: 46px;
+  height: 46px;
+}
+
 .scanner-live-body {
   min-height: 0;
   display: flex;
@@ -3477,6 +3497,21 @@ textarea {
   min-height: 48px;
   border-radius: 12px;
   background: var(--bg-elevated);
+}
+
+.scanner-live-page.has-detections .scanner-live-picker {
+  gap: 5px;
+}
+
+.scanner-live-page.has-detections .scanner-live-picker span {
+  font-size: 11px;
+}
+
+.scanner-live-page.has-detections .scanner-live-picker select {
+  min-height: 38px;
+  border-radius: 10px;
+  padding: 8px 40px 8px 12px;
+  font-size: 14px;
 }
 
 .scanner-live-summary {
@@ -3533,6 +3568,11 @@ textarea {
   scrollbar-width: thin;
 }
 
+.scanner-live-page.has-detections .scanner-live-list {
+  gap: 6px;
+  flex-basis: 260px;
+}
+
 .scanner-live-chip {
   min-width: 0;
   width: 100%;
@@ -3550,6 +3590,14 @@ textarea {
   font-weight: 900;
   text-align: left;
   cursor: pointer;
+}
+
+.scanner-live-page.has-detections .scanner-live-chip {
+  min-height: 38px;
+  gap: 7px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  font-size: 12px;
 }
 
 .scanner-live-chip.green {
@@ -3578,6 +3626,11 @@ textarea {
   object-fit: cover;
 }
 
+.scanner-live-page.has-detections .scanner-live-chip img {
+  width: 24px;
+  height: 17px;
+}
+
 .scanner-live-chip span {
   min-width: 0;
   overflow: hidden;
@@ -3594,6 +3647,10 @@ textarea {
   display: grid;
   gap: 8px;
   flex: 0 0 auto;
+}
+
+.scanner-live-page.has-detections .scanner-live-actions {
+  gap: 6px;
 }
 
 .scanner-live-action-row {
@@ -3619,6 +3676,15 @@ textarea {
   letter-spacing: 0;
   text-transform: none;
   cursor: pointer;
+}
+
+.scanner-live-page.has-detections .scanner-live-capture,
+.scanner-live-page.has-detections .scanner-live-advanced,
+.scanner-live-page.has-detections .scanner-live-add,
+.scanner-live-page.has-detections .scanner-live-manual {
+  min-height: 42px;
+  border-radius: 11px;
+  font-size: 14px;
 }
 
 .scanner-live-capture {
@@ -3715,9 +3781,18 @@ textarea {
     grid-template-rows: auto minmax(210px, 35dvh) minmax(0, 1fr);
   }
 
+  .scanner-live-page.has-detections {
+    grid-template-rows: auto minmax(120px, 19dvh) minmax(0, 1fr);
+  }
+
   .scanner-live-header {
     min-height: calc(78px + env(safe-area-inset-top));
     padding: max(12px, env(safe-area-inset-top)) 20px 14px;
+  }
+
+  .scanner-live-page.has-detections .scanner-live-header {
+    min-height: calc(54px + env(safe-area-inset-top));
+    padding: max(8px, env(safe-area-inset-top)) 18px 8px;
   }
 
   .scanner-live-close {
@@ -3725,13 +3800,27 @@ textarea {
     height: 48px;
   }
 
+  .scanner-live-page.has-detections .scanner-live-close {
+    width: 38px;
+    height: 38px;
+  }
+
   .scanner-live-body {
     gap: 10px;
     padding: 12px 20px max(14px, env(safe-area-inset-bottom));
   }
 
+  .scanner-live-page.has-detections .scanner-live-body {
+    gap: 7px;
+    padding: 8px 16px max(10px, env(safe-area-inset-bottom));
+  }
+
   .scanner-live-list {
     gap: 8px;
+  }
+
+  .scanner-live-page.has-detections .scanner-live-list {
+    gap: 6px;
   }
 
   .scanner-help-btn {
@@ -3739,6 +3828,13 @@ textarea {
     bottom: 18px;
     width: 48px;
     height: 48px;
+  }
+
+  .scanner-live-page.has-detections .scanner-help-btn {
+    right: 12px;
+    bottom: 12px;
+    width: 40px;
+    height: 40px;
   }
 
   .scanner-live-summary {
@@ -3751,12 +3847,28 @@ textarea {
     border-radius: 11px;
   }
 
+  .scanner-live-page.has-detections .scanner-live-chip {
+    min-height: 36px;
+    padding: 6px 8px;
+    border-radius: 9px;
+    font-size: 11px;
+  }
+
   .scanner-live-capture,
   .scanner-live-advanced,
   .scanner-live-add,
   .scanner-live-manual {
     min-height: 52px;
     border-radius: 13px;
+  }
+
+  .scanner-live-page.has-detections .scanner-live-capture,
+  .scanner-live-page.has-detections .scanner-live-advanced,
+  .scanner-live-page.has-detections .scanner-live-add,
+  .scanner-live-page.has-detections .scanner-live-manual {
+    min-height: 40px;
+    border-radius: 10px;
+    font-size: 13px;
   }
 
   .scanner-live-action-row {

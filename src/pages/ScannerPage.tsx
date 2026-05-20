@@ -418,23 +418,63 @@ function getStickerCodesFromOcrText(text: string) {
   return resolveOcrCodeCandidates(getStickerCodeCandidatesFromOcrText(text));
 }
 
+const numericOcrNoiseWords = [
+  "BETCLIC",
+  "BOLAS",
+  "COLECAO",
+  "CROMOS",
+  "MADE",
+  "OFICIAL",
+  "PANINI",
+  "PROMOCAO",
+  "PUMA",
+  "SINDICATO",
+  "SUPERGOLACO",
+];
+
+function scoreNumericOcrMatch(line: string, value: string, maxStickerNumber: number) {
+  const compactLine = line.replace(/\s+/g, " ").trim();
+  const lineWithoutValue = compactLine.replace(value, "").trim();
+  let score = 0;
+
+  if (/^[0-9]{1,4}$/.test(compactLine)) score += 18;
+  if (value.length >= 3) score += 8;
+  if (value.length === String(maxStickerNumber).length) score += 4;
+  if (value.length <= 2 && maxStickerNumber >= 100) score -= 5;
+  if (lineWithoutValue.length <= 8) score += 4;
+  if (numericOcrNoiseWords.some((word) => compactLine.includes(word))) score -= 10;
+  if (/\b20[0-9]{2}\b/.test(compactLine) || /\b[0-9]{2}\s*[-_/]\s*[0-9]{2}\b/.test(compactLine)) score -= 14;
+
+  return score;
+}
+
 function getStickerNumbersFromOcrText(text: string, candidates: Sticker[]) {
   if (candidates.length === 0) return [];
   if (candidates.some((sticker) => sticker.collection_id === WORLD_ALBUM_COLLECTION_ID)) return [];
 
   const validNumbers = new Set(candidates.map((sticker) => sticker.number));
-  const normalizedText = normalizeOcrCodeText(text)
-    .replace(/\b20[0-9]{2}\s*[-_/]?\s*[0-9]{2}\b/g, " ")
-    .replace(/\b20[0-9]{4}\b/g, " ");
-  const codes: string[] = [];
+  const maxStickerNumber = Math.max(...candidates.map((sticker) => sticker.number));
+  const scoredCodes = new Map<string, number>();
 
-  for (const match of normalizedText.matchAll(/\b[0-9]{1,4}\b/g)) {
-    const number = Number.parseInt(match[0], 10);
-    if (!Number.isFinite(number) || !validNumbers.has(number)) continue;
-    codes.push(String(number));
+  for (const rawLine of text.split(/\r?\n/)) {
+    const normalizedLine = normalizeOcrCodeText(rawLine);
+    for (const match of normalizedLine.matchAll(/\b[0-9]{1,4}\b/g)) {
+      const number = Number.parseInt(match[0], 10);
+      if (!Number.isFinite(number) || !validNumbers.has(number)) continue;
+
+      const score = scoreNumericOcrMatch(normalizedLine, match[0], maxStickerNumber);
+      if (score < 10) continue;
+
+      const code = String(number);
+      scoredCodes.set(code, Math.max(scoredCodes.get(code) || 0, score));
+    }
   }
 
-  return codes.filter((code, index, all) => all.indexOf(code) === index);
+  const rankedCodes = [...scoredCodes.entries()].sort((a, b) => b[1] - a[1]);
+  if (rankedCodes.length === 0) return [];
+  if (rankedCodes.length > 1 && rankedCodes[0][1] - rankedCodes[1][1] < 8) return [];
+
+  return [rankedCodes[0][0]];
 }
 
 function playScannerBeep() {
@@ -559,6 +599,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   const codeOcrWorkerRef = useRef<any | null>(null);
   const codeOcrWorkerPromiseRef = useRef<Promise<any> | null>(null);
   const codeLastSeenAtRef = useRef<Map<string, number>>(new Map());
+  const scannerListRef = useRef<HTMLDivElement | null>(null);
   const autoStartedScannerRef = useRef(false);
 
   const collectionStickers = useMemo(
@@ -1241,13 +1282,25 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   const scanReviewRepeated = scanReviewItems.filter((item) => item.sticker && item.existingQuantity > 0);
   const scanReviewUnknown = scanReviewItems.filter((item) => !item.sticker);
   const scanReviewTotal = scanReviewItems.reduce((total, item) => total + item.count, 0);
+
+  useEffect(() => {
+    const list = scannerListRef.current;
+    if (!list || scannedCodes.length === 0) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [scannedCodes.length, detectedTotal]);
+
   const handleClose = () => {
     stopCodeScanner();
     onClose?.();
   };
 
   return (
-    <div className="scanner-page scanner-live-page">
+    <div className={`scanner-page scanner-live-page ${scannedCodes.length > 0 ? "has-detections" : ""}`}>
       <header className="scanner-live-header">
         <div>
           <strong>Scanner OCR</strong>
@@ -1287,7 +1340,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
         {error && <p className="scanner-live-message error">{error}</p>}
         {codeResult && <p className="scanner-live-message success">{codeResult}</p>}
 
-        <div className="scanner-live-list">
+        <div className="scanner-live-list" ref={scannerListRef}>
           {scannedCodes.length > 0 && (
             scannedCodes.map((item, index) => {
               const flagCode = getFlagCodeForScannedItem(item);
