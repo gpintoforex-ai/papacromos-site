@@ -502,7 +502,6 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   const [manualCodeOpen, setManualCodeOpen] = useState(false);
   const [manualCodeValue, setManualCodeValue] = useState("");
   const [scannerHelpOpen, setScannerHelpOpen] = useState(false);
-  const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const codeVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -987,7 +986,6 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       const canvas = captureCameraCanvas();
       const canvases = buildCodeOcrCanvasesFromSource(canvas, canvas.width, canvas.height, true);
       const detectedCount = await recognizeCodeCanvases(canvases);
-      setLastReadAt(new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       if (detectedCount === 0) {
         if (options.showError !== false) {
           setError("Nao encontrei codigos nesta captura. Aproxima mais os cantos com os codigos e evita reflexos.");
@@ -1017,11 +1015,10 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       const canvas = captureCameraCanvas();
       setCapturedPreview(canvas.toDataURL("image/jpeg", 0.76));
       const detectedCount = await recognizeWithExternalOcr(canvas);
-      setLastReadAt(new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       if (detectedCount === 0) {
         setError("OCR avancado nao encontrou codigos nesta captura.");
       } else {
-        setCodeResult(`${detectedCount} codigo${detectedCount === 1 ? "" : "s"} encontrado${detectedCount === 1 ? "" : "s"} pelo OCR avancado.`);
+        setCapturedPreview(null);
       }
     } catch (err: any) {
       setError(err.message || "Erro no OCR avancado.");
@@ -1141,19 +1138,20 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     setScanReviewMode("confirm");
   };
 
-  const updateScanReviewQuantity = (key: string, value: number) => {
-    const count = Math.max(1, Math.min(99, Math.round(value) || 1));
+  const updateScanReviewQuantity = (key: string, value: number | null) => {
+    const count = value === null ? 0 : Math.max(0, Math.min(99, Math.round(value) || 0));
     setScanReviewItems((current) =>
       current.map((item) => item.key === key ? { ...item, count } : item)
     );
   };
 
   const confirmReviewCodes = async () => {
+    const normalizedItems = scanReviewItems.map((item) => ({ ...item, count: Math.max(1, item.count || 0) }));
     setError(null);
     setCodeResult(null);
     setScanConfirming(true);
     try {
-      await addScannedCodes(scanReviewItems);
+      await addScannedCodes(normalizedItems);
     } catch (err: any) {
       setError(err.message || "Erro ao adicionar os codigos detectados.");
     } finally {
@@ -1229,11 +1227,6 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
             ))}
           </select>
         </label>
-
-        <div className="scanner-live-summary" role="status" aria-live="polite">
-          <strong>{detectedTotal} figurinha(s) detectada(s)</strong>
-          <span>{lastReadAt ? `Ultima leitura: ${lastReadAt}` : "Aguardando leitura"}</span>
-        </div>
 
         {error && <p className="scanner-live-message error">{error}</p>}
         {codeResult && <p className="scanner-live-message success">{codeResult}</p>}
@@ -1421,7 +1414,7 @@ export function ScanReviewSection({
   items: ScanReviewEntry[];
   tone: "new" | "repeated" | "unknown";
   editable?: boolean;
-  onQuantityChange?: (key: string, value: number) => void;
+  onQuantityChange?: (key: string, value: number | null) => void;
 }) {
   return (
     <section className={`scanner-review-section ${tone}`}>
@@ -1459,12 +1452,15 @@ export function ScanReviewSection({
                       type="tel"
                       inputMode="numeric"
                       pattern="[0-9]*"
-                      value={item.count}
+                      value={item.count || ""}
                       onFocus={(event) => event.currentTarget.select()}
                       onClick={(event) => event.currentTarget.select()}
+                      onBlur={() => {
+                        if (!item.count) onQuantityChange?.(item.key, 1);
+                      }}
                       onChange={(event) => {
                         const digits = event.target.value.replace(/\D/g, "").slice(0, 2);
-                        onQuantityChange?.(item.key, Number(digits || "1"));
+                        onQuantityChange?.(item.key, digits ? Number(digits) : null);
                       }}
                       aria-label={`Quantidade de ${item.rawValues.join(", ")}`}
                     />
