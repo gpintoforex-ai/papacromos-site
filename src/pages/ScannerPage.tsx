@@ -278,6 +278,11 @@ function normalizeOcrCodeText(text: string) {
     .replace(/\bE[CO]U\b/g, "ECU")
     .replace(/\bU[2Z]8\b/g, "UZB")
     .replace(/\bUZ8\b/g, "UZB")
+    .replace(/\b6ER\b/g, "GER")
+    .replace(/\bG[£E]R\b/g, "GER")
+    .replace(/\bGE[8B]\b/g, "GER")
+    .replace(/\bGFR\b/g, "GER")
+    .replace(/\bCER\b/g, "GER")
     .replace(/\bT[UO]M\b/g, "TUN")
     .replace(/\bT[UO][NM]\b/g, "TUN")
     .replace(/\bT[UV][NM]\b/g, "TUN")
@@ -824,14 +829,14 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     void startCodeScanner();
   }, [loading, selectedCollectionId, codeScanning]);
 
-  const captureCodeFrame = async () => {
+  const readCodeFrame = async (options: { audible?: boolean; showError?: boolean } = {}) => {
     if (codeOcrBusyRef.current) return;
-    setError(null);
+    if (options.showError !== false) setError(null);
     setCodeResult(null);
-    playScannerBeep();
+    if (options.audible) playScannerBeep();
     const video = codeVideoRef.current;
     if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) {
-      setError("Nao consegui capturar a imagem da camara.");
+      if (options.showError !== false) setError("Nao consegui capturar a imagem da camara.");
       return;
     }
 
@@ -849,15 +854,39 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       const detectedCount = await recognizeCodeCanvases(canvases);
       setLastReadAt(new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       if (detectedCount === 0) {
-        setError("Nao encontrei codigos nesta captura. Aproxima mais os cantos com os codigos e evita reflexos.");
+        if (options.showError !== false) {
+          setError("Nao encontrei codigos nesta captura. Aproxima mais os cantos com os codigos e evita reflexos.");
+        }
+      } else {
+        setError(null);
       }
     } catch (err: any) {
-      setError(err.message || "Erro ao ler a imagem capturada.");
+      if (options.showError !== false) setError(err.message || "Erro ao ler a imagem capturada.");
     } finally {
       codeOcrBusyRef.current = false;
       setCodeReading(false);
     }
   };
+
+  const captureCodeFrame = async () => {
+    await readCodeFrame({ audible: true, showError: true });
+  };
+
+  useEffect(() => {
+    if (!codeScanning) return;
+
+    const firstReadId = window.setTimeout(() => {
+      void readCodeFrame({ audible: false, showError: false });
+    }, 900);
+    const intervalId = window.setInterval(() => {
+      void readCodeFrame({ audible: false, showError: false });
+    }, 3200);
+
+    return () => {
+      window.clearTimeout(firstReadId);
+      window.clearInterval(intervalId);
+    };
+  }, [codeScanning]);
 
   const clearScannedCodes = () => {
     setScannedCodes([]);
