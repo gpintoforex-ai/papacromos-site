@@ -326,9 +326,13 @@ function getStickerDisplayName(sticker: Sticker) {
   if (localNumber === 1) return `${teamName} - Escudo`;
   if (localNumber === 13) return `${teamName} - Foto de equipa`;
 
+  const detail = sticker.name.includes(" - ") ? sticker.name.split(" - ").slice(1).join(" - ").trim() : sticker.name;
+  if (detail && !/^Jogador\s+\d+$/i.test(detail)) {
+    return `${teamName} - ${detail}`;
+  }
+
   const knownName = getKnownWorldPlayerName(sticker);
   if (!knownName) {
-    const detail = sticker.name.includes(" - ") ? sticker.name.split(" - ").slice(1).join(" - ").trim() : sticker.name;
     return `${teamName} - ${detail}`;
   }
   return `${teamName} - ${knownName}`;

@@ -418,6 +418,25 @@ function getStickerCodesFromOcrText(text: string) {
   return resolveOcrCodeCandidates(getStickerCodeCandidatesFromOcrText(text));
 }
 
+function getStickerNumbersFromOcrText(text: string, candidates: Sticker[]) {
+  if (candidates.length === 0) return [];
+  if (candidates.some((sticker) => sticker.collection_id === WORLD_ALBUM_COLLECTION_ID)) return [];
+
+  const validNumbers = new Set(candidates.map((sticker) => sticker.number));
+  const normalizedText = normalizeOcrCodeText(text)
+    .replace(/\b20[0-9]{2}\s*[-_/]?\s*[0-9]{2}\b/g, " ")
+    .replace(/\b20[0-9]{4}\b/g, " ");
+  const codes: string[] = [];
+
+  for (const match of normalizedText.matchAll(/\b[0-9]{1,4}\b/g)) {
+    const number = Number.parseInt(match[0], 10);
+    if (!Number.isFinite(number) || !validNumbers.has(number)) continue;
+    codes.push(String(number));
+  }
+
+  return codes.filter((code, index, all) => all.indexOf(code) === index);
+}
+
 function playScannerBeep() {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -583,6 +602,15 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
 
   const findStickerForScannedCode = useCallback(
     (rawValue: string): Sticker | null => findStickerForCodeInCollection(rawValue, collectionStickers),
+    [collectionStickers]
+  );
+
+  const getScannableCodesFromOcrText = useCallback(
+    (text: string) => {
+      const stickerCodes = getStickerCodesFromOcrText(text);
+      const numericCodes = getStickerNumbersFromOcrText(text, collectionStickers);
+      return [...stickerCodes, ...numericCodes].filter((code, index, all) => all.indexOf(code) === index);
+    },
     [collectionStickers]
   );
 
@@ -876,6 +904,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     if (canvases.length === 0) return 0;
     const worker = await prepareCodeOcrWorker();
     const candidates: StickerCodeCandidate[] = [];
+    const numericCodes: string[] = [];
 
     for (const { canvas, pageSegMode } of canvases) {
       if (typeof worker.setParameters === "function") {
@@ -883,9 +912,11 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       }
       const result = await worker.recognize(canvas);
       candidates.push(...getStickerCodeCandidatesFromOcrText(result.data.text));
+      numericCodes.push(...getStickerNumbersFromOcrText(result.data.text, collectionStickers));
     }
 
-    const codes = resolveOcrCodeCandidates(candidates);
+    const codes = [...resolveOcrCodeCandidates(candidates), ...numericCodes]
+      .filter((code, index, all) => all.indexOf(code) === index);
     codes.forEach(addDetectedCode);
     return codes.length;
   };
@@ -945,7 +976,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     const text = (payload.ParsedResults || [])
       .map((result) => result.ParsedText || "")
       .join("\n");
-    const codes = getStickerCodesFromOcrText(text);
+    const codes = getScannableCodesFromOcrText(text);
     codes.forEach(addDetectedCode);
     return codes.length;
   };
