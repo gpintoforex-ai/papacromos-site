@@ -46,6 +46,11 @@ interface StickerCodeCandidate {
 type CodeOcrCanvasMode = "normal" | "inverted";
 type CodeOcrRegion = readonly [number, number, number, number];
 
+interface CodeOcrCanvasInput {
+  canvas: HTMLCanvasElement;
+  pageSegMode: "6" | "7" | "11";
+}
+
 const DATA_PAGE_SIZE = 1000;
 const WORLD_ALBUM_COLLECTION_ID = "b2026000-0000-4000-8000-000000000001";
 
@@ -331,6 +336,30 @@ function getStickerCodesFromOcrText(text: string) {
   return resolveOcrCodeCandidates(getStickerCodeCandidatesFromOcrText(text));
 }
 
+function playScannerBeep() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const audioContext = new AudioContextClass();
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(980, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(1320, audioContext.currentTime + 0.07);
+    gain.gain.setValueAtTime(0.001, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.16, audioContext.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.13);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.14);
+    window.setTimeout(() => void audioContext.close(), 220);
+  } catch {
+    // Audio feedback is optional; scanner capture should continue if blocked.
+  }
+}
+
 async function fetchAllStickers() {
   const allStickers: Sticker[] = [];
   let from = 0;
@@ -541,7 +570,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   ) => {
     const crops = regions
       .map(([sourceX, sourceY, sourceWidth, sourceHeight]) =>
-        createCodeOcrCanvas(source, sourceX, sourceY, sourceWidth, sourceHeight, 520, mode)
+        createCodeOcrCanvas(source, sourceX, sourceY, sourceWidth, sourceHeight, 760, mode)
       )
       .filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas));
     if (crops.length === 0) return null;
@@ -642,8 +671,8 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
 
       if (!looksLikeCodePill) continue;
 
-      const padX = Math.round(boxWidth * 0.12);
-      const padY = Math.round(boxHeight * 0.24);
+      const padX = Math.round(boxWidth * 0.22);
+      const padY = Math.round(boxHeight * 0.38);
       const sourceX = Math.max(0, Math.round((minX - padX) / scale));
       const sourceY = Math.max(0, Math.round((minY - padY) / scale));
       const sourceRight = Math.min(source.width, Math.round((maxX + padX) / scale));
@@ -675,7 +704,10 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       [0, 0, width, height],
     ] as const;
     const exhaustiveRegions = [
+      [Math.round(width * 0.46), Math.round(height * 0.02), Math.round(width * 0.5), Math.round(height * 0.18)],
       [Math.round(width * 0.42), 0, Math.round(width * 0.56), Math.round(height * 0.26)],
+      [Math.round(width * 0.46), Math.round(height * 0.18), Math.round(width * 0.5), Math.round(height * 0.2)],
+      [Math.round(width * 0.46), Math.round(height * 0.28), Math.round(width * 0.5), Math.round(height * 0.2)],
       [0, 0, width, Math.round(height * 0.34)],
       [0, 0, width, Math.round(height * 0.48)],
       [Math.round(width * 0.48), 0, Math.round(width * 0.52), Math.round(height * 0.52)],
@@ -691,10 +723,25 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     const modes: CodeOcrCanvasMode[] = detectedRegions.length > 0
       ? ["inverted", "normal"]
       : exhaustive ? ["inverted", "normal"] : ["normal"];
+    const inputs: CodeOcrCanvasInput[] = [];
+    const individualRegions = detectedRegions.length > 0 ? detectedRegions : exhaustiveRegions;
 
-    return modes
-      .map((mode) => createCodeOcrSheetCanvas(source, regions, mode))
-      .filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas));
+    modes.forEach((mode) => {
+      individualRegions.forEach(([sourceX, sourceY, sourceWidth, sourceHeight]) => {
+        const canvas = createCodeOcrCanvas(source, sourceX, sourceY, sourceWidth, sourceHeight, 1400, mode);
+        if (canvas) inputs.push({ canvas, pageSegMode: "7" });
+      });
+
+      const sheet = createCodeOcrSheetCanvas(source, regions, mode);
+      if (sheet) inputs.push({ canvas: sheet, pageSegMode: "6" });
+    });
+
+    if (!exhaustive) {
+      const canvas = createCodeOcrCanvas(source, 0, 0, width, height, 1600, "normal");
+      if (canvas) inputs.push({ canvas, pageSegMode: "11" });
+    }
+
+    return inputs;
   };
 
   const prepareCodeOcrWorker = async () => {
@@ -713,14 +760,14 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     return codeOcrWorkerPromiseRef.current;
   };
 
-  const recognizeCodeCanvases = async (canvases: HTMLCanvasElement[]) => {
+  const recognizeCodeCanvases = async (canvases: CodeOcrCanvasInput[]) => {
     if (canvases.length === 0) return 0;
     const worker = await prepareCodeOcrWorker();
     const candidates: StickerCodeCandidate[] = [];
 
-    for (const canvas of canvases) {
+    for (const { canvas, pageSegMode } of canvases) {
       if (typeof worker.setParameters === "function") {
-        await worker.setParameters({ tessedit_pageseg_mode: "6" } as any);
+        await worker.setParameters({ tessedit_pageseg_mode: pageSegMode } as any);
       }
       const result = await worker.recognize(canvas);
       candidates.push(...getStickerCodeCandidatesFromOcrText(result.data.text));
@@ -781,6 +828,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     if (codeOcrBusyRef.current) return;
     setError(null);
     setCodeResult(null);
+    playScannerBeep();
     const video = codeVideoRef.current;
     if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) {
       setError("Nao consegui capturar a imagem da camara.");
@@ -953,9 +1001,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
         {codeResult && <p className="scanner-live-message success">{codeResult}</p>}
 
         <div className="scanner-live-list">
-          {scannedCodes.length === 0 ? (
-            <p>Aponte a camara para os codigos e toque em Capturar e Ler.</p>
-          ) : (
+          {scannedCodes.length > 0 && (
             scannedCodes.map((item, index) => {
               const flagCode = getStickerFlagCode(item.sticker);
               const chipTone = index % 3 === 0 ? "green" : index % 3 === 1 ? "blue" : "gold";
