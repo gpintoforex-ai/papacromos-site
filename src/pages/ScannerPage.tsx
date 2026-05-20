@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, HelpCircle, Plus, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
@@ -483,6 +483,36 @@ async function fetchUserStickers(userId: string) {
   return allUserStickers;
 }
 
+function findStickerForCodeInCollection(rawValue: string, candidates: Sticker[]): Sticker | null {
+  const abbrevMatch = normalizeOcrCodeText(rawValue).match(/^([A-Z0-9]{2,4})\s*[-_\\/]?\s*0*([1-9][0-9]?)$/);
+  if (abbrevMatch) {
+    const abbrev = normalizeAbbrev(abbrevMatch[1]);
+    const num = Number.parseInt(abbrevMatch[2], 10);
+    const mappedTeam = abbrevToTeam[abbrev];
+    if (mappedTeam) {
+      const mappedTeamNorm = normalizeAbbrev(mappedTeam);
+      const found = candidates.find((sticker) =>
+        normalizeAbbrev(getStickerEffectiveTeamName(sticker)) === mappedTeamNorm &&
+        getAlbumLocalNumber(sticker) === num
+      );
+      if (found) return found;
+    }
+
+    const found = candidates.find((sticker) =>
+      isSimilarAbbrev(abbrev, normalizeAbbrev(getStickerEffectiveTeamName(sticker))) &&
+      getAlbumLocalNumber(sticker) === num
+    );
+    if (found) return found;
+  }
+
+  const number = Number.parseInt(rawValue.replace(/\D/g, ""), 10);
+  if (Number.isFinite(number)) {
+    return candidates.find((sticker) => sticker.number === number || getAlbumLocalNumber(sticker) === number) || null;
+  }
+
+  return null;
+}
+
 export default function ScannerPage({ onCollectionChange, onClose }: { onCollectionChange?: () => void; onClose?: () => void }) {
   const { user } = useAuth();
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -512,7 +542,10 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   const codeLastSeenAtRef = useRef<Map<string, number>>(new Map());
   const autoStartedScannerRef = useRef(false);
 
-  const collectionStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
+  const collectionStickers = useMemo(
+    () => stickers.filter((sticker) => sticker.collection_id === selectedCollectionId),
+    [selectedCollectionId, stickers]
+  );
 
   useEffect(() => {
     loadData();
@@ -548,34 +581,22 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     }
   };
 
-  const findStickerForScannedCode = (rawValue: string): Sticker | null => {
-    const abbrevMatch = normalizeOcrCodeText(rawValue).match(/^([A-Z0-9]{2,4})\s*[-_\\/]?\s*0*([1-9][0-9]?)$/);
-    if (abbrevMatch) {
-      const abbrev = normalizeAbbrev(abbrevMatch[1]);
-      const num = Number.parseInt(abbrevMatch[2], 10);
-      const mappedTeam = abbrevToTeam[abbrev];
-      if (mappedTeam) {
-        const mappedTeamNorm = normalizeAbbrev(mappedTeam);
-        const found = collectionStickers.find((sticker) =>
-          normalizeAbbrev(getStickerEffectiveTeamName(sticker)) === mappedTeamNorm &&
-          getAlbumLocalNumber(sticker) === num
-        );
-        if (found) return found;
-      }
+  const findStickerForScannedCode = useCallback(
+    (rawValue: string): Sticker | null => findStickerForCodeInCollection(rawValue, collectionStickers),
+    [collectionStickers]
+  );
 
-      const found = collectionStickers.find((sticker) =>
-        isSimilarAbbrev(abbrev, normalizeAbbrev(getStickerEffectiveTeamName(sticker))) &&
-        getAlbumLocalNumber(sticker) === num
-      );
-      if (found) return found;
-    }
-
-    const number = Number.parseInt(rawValue.replace(/\D/g, ""), 10);
-    if (Number.isFinite(number)) {
-      return collectionStickers.find((sticker) => sticker.number === number || getAlbumLocalNumber(sticker) === number) || null;
-    }
-
-    return null;
+  const handleCollectionFilterChange = (collectionId: string) => {
+    const nextCollectionStickers = stickers.filter((sticker) => sticker.collection_id === collectionId);
+    setSelectedCollectionId(collectionId);
+    setScannedCodes((current) =>
+      current.map((item) => ({
+        ...item,
+        sticker: findStickerForCodeInCollection(item.rawValue, nextCollectionStickers),
+      }))
+    );
+    setError(null);
+    setCodeResult(null);
   };
 
   const stopCodeScanner = (options?: { keepWorker?: boolean }) => {
@@ -1221,7 +1242,11 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       <section className="scanner-live-body">
         <label className="scanner-collection-picker scanner-live-picker">
           <span>Colecao</span>
-          <select value={selectedCollectionId} onChange={(event) => setSelectedCollectionId(event.target.value)} disabled={loading || codeScanning}>
+          <select
+            value={selectedCollectionId}
+            onChange={(event) => handleCollectionFilterChange(event.target.value)}
+            disabled={loading || scanConfirming}
+          >
             {collections.map((collection) => (
               <option key={collection.id} value={collection.id}>{collection.name}</option>
             ))}

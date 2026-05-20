@@ -3469,7 +3469,14 @@ textarea {
 }
 
 .scanner-live-picker {
-  display: none;
+  display: flex;
+  min-width: 0;
+}
+
+.scanner-live-picker select {
+  min-height: 48px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
 }
 
 .scanner-live-summary {

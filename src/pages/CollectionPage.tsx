@@ -334,6 +334,28 @@ function getStickerDisplayName(sticker: Sticker) {
   return `${teamName} - ${knownName}`;
 }
 
+function normalizeSearchText(text: string) {
+  return text
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+function getStickerSearchText(sticker: Sticker) {
+  const teamName = getStickerEffectiveTeamName(sticker);
+  const localNumber = getAlbumLocalNumber(sticker);
+  const displayName = getStickerDisplayName(sticker);
+  const detail = displayName.includes(" - ") ? displayName.split(" - ").slice(1).join(" - ").trim() : displayName;
+  const searchParts = [teamName, String(localNumber), String(sticker.number).padStart(3, "0")];
+
+  if (localNumber === 1 || localNumber === 13 || !/^Jogador\s+\d+$/i.test(detail)) {
+    searchParts.push(detail, displayName);
+  }
+
+  return normalizeSearchText(searchParts.join(" "));
+}
+
 function escapeSvgText(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -2014,7 +2036,8 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
 
   const filteredStickers = stickers.filter((s) => {
     if (!selectedCollectionId || s.collection_id !== selectedCollectionId || !isCollectionActive(s.collection_id)) return false;
-    if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
+    const normalizedSearch = normalizeSearchText(search);
+    if (normalizedSearch && !getStickerSearchText(s).includes(normalizedSearch)) return false;
     if (filter === "have") return hasUserStickerStatus(s.id, "have");
     if (filter === "repeated") {
       const ownHave = userStickers.find(
@@ -2079,6 +2102,12 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const progress = totalCount > 0 ? Math.round((haveCount / totalCount) * 100) : 0;
   const isWorldAlbum = selectedCollection?.name.toLowerCase().includes("mundial") || false;
   const albumTeamButtons = isWorldAlbum ? buildAlbumTeamPages(selectedStickers) : [];
+  const filteredAlbumTeamNames = new Set(
+    isWorldAlbum ? buildAlbumTeamPages(filteredStickers).map((teamPage) => teamPage.teamName) : []
+  );
+  const visibleAlbumTeamButtons = isWorldAlbum
+    ? albumTeamButtons.filter((teamPage) => filteredAlbumTeamNames.has(teamPage.teamName))
+    : [];
   const albumTeamPages = isWorldAlbum
     ? buildAlbumTeamPages(filteredStickers).filter((teamPage) => !selectedAlbumTeamName || teamPage.teamName === selectedAlbumTeamName)
     : [];
@@ -2660,7 +2689,8 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
 
       {isWorldAlbum && !selectedAlbumTeamName ? (
         <div className="album-team-selector">
-          {albumTeamButtons.map((teamPage, pageIndex) => {
+          {visibleAlbumTeamButtons.map((teamPage) => {
+            const pageIndex = Math.max(0, albumTeamButtons.findIndex((albumTeam) => albumTeam.teamName === teamPage.teamName));
             const teamHaveCount = teamPage.stickers.filter((sticker) => getUserSticker(sticker.id)).length;
             const teamProgress = Math.round((teamHaveCount / Math.max(1, teamPage.stickers.length)) * 100);
 
