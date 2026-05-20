@@ -493,6 +493,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   const [codeScanning, setCodeScanning] = useState(false);
   const [codeReading, setCodeReading] = useState(false);
   const [advancedReading, setAdvancedReading] = useState(false);
+  const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
   const [codeResult, setCodeResult] = useState<string | null>(null);
   const [scannedCodes, setScannedCodes] = useState<ScannedCodeItem[]>([]);
   const [scanConfirming, setScanConfirming] = useState(false);
@@ -1013,7 +1014,9 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     playScannerBeep();
     setAdvancedReading(true);
     try {
-      const detectedCount = await recognizeWithExternalOcr(captureCameraCanvas());
+      const canvas = captureCameraCanvas();
+      setCapturedPreview(canvas.toDataURL("image/jpeg", 0.76));
+      const detectedCount = await recognizeWithExternalOcr(canvas);
       setLastReadAt(new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       if (detectedCount === 0) {
         setError("OCR avancado nao encontrou codigos nesta captura.");
@@ -1026,22 +1029,6 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       setAdvancedReading(false);
     }
   };
-
-  useEffect(() => {
-    if (!codeScanning) return;
-
-    const firstReadId = window.setTimeout(() => {
-      void readCodeFrame({ audible: false, showError: false });
-    }, 900);
-    const intervalId = window.setInterval(() => {
-      void readCodeFrame({ audible: false, showError: false });
-    }, 3200);
-
-    return () => {
-      window.clearTimeout(firstReadId);
-      window.clearInterval(intervalId);
-    };
-  }, [codeScanning]);
 
   const clearScannedCodes = () => {
     setScannedCodes([]);
@@ -1213,7 +1200,6 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       <header className="scanner-live-header">
         <div>
           <strong>Scanner OCR</strong>
-          <span>Aponte para as figurinhas</span>
         </div>
         <button className="scanner-live-close" type="button" onClick={handleClose} aria-label="Fechar scanner">
           <X size={28} />
@@ -1221,10 +1207,14 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       </header>
 
       <section className="scanner-live-camera">
-        <video ref={codeVideoRef} muted playsInline />
+        {capturedPreview ? (
+          <img className="scanner-captured-preview" src={capturedPreview} alt="Captura analisada" />
+        ) : (
+          <video ref={codeVideoRef} muted playsInline />
+        )}
         {!codeScanning && <span className="code-scan-empty">Camara desligada</span>}
-        {codeScanning && <div className="code-scan-line" />}
-        {codeReading && <span className="code-scan-status">A ler texto...</span>}
+        {codeScanning && !capturedPreview && <div className="code-scan-line" />}
+        {(codeReading || advancedReading) && <span className="code-scan-status">{advancedReading ? "A analisar captura..." : "A ler texto..."}</span>}
         <button className="scanner-help-btn" type="button" onClick={() => setScannerHelpOpen(true)} aria-label="Como usar o scanner">
           <HelpCircle size={24} />
         </button>
@@ -1276,17 +1266,19 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
         </div>
 
         <div className="scanner-live-actions">
-          <button className="scanner-live-capture" type="button" onClick={captureCodeFrame} disabled={!codeScanning || codeReading}>
+          <button className="scanner-live-capture scanner-live-disabled-option" type="button" onClick={captureCodeFrame} disabled>
             <Camera size={24} /> {codeReading ? "A ler..." : "Capturar e Ler"}
           </button>
-          <button className="scanner-live-advanced" type="button" onClick={captureAdvancedOcr} disabled={!codeScanning || codeReading || advancedReading}>
-            <Camera size={22} /> {advancedReading ? "A analisar..." : "Leitura avancada"}
-          </button>
+          <div className="scanner-live-action-row">
+            <button className="scanner-live-advanced" type="button" onClick={captureAdvancedOcr} disabled={!codeScanning || codeReading || advancedReading}>
+              <Camera size={22} /> {advancedReading ? "A analisar..." : "Capturar imagem"}
+            </button>
+            <button className="scanner-live-manual" type="button" onClick={openManualCode}>
+              <Plus size={22} /> Manual
+            </button>
+          </div>
           <button className="scanner-live-add" type="button" onClick={confirmScannedCodes} disabled={scannedCodes.length === 0 || scanConfirming}>
             <Plus size={26} /> {scanConfirming ? "A adicionar..." : `Adicionar (${detectedTotal}) detectadas`}
-          </button>
-          <button className="scanner-live-manual" type="button" onClick={openManualCode}>
-            <Plus size={22} /> Adicionar manualmente
           </button>
         </div>
       </section>
