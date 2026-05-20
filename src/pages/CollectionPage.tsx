@@ -406,8 +406,15 @@ function getStickerPreviewImageUrl(imageUrl: string) {
   return `/sticker-previews/${match[1]}/${match[2]}.jpg`;
 }
 
+function isGenericSeedStickerImage(imageUrl: string) {
+  return imageUrl.startsWith("https://images.pexels.com/");
+}
+
 function getStickerImageSource(sticker: Sticker) {
   if (!sticker.image_url) return getStickerFallbackImage(sticker);
+  if (sticker.collection_id === WORLD_ALBUM_COLLECTION_ID && isGenericSeedStickerImage(sticker.image_url)) {
+    return getStickerFallbackImage(sticker);
+  }
   return getStickerPreviewImageUrl(sticker.image_url) || sticker.image_url;
 }
 
