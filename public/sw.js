@@ -1,5 +1,5 @@
-const CACHE_NAME = "papa-cromos-v4";
-const APP_SHELL = ["/", "/index.html", "/logo.png", "/favicon.svg", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
+const CACHE_NAME = "papa-cromos-v2026-11";
+const APP_SHELL = ["/logo.png", "/favicon.svg", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -31,16 +31,8 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put("/", responseClone.clone());
-            cache.put("/index.html", responseClone);
-          });
-          return response;
-        })
-        .catch(() => caches.match("/") || caches.match("/index.html"))
+      fetch(request, { cache: "no-store" })
+        .catch(() => caches.match("/index.html") || Response.error())
     );
     return;
   }
