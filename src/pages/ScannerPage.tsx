@@ -1206,7 +1206,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       </header>
 
       <section className="scanner-live-camera">
-        <video className={capturedPreview ? "scanner-live-video-paused" : undefined} ref={codeVideoRef} muted playsInline />
+        <video ref={codeVideoRef} muted playsInline />
         {capturedPreview && (
           <img className="scanner-captured-preview" src={capturedPreview} alt="Captura analisada" />
         )}
