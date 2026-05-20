@@ -177,6 +177,67 @@ const flagCodeByTeamNorm: Record<string, string> = {
   UZBEQUISTAO: "uz",
 };
 
+const flagCodeByAbbrev: Record<string, string> = {
+  AFS: "za",
+  ALG: "dz",
+  ARG: "ar",
+  AUS: "au",
+  AUT: "at",
+  BEL: "be",
+  BIH: "ba",
+  BRA: "br",
+  CAN: "ca",
+  CHE: "ch",
+  CIV: "ci",
+  COD: "cd",
+  COL: "co",
+  CPV: "cv",
+  CRO: "hr",
+  CUW: "cw",
+  CZE: "cz",
+  DEU: "de",
+  DRC: "cd",
+  ECU: "ec",
+  EGY: "eg",
+  ENG: "gb-eng",
+  ESP: "es",
+  FRA: "fr",
+  GER: "de",
+  GHA: "gh",
+  HAI: "ht",
+  HOL: "nl",
+  HRV: "hr",
+  IRN: "ir",
+  IRQ: "iq",
+  JAM: "jm",
+  JOR: "jo",
+  JPN: "jp",
+  KOR: "kr",
+  KSA: "sa",
+  MAR: "ma",
+  MEX: "mx",
+  NED: "nl",
+  NLD: "nl",
+  NOR: "no",
+  NZL: "nz",
+  PAN: "pa",
+  PAR: "py",
+  POR: "pt",
+  QAT: "qa",
+  RSA: "za",
+  SAU: "sa",
+  SCO: "gb-sct",
+  SEN: "sn",
+  SUI: "ch",
+  SWE: "se",
+  TUN: "tn",
+  TUR: "tr",
+  URU: "uy",
+  USA: "us",
+  UZB: "uz",
+  ZAF: "za",
+};
+
 function getStickerTeamName(stickerName: string) {
   return stickerName.includes(" - ") ? stickerName.split(" - ")[0].trim() : "Cromos";
 }
@@ -196,6 +257,14 @@ function getStickerEffectiveTeamName(sticker: Sticker) {
 function getStickerFlagCode(sticker: Sticker | null) {
   if (!sticker) return "";
   return flagCodeByTeamNorm[normalizeAbbrev(getStickerEffectiveTeamName(sticker))] || "";
+}
+
+function getFlagCodeForScannedItem(item: ScannedCodeItem | ScanReviewEntry) {
+  const stickerCode = getStickerFlagCode(item.sticker);
+  if (stickerCode) return stickerCode;
+  const rawValue = "rawValue" in item ? item.rawValue : item.rawValues[0] || "";
+  const abbrev = normalizeAbbrev(rawValue).match(/^[A-Z]{2,4}/)?.[0] || "";
+  return flagCodeByAbbrev[abbrev] || "";
 }
 
 function getFlagUrl(flagCode: string) {
@@ -419,6 +488,9 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   const [scannedCodes, setScannedCodes] = useState<ScannedCodeItem[]>([]);
   const [scanConfirming, setScanConfirming] = useState(false);
   const [scanReviewItems, setScanReviewItems] = useState<ScanReviewEntry[]>([]);
+  const [scanReviewMode, setScanReviewMode] = useState<"confirm" | "summary">("summary");
+  const [manualCodeOpen, setManualCodeOpen] = useState(false);
+  const [manualCodeValue, setManualCodeValue] = useState("");
   const [scannerHelpOpen, setScannerHelpOpen] = useState(false);
   const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -515,13 +587,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     }
   };
 
-  const addDetectedCode = (rawValue: string) => {
-    const normalized = getStickerCodesFromOcrText(rawValue)[0] || normalizeOcrCodeText(rawValue);
-    const now = Date.now();
-    const lastSeenAt = codeLastSeenAtRef.current.get(normalized) || 0;
-    if (now - lastSeenAt < 1600) return;
-    codeLastSeenAtRef.current.set(normalized, now);
-
+  const addCodeToScanList = (normalized: string) => {
     setCodeText(normalized);
     setScannedCodes((current) => {
       const existing = current.find((item) => item.rawValue === normalized);
@@ -532,6 +598,15 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       }
       return [...current, { rawValue: normalized, sticker: findStickerForScannedCode(normalized), count: 1 }];
     });
+  };
+
+  const addDetectedCode = (rawValue: string) => {
+    const normalized = getStickerCodesFromOcrText(rawValue)[0] || normalizeOcrCodeText(rawValue);
+    const now = Date.now();
+    const lastSeenAt = codeLastSeenAtRef.current.get(normalized) || 0;
+    if (now - lastSeenAt < 1600) return;
+    codeLastSeenAtRef.current.set(normalized, now);
+    addCodeToScanList(normalized);
   };
 
   const createCodeOcrCanvas = (
@@ -980,6 +1055,14 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     }));
   };
 
+  const addScannedCodes = async (reviewEntries: ScanReviewEntry[]) => {
+    const codes = reviewEntries.flatMap((item) => Array.from({ length: item.count }, () => item.rawValues[0]));
+    await markCodes(codes);
+    setScanReviewItems(reviewEntries);
+    setScanReviewMode("summary");
+    clearScannedCodes();
+  };
+
   const confirmScannedCodes = async () => {
     if (scannedCodes.length === 0) {
       setError("Nenhum codigo detectado para adicionar.");
@@ -988,18 +1071,52 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
 
     setError(null);
     setCodeResult(null);
+    setScanReviewItems(buildScanReviewEntries());
+    setScanReviewMode("confirm");
+  };
+
+  const updateScanReviewQuantity = (key: string, value: number) => {
+    const count = Math.max(1, Math.min(99, Math.round(value) || 1));
+    setScanReviewItems((current) =>
+      current.map((item) => item.key === key ? { ...item, count } : item)
+    );
+  };
+
+  const confirmReviewCodes = async () => {
+    setError(null);
+    setCodeResult(null);
     setScanConfirming(true);
     try {
-      const reviewEntries = buildScanReviewEntries();
-      const codes = scannedCodes.flatMap((item) => Array.from({ length: item.count }, () => item.rawValue));
-      await markCodes(codes);
-      setScanReviewItems(reviewEntries);
-      clearScannedCodes();
+      await addScannedCodes(scanReviewItems);
     } catch (err: any) {
       setError(err.message || "Erro ao adicionar os codigos detectados.");
     } finally {
       setScanConfirming(false);
     }
+  };
+
+  const cancelRepeatedCodes = () => {
+    setScanReviewItems([]);
+    setScanReviewMode("summary");
+  };
+
+  const openManualCode = () => {
+    setManualCodeValue("");
+    setManualCodeOpen(true);
+  };
+
+  const addManualCode = () => {
+    const code = getStickerCodesFromOcrText(manualCodeValue)[0] || normalizeOcrCodeText(manualCodeValue);
+    const normalized = getStickerCodesFromOcrText(code)[0] || code;
+    if (!getStickerCodesFromOcrText(normalized).length && !findStickerForScannedCode(normalized)) {
+      setError("Codigo manual invalido. Usa formato como GER 3 ou CUW 15.");
+      return;
+    }
+
+    setError(null);
+    addCodeToScanList(normalized);
+    setManualCodeValue("");
+    setManualCodeOpen(false);
   };
 
   const detectedTotal = scannedCodes.reduce((total, item) => total + item.count, 0);
@@ -1055,7 +1172,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
         <div className="scanner-live-list">
           {scannedCodes.length > 0 && (
             scannedCodes.map((item, index) => {
-              const flagCode = getStickerFlagCode(item.sticker);
+              const flagCode = getFlagCodeForScannedItem(item);
               const chipTone = index % 3 === 0 ? "green" : index % 3 === 1 ? "blue" : "gold";
 
               return (
@@ -1086,6 +1203,9 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
           <button className="scanner-live-add" type="button" onClick={confirmScannedCodes} disabled={scannedCodes.length === 0 || scanConfirming}>
             <Plus size={26} /> {scanConfirming ? "A adicionar..." : `Adicionar (${detectedTotal}) detectadas`}
           </button>
+          <button className="scanner-live-manual" type="button" onClick={openManualCode}>
+            <Plus size={22} /> Adicionar manualmente
+          </button>
         </div>
       </section>
 
@@ -1094,10 +1214,16 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
           <div className="scanner-review-panel">
             <header className="scanner-review-header">
               <div>
-                <h3 id="scanner-review-title">Cromos adicionados</h3>
-                <p>{scanReviewTotal} cromo{scanReviewTotal === 1 ? "" : "s"} processado{scanReviewTotal === 1 ? "" : "s"}.</p>
+                <h3 id="scanner-review-title">{scanReviewMode === "confirm" ? "Confirmar cromos" : "Cromos adicionados"}</h3>
+                <p>
+                  {scanReviewMode === "confirm"
+                    ? (scanReviewRepeated.length > 0
+                      ? "Existem repetidos. Confirma os cromos e corrige a quantidade antes de adicionar."
+                      : "Confirma os cromos e corrige a quantidade antes de adicionar.")
+                    : `${scanReviewTotal} cromo${scanReviewTotal === 1 ? "" : "s"} processado${scanReviewTotal === 1 ? "" : "s"}.`}
+                </p>
               </div>
-              <button className="scanner-live-close" type="button" onClick={() => setScanReviewItems([])} aria-label="Fechar resumo">
+              <button className="scanner-live-close" type="button" onClick={cancelRepeatedCodes} aria-label="Fechar resumo">
                 <X size={24} />
               </button>
             </header>
@@ -1108,12 +1234,16 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
                 emptyText="Nenhum cromo novo nesta leitura."
                 items={scanReviewNew}
                 tone="new"
+                editable={scanReviewMode === "confirm"}
+                onQuantityChange={updateScanReviewQuantity}
               />
               <ScanReviewSection
                 title="Repetidos"
                 emptyText="Nenhum repetido nesta leitura."
                 items={scanReviewRepeated}
                 tone="repeated"
+                editable={scanReviewMode === "confirm"}
+                onQuantityChange={updateScanReviewQuantity}
               />
               {scanReviewUnknown.length > 0 && (
                 <ScanReviewSection
@@ -1121,13 +1251,62 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
                   emptyText="Todos os codigos foram encontrados."
                   items={scanReviewUnknown}
                   tone="unknown"
+                  editable={scanReviewMode === "confirm"}
+                  onQuantityChange={updateScanReviewQuantity}
                 />
               )}
             </div>
 
             <div className="scanner-review-actions">
-              <button className="btn btn-primary" type="button" onClick={() => setScanReviewItems([])}>
-                Fechar
+              {scanReviewMode === "confirm" ? (
+                <>
+                  <button className="btn btn-secondary" type="button" onClick={cancelRepeatedCodes} disabled={scanConfirming}>
+                    Cancelar
+                  </button>
+                  <button className="btn btn-primary" type="button" onClick={confirmReviewCodes} disabled={scanConfirming}>
+                    {scanConfirming ? "A adicionar..." : "Confirmar"}
+                  </button>
+                </>
+              ) : (
+                <button className="btn btn-primary" type="button" onClick={cancelRepeatedCodes}>
+                  Fechar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {manualCodeOpen && (
+        <div className="scanner-review-overlay" role="dialog" aria-modal="true" aria-labelledby="scanner-manual-title">
+          <div className="scanner-manual-panel">
+            <header className="scanner-review-header">
+              <div>
+                <h3 id="scanner-manual-title">Adicionar manualmente</h3>
+                <p>Escreve o codigo do verso do cromo.</p>
+              </div>
+              <button className="scanner-live-close" type="button" onClick={() => setManualCodeOpen(false)} aria-label="Fechar adicionar manualmente">
+                <X size={24} />
+              </button>
+            </header>
+            <label className="scanner-manual-field">
+              <span>Codigo</span>
+              <input
+                value={manualCodeValue}
+                onChange={(event) => setManualCodeValue(event.target.value.toUpperCase())}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") addManualCode();
+                }}
+                placeholder="Ex: GER 3"
+                autoFocus
+              />
+            </label>
+            <div className="scanner-review-actions">
+              <button className="btn btn-secondary" type="button" onClick={() => setManualCodeOpen(false)}>
+                Cancelar
+              </button>
+              <button className="btn btn-primary" type="button" onClick={addManualCode}>
+                Adicionar
               </button>
             </div>
           </div>
@@ -1160,11 +1339,15 @@ export function ScanReviewSection({
   emptyText,
   items,
   tone,
+  editable = false,
+  onQuantityChange,
 }: {
   title: string;
   emptyText: string;
   items: ScanReviewEntry[];
   tone: "new" | "repeated" | "unknown";
+  editable?: boolean;
+  onQuantityChange?: (key: string, value: number) => void;
 }) {
   return (
     <section className={`scanner-review-section ${tone}`}>
@@ -1174,7 +1357,7 @@ export function ScanReviewSection({
       ) : (
         <ul>
           {items.map((item) => {
-            const flagCode = getStickerFlagCode(item.sticker);
+            const flagCode = getFlagCodeForScannedItem(item);
 
             return (
               <li key={item.key}>
@@ -1195,6 +1378,18 @@ export function ScanReviewSection({
                     <small>Confirma a colecao ou escreve o codigo manualmente.</small>
                   )}
                 </div>
+                {editable && (
+                  <label className="scanner-review-quantity">
+                    <span>Qtd</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="99"
+                      value={item.count}
+                      onChange={(event) => onQuantityChange?.(item.key, Number(event.target.value))}
+                    />
+                  </label>
+                )}
               </li>
             );
           })}
