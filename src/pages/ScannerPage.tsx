@@ -558,7 +558,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     try {
       if (!user?.id) return;
       const [collectionsRes, preferencesRes, allStickers, ownStickers] = await Promise.all([
-        supabase.from("collections").select("id, name").order("created_at", { ascending: false }),
+        supabase.from("collections").select("id, name").order("name", { ascending: true }),
         supabase.from("user_collection_preferences").select("collection_id, is_active").eq("user_id", user.id),
         fetchAllStickers(),
         fetchUserStickers(user.id),

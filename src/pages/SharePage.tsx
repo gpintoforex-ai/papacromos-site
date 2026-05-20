@@ -349,7 +349,7 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
       const [friendData, myData, collectionsData] = await Promise.all([
         fetchUserStickerRows(sharedUserId),
         fetchUserStickerRows(user.id),
-        supabase.from("collections").select("id, name, description, total_stickers").order("created_at", { ascending: false }),
+        supabase.from("collections").select("id, name, description, total_stickers").order("name", { ascending: true }),
       ]);
 
       if (collectionsData.error) throw collectionsData.error;

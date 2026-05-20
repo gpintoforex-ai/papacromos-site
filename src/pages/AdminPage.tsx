@@ -158,7 +158,7 @@ export default function AdminPage() {
 
     try {
       const [collectionsRes, usersRes] = await Promise.all([
-        supabase.from("collections").select("*").order("created_at", { ascending: false }),
+        supabase.from("collections").select("*").order("name", { ascending: true }),
         supabase
           .from("user_profiles")
           .select("id, username, email, phone, city, is_admin, is_blocked, created_at")

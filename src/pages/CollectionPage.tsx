@@ -1102,7 +1102,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       }
 
       const [collectionsRes, preferencesRes, allStickers, allUserStickers] = await Promise.all([
-        supabase.from("collections").select("*").order("created_at", { ascending: false }),
+        supabase.from("collections").select("*").order("name", { ascending: true }),
         supabase.from("user_collection_preferences").select("collection_id, is_active").eq("user_id", user.id),
         fetchAllStickers(),
         fetchUserStickers(user.id),
