@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ClipboardCheck, ScanLine, X } from "lucide-react";
+import { Camera, HelpCircle, Plus, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 
@@ -372,7 +372,7 @@ async function fetchUserStickers(userId: string) {
   return allUserStickers;
 }
 
-export default function ScannerPage({ onCollectionChange }: { onCollectionChange?: () => void }) {
+export default function ScannerPage({ onCollectionChange, onClose }: { onCollectionChange?: () => void; onClose?: () => void }) {
   const { user } = useAuth();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [stickers, setStickers] = useState<Sticker[]>([]);
@@ -383,9 +383,9 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
   const [codeReading, setCodeReading] = useState(false);
   const [codeResult, setCodeResult] = useState<string | null>(null);
   const [scannedCodes, setScannedCodes] = useState<ScannedCodeItem[]>([]);
-  const [scanReviewOpen, setScanReviewOpen] = useState(false);
   const [scanConfirming, setScanConfirming] = useState(false);
-  const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null);
+  const [scannerHelpOpen, setScannerHelpOpen] = useState(false);
+  const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const codeVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -741,7 +741,6 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       }
 
       stopCodeScanner();
-      setCapturedImageUrl(null);
       void prepareCodeOcrWorker();
       const video = codeVideoRef.current;
       if (!video) throw new Error("Nao consegui abrir o leitor de codigos.");
@@ -798,11 +797,9 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
       if (!context) throw new Error("Nao consegui preparar a imagem capturada.");
 
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      setCapturedImageUrl(canvas.toDataURL("image/jpeg", 0.86));
-      stopCodeScanner({ keepWorker: true });
-
       const canvases = buildCodeOcrCanvasesFromSource(canvas, canvas.width, canvas.height, true);
       const detectedCount = await recognizeCodeCanvases(canvases);
+      setLastReadAt(new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       if (detectedCount === 0) {
         setError("Nao encontrei codigos nesta captura. Aproxima mais os cantos com os codigos e evita reflexos.");
       }
@@ -816,18 +813,15 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
 
   const clearScannedCodes = () => {
     setScannedCodes([]);
-    setScanReviewOpen(false);
     codeLastSeenAtRef.current.clear();
     setCodeText("");
     setCodeResult(null);
-    setCapturedImageUrl(null);
   };
 
   const removeScannedCode = (rawValue: string) => {
     setScannedCodes((current) => current.filter((item) => item.rawValue !== rawValue));
     codeLastSeenAtRef.current.delete(rawValue);
     if (codeText === rawValue) setCodeText("");
-    setScanReviewOpen(false);
   };
 
   const markCodes = async (codes: string[]) => {
@@ -892,42 +886,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
     setCodeResult(`${countByStickerId.size} cromo${countByStickerId.size === 1 ? "" : "s"} marcado${countByStickerId.size === 1 ? "" : "s"}.`);
   };
 
-  const getExistingHaveQuantity = (stickerId: string) => {
-    return userStickers.find((userSticker) =>
-      userSticker.user_id === user?.id &&
-      userSticker.sticker_id === stickerId &&
-      userSticker.status === "have"
-    )?.quantity || 0;
-  };
-
-  const buildScanReviewEntries = () => {
-    const grouped = new Map<string, ScanReviewEntry>();
-
-    scannedCodes.forEach((item) => {
-      const sticker = item.sticker || findStickerForScannedCode(item.rawValue);
-      const key = sticker ? sticker.id : `unknown:${item.rawValue}`;
-      const existing = grouped.get(key);
-      if (existing) {
-        existing.count += item.count;
-        if (!existing.rawValues.includes(item.rawValue)) {
-          existing.rawValues.push(item.rawValue);
-        }
-        return;
-      }
-
-      grouped.set(key, {
-        key,
-        rawValues: [item.rawValue],
-        sticker,
-        count: item.count,
-        existingQuantity: sticker ? getExistingHaveQuantity(sticker.id) : 0,
-      });
-    });
-
-    return Array.from(grouped.values());
-  };
-
-  const openScannedCodesReview = () => {
+  const confirmScannedCodes = async () => {
     if (scannedCodes.length === 0) {
       setError("Nenhum codigo detectado para adicionar.");
       return;
@@ -935,18 +894,11 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
 
     setError(null);
     setCodeResult(null);
-    setScanReviewOpen(true);
-  };
-
-  const confirmScannedCodes = async () => {
-    setError(null);
-    setCodeResult(null);
     setScanConfirming(true);
     try {
       const codes = scannedCodes.flatMap((item) => Array.from({ length: item.count }, () => item.rawValue));
       await markCodes(codes);
       clearScannedCodes();
-      stopCodeScanner();
     } catch (err: any) {
       setError(err.message || "Erro ao adicionar os codigos detectados.");
     } finally {
@@ -954,19 +906,36 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
     }
   };
 
-  const scanReviewEntries = scanReviewOpen ? buildScanReviewEntries() : [];
-  const newScanReviewEntries = scanReviewEntries.filter((item) => item.sticker && item.existingQuantity <= 0);
-  const repeatedScanReviewEntries = scanReviewEntries.filter((item) => item.sticker && item.existingQuantity > 0);
-  const unknownScanReviewEntries = scanReviewEntries.filter((item) => !item.sticker);
+  const detectedTotal = scannedCodes.reduce((total, item) => total + item.count, 0);
+  const handleClose = () => {
+    stopCodeScanner();
+    onClose?.();
+  };
 
   return (
-    <div className="scanner-page">
-      <section className="collection-header scanner-header">
+    <div className="scanner-page scanner-live-page">
+      <header className="scanner-live-header">
         <div>
-          <h2>Scanner</h2>
-          <p>Le codigos dos cromos e adiciona-os diretamente a colecao escolhida.</p>
+          <strong>Scanner OCR</strong>
+          <span>Aponte para as figurinhas</span>
         </div>
-        <label className="scanner-collection-picker">
+        <button className="scanner-live-close" type="button" onClick={handleClose} aria-label="Fechar scanner">
+          <X size={28} />
+        </button>
+      </header>
+
+      <section className="scanner-live-camera">
+        <video ref={codeVideoRef} muted playsInline />
+        {!codeScanning && <span className="code-scan-empty">Camara desligada</span>}
+        {codeScanning && <div className="code-scan-line" />}
+        {codeReading && <span className="code-scan-status">A ler texto...</span>}
+        <button className="scanner-help-btn" type="button" onClick={() => setScannerHelpOpen(true)} aria-label="Como usar o scanner">
+          <HelpCircle size={24} />
+        </button>
+      </section>
+
+      <section className="scanner-live-body">
+        <label className="scanner-collection-picker scanner-live-picker">
           <span>Colecao</span>
           <select value={selectedCollectionId} onChange={(event) => setSelectedCollectionId(event.target.value)} disabled={loading || codeScanning}>
             {collections.map((collection) => (
@@ -974,137 +943,68 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
             ))}
           </select>
         </label>
-      </section>
 
-      {error && <p className="error-message">{error}</p>}
-      {codeResult && <p className="success-text">{codeResult}</p>}
-
-      <section className="code-scan-panel scanner-panel">
-        <div className="voice-mark-header">
-          <div>
-            <strong>Scanner OCR</strong>
-            <span>Aponta para o codigo no canto do cromo, por exemplo ALG 7, CPV 10 ou COD 13.</span>
-          </div>
+        <div className="scanner-live-summary" role="status" aria-live="polite">
+          <strong>{detectedTotal} figurinha(s) detectada(s)</strong>
+          <span>{lastReadAt ? `Ultima leitura: ${lastReadAt}` : "Aguardando leitura"}</span>
         </div>
-        <div className="code-scan-reader">
-          {capturedImageUrl && !codeScanning ? (
-            <img className="code-scan-capture" src={capturedImageUrl} alt="Imagem capturada para leitura" />
+
+        {error && <p className="scanner-live-message error">{error}</p>}
+        {codeResult && <p className="scanner-live-message success">{codeResult}</p>}
+
+        <div className="scanner-live-list">
+          {scannedCodes.length === 0 ? (
+            <p>Aponte a camara para os codigos e toque em Capturar e Ler.</p>
           ) : (
-            <video ref={codeVideoRef} muted playsInline />
+            scannedCodes.map((item, index) => {
+              const flagCode = getStickerFlagCode(item.sticker);
+              const chipTone = index % 3 === 0 ? "green" : index % 3 === 1 ? "blue" : "gold";
+
+              return (
+                <button
+                  className={`scanner-live-chip ${chipTone}`}
+                  type="button"
+                  key={item.rawValue}
+                  onClick={() => removeScannedCode(item.rawValue)}
+                  title="Remover detectada"
+                >
+                  {flagCode && <img src={getFlagUrl(flagCode)} alt="" loading="lazy" aria-hidden="true" />}
+                  <span>
+                    {item.rawValue}
+                    {item.sticker ? ` - ${getStickerDisplayName(item.sticker)}` : " - Sem correspondencia"}
+                    {item.count > 1 ? ` x${item.count}` : ""}
+                  </span>
+                  <X size={16} />
+                </button>
+              );
+            })
           )}
-          {!codeScanning && !capturedImageUrl && <span className="code-scan-empty">Camara desligada</span>}
-          {codeScanning && <div className="code-scan-line" />}
-          {codeReading && <span className="code-scan-status">A ler texto...</span>}
         </div>
 
-        {scannedCodes.length > 0 && (
-          <div className="code-scan-detected">
-            <strong>{scannedCodes.reduce((total, item) => total + item.count, 0)} figurinha(s) detectada(s)</strong>
-            <ul>
-              {scannedCodes.map((item) => (
-                <li key={item.rawValue}>
-                  <span className="code-scan-chip">{item.rawValue}{item.count > 1 ? ` x${item.count}` : ""}</span>
-                  {item.sticker ? (
-                    <span className="scanner-detected-name">
-                      {getStickerFlagCode(item.sticker) && (
-                        <img src={getFlagUrl(getStickerFlagCode(item.sticker))} alt="" loading="lazy" aria-hidden="true" />
-                      )}
-                      <span>- {getStickerDisplayName(item.sticker)}</span>
-                    </span>
-                  ) : (
-                    <span className="scanner-detected-name">Sem correspondencia</span>
-                  )}
-                  <button
-                    className="code-scan-remove"
-                    type="button"
-                    onClick={() => removeScannedCode(item.rawValue)}
-                    title="Remover detectado"
-                    aria-label={`Remover ${item.rawValue}`}
-                  >
-                    <X size={14} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="code-scan-actions">
-          <input
-            type="text"
-            value={codeText}
-            placeholder="Ex.: CPV 10"
-            onChange={(event) => setCodeText(event.target.value)}
-          />
-          <button className="btn btn-code-toggle btn-sm" type="button" onClick={startCodeScanner} disabled={codeScanning || !selectedCollectionId}>
-            <ScanLine size={14} /> {codeScanning ? "Scanner ativo" : "Abrir scanner"}
+        <div className="scanner-live-actions">
+          <button className="scanner-live-capture" type="button" onClick={captureCodeFrame} disabled={!codeScanning || codeReading}>
+            <Camera size={24} /> {codeReading ? "A ler..." : "Capturar e Ler"}
           </button>
-          <button className="btn btn-primary btn-sm" type="button" onClick={captureCodeFrame} disabled={!codeScanning || codeReading}>
-            <ScanLine size={14} /> Capturar agora
-          </button>
-          {codeScanning && (
-            <button className="btn btn-ghost btn-sm" type="button" onClick={() => stopCodeScanner()}>
-              Parar
-            </button>
-          )}
-          <button className="btn btn-primary btn-sm" type="button" onClick={openScannedCodesReview} disabled={scannedCodes.length === 0}>
-            <ClipboardCheck size={14} /> Adicionar detectadas ({scannedCodes.reduce((total, item) => total + item.count, 0)})
+          <button className="scanner-live-add" type="button" onClick={confirmScannedCodes} disabled={scannedCodes.length === 0 || scanConfirming}>
+            <Plus size={26} /> {scanConfirming ? "A adicionar..." : `Adicionar (${detectedTotal}) detectadas`}
           </button>
         </div>
       </section>
 
-      {scanReviewOpen && (
-        <div className="scanner-review-overlay" role="dialog" aria-modal="true" aria-labelledby="scanner-review-title">
-          <div className="scanner-review-panel">
-            <div className="scanner-review-header">
-              <div>
-                <h3 id="scanner-review-title">Revisao antes de introduzir</h3>
-                <p>Confirma os cromos detectados antes de gravar na tua colecao.</p>
-              </div>
-              <button
-                className="code-scan-remove"
-                type="button"
-                onClick={() => setScanReviewOpen(false)}
-                title="Fechar revisao"
-                aria-label="Fechar revisao"
-                disabled={scanConfirming}
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            <div className="scanner-review-grid">
-              <ScanReviewSection
-                title={`Novos (${newScanReviewEntries.reduce((total, item) => total + item.count, 0)})`}
-                emptyText="Nenhum cromo novo."
-                items={newScanReviewEntries}
-                tone="new"
-              />
-              <ScanReviewSection
-                title={`Repetidos (${repeatedScanReviewEntries.reduce((total, item) => total + item.count, 0)})`}
-                emptyText="Nenhum repetido."
-                items={repeatedScanReviewEntries}
-                tone="repeated"
-              />
-            </div>
-
-            {unknownScanReviewEntries.length > 0 && (
-              <ScanReviewSection
-                title={`Sem correspondencia (${unknownScanReviewEntries.reduce((total, item) => total + item.count, 0)})`}
-                emptyText=""
-                items={unknownScanReviewEntries}
-                tone="unknown"
-              />
-            )}
-
-            <div className="scanner-review-actions">
-              <button className="btn btn-primary btn-sm" type="button" onClick={confirmScannedCodes} disabled={scanConfirming}>
-                <ClipboardCheck size={14} /> {scanConfirming ? "A introduzir..." : "Confirmar introducao"}
-              </button>
-              <button className="btn btn-ghost btn-sm" type="button" onClick={() => setScanReviewOpen(false)} disabled={scanConfirming}>
-                Voltar
-              </button>
-            </div>
+      {scannerHelpOpen && (
+        <div className="scanner-help-overlay" role="dialog" aria-modal="true" aria-labelledby="scanner-help-title">
+          <div className="scanner-help-panel">
+            <button className="scanner-live-close scanner-help-close" type="button" onClick={() => setScannerHelpOpen(false)} aria-label="Fechar ajuda">
+              <X size={28} />
+            </button>
+            <h2 id="scanner-help-title">Como usar o Scanner</h2>
+            <ol>
+              <li>Aponte a camara para o numero no verso da figurinha que deseja escanear.</li>
+              <li>Quando estiver pronto, toque em Capturar e Ler.</li>
+              <li>A figurinha sera marcada na lista quando for identificada.</li>
+              <li>Revise os itens detectados. Toque em uma figurinha detectada para remove-la, se necessario.</li>
+              <li>Ao finalizar, toque em Adicionar Detectadas para enviar tudo ao seu album.</li>
+            </ol>
           </div>
         </div>
       )}
@@ -1112,7 +1012,7 @@ export default function ScannerPage({ onCollectionChange }: { onCollectionChange
   );
 }
 
-function ScanReviewSection({
+export function ScanReviewSection({
   title,
   emptyText,
   items,

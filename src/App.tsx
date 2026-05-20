@@ -154,7 +154,7 @@ function AppContent() {
             }}
           />
         )}
-        {page === "scanner" && <ScannerPage onCollectionChange={refreshMatchCount} />}
+        {page === "scanner" && <ScannerPage onCollectionChange={refreshMatchCount} onClose={() => setPage("collection")} />}
         {page === "matches" && <MatchesPage onMatchesChange={setMatchCount} />}
         {page === "trades" && <TradesPage onPendingTradeCountChange={setPendingTradeCount} />}
         {page === "share" && <SharePage sharedUserId={sharedUserId} onOpenSharedUser={setSharedUserId} />}
