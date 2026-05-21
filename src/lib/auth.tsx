@@ -1,13 +1,15 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "./supabase";
-import type { User } from "@supabase/supabase-js";
+import type { Provider, User } from "@supabase/supabase-js";
 
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithProvider: (provider: Provider) => Promise<void>;
   signUp: (profile: SignUpProfile) => Promise<SignUpResult>;
+  updateProfileDetails: (details: ProfileDetailsUpdate) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -38,12 +40,19 @@ interface SignUpResult {
   needsEmailConfirmation: boolean;
 }
 
+interface ProfileDetailsUpdate {
+  phone: string;
+  city: string;
+}
+
 const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   loading: true,
   signIn: async () => {},
+  signInWithProvider: async () => {},
   signUp: async () => ({ needsEmailConfirmation: false }),
+  updateProfileDetails: async () => {},
   signOut: async () => {},
 });
 
@@ -104,6 +113,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
+  const signInWithProvider = async (provider: Provider) => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    if (error) throw error;
+  };
+
   const signUp = async ({ firstName, lastName, username, email, password, phone, city }: SignUpProfile) => {
     const cleanFirstName = firstName.trim();
     const cleanLastName = lastName.trim();
@@ -146,6 +165,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const updateProfileDetails = async ({ phone, city }: ProfileDetailsUpdate) => {
+    if (!user?.id || !profile) throw new Error("Sessao invalida.");
+
+    const cleanPhone = phone.trim();
+    const cleanCity = city.trim();
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({ phone: cleanPhone, city: cleanCity })
+      .eq("id", user.id);
+    if (error) throw error;
+
+    setProfile({ ...profile, phone: cleanPhone, city: cleanCity });
+  };
+
   const createOrUpdateProfile = async (currentUser: User) => {
     const userId = currentUser.id;
     const metadata = currentUser.user_metadata || {};
@@ -175,9 +208,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       existing = fallback.data;
     }
 
-    const firstName = String(metadata.first_name || (supportsNameFields ? existing?.first_name : "") || "").trim();
-    const lastName = String(metadata.last_name || (supportsNameFields ? existing?.last_name : "") || "").trim();
-    const username = String(metadata.username || existing?.username || email.split("@")[0] || "utilizador").trim();
+    const fullName = String(metadata.full_name || metadata.name || "").trim();
+    const [oauthFirstName = "", ...oauthLastNameParts] = fullName.split(/\s+/).filter(Boolean);
+    const firstName = String(metadata.first_name || (supportsNameFields ? existing?.first_name : "") || oauthFirstName || "").trim();
+    const lastName = String(metadata.last_name || (supportsNameFields ? existing?.last_name : "") || oauthLastNameParts.join(" ") || "").trim();
+    const username = String(metadata.username || existing?.username || fullName || email.split("@")[0] || "utilizador").trim();
     const phone = String(metadata.phone || existing?.phone || "").trim();
     const city = String(metadata.city || existing?.city || "").trim();
     const avatarSeed = username;
@@ -260,7 +295,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signInWithProvider, signUp, updateProfileDetails, signOut }}>
       {children}
     </AuthContext.Provider>
   );

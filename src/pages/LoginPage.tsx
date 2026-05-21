@@ -3,6 +3,7 @@ import { BookOpen, Repeat2, ShieldCheck, UserRound, Users } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import LegalFooter from "../components/LegalFooter";
 import { supabase } from "../lib/supabase";
+import type { Provider } from "@supabase/supabase-js";
 
 const locationOptions = {
   Portugal: {
@@ -56,7 +57,7 @@ function getAuthErrorMessage(error: any) {
 }
 
 export default function LoginPage() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signInWithProvider, signUp } = useAuth();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
@@ -67,6 +68,7 @@ export default function LoginPage() {
   const [city, setCity] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<Provider | null>(null);
   const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -149,6 +151,28 @@ export default function LoginPage() {
     if (e.key === "Enter") handleAuth();
   };
 
+  const handleOAuth = async (provider: Provider) => {
+    if (isSignUp && !acceptedTerms) {
+      setMissingFields(["terms"]);
+      setError("Aceita os Termos e Condicoes para continuar.");
+      setSuccess(null);
+      return;
+    }
+
+    setOauthLoading(provider);
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    setMissingFields([]);
+    try {
+      await signInWithProvider(provider);
+    } catch (err: any) {
+      setError(getAuthErrorMessage(err));
+      setLoading(false);
+      setOauthLoading(null);
+    }
+  };
+
   const clearMissingField = (field: string) => {
     setMissingFields((current) => current.filter((item) => item !== field));
   };
@@ -229,6 +253,18 @@ export default function LoginPage() {
             <Users size={18} />
             <span>Troca cromos com outros</span>
           </div>
+        </div>
+
+        <div className="login-oauth">
+          <button className="oauth-button google" type="button" onClick={() => handleOAuth("google")} disabled={loading || Boolean(oauthLoading)}>
+            <span aria-hidden="true">G</span>
+            {oauthLoading === "google" ? "A abrir Google..." : isSignUp ? "Registar com Google" : "Entrar com Google"}
+          </button>
+          <button className="oauth-button facebook" type="button" onClick={() => handleOAuth("facebook")} disabled={loading || Boolean(oauthLoading)}>
+            <span aria-hidden="true">f</span>
+            {oauthLoading === "facebook" ? "A abrir Facebook..." : isSignUp ? "Registar com Facebook" : "Entrar com Facebook"}
+          </button>
+          <div className="login-divider"><span>ou</span></div>
         </div>
 
         <div className="login-form">

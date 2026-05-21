@@ -11,6 +11,7 @@ import SupportPage from "./pages/SupportPage";
 import ScannerPage from "./pages/ScannerPage";
 import CookieConsent from "./components/CookieConsent";
 import InstallAppPrompt from "./components/InstallAppPrompt";
+import ProfileCompletionGate from "./components/ProfileCompletionGate";
 import { useEffect, useState } from "react";
 import { countUniqueRequestedStickers, findUserMatches } from "./lib/matches";
 import { supabase } from "./lib/supabase";
@@ -19,7 +20,7 @@ import { setupPushNotifications } from "./lib/pushNotifications";
 type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const [page, setPage] = useState<Page>("collection");
   const [collectionHomeKey, setCollectionHomeKey] = useState(0);
   const [matchCount, setMatchCount] = useState(0);
@@ -136,6 +137,15 @@ function AppContent() {
       <>
         <LoginPage />
         <InstallAppPrompt />
+        <CookieConsent />
+      </>
+    );
+  }
+
+  if (profile && (!profile.phone?.trim() || !profile.city?.trim())) {
+    return (
+      <>
+        <ProfileCompletionGate />
         <CookieConsent />
       </>
     );
