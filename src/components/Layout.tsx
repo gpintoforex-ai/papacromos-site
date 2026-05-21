@@ -172,6 +172,10 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                       <dd>{profile?.phone || "-"}</dd>
                     </div>
                     <div>
+                      <dt>Distrito</dt>
+                      <dd>{profile?.region || "-"}</dd>
+                    </div>
+                    <div>
                       <dt>Cidade</dt>
                       <dd>{profile?.city || "-"}</dd>
                     </div>
@@ -185,7 +189,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                     </div>
                     <div>
                       <dt>vr</dt>
-                      <dd>2026.13</dd>
+                      <dd>2026.14</dd>
                     </div>
                   </dl>
                   {accountError && <p className="profile-error">{accountError}</p>}
@@ -262,6 +266,10 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
               <div>
                 <dt>Telefone</dt>
                 <dd>{profile?.phone || "-"}</dd>
+              </div>
+              <div>
+                <dt>Distrito</dt>
+                <dd>{profile?.region || "-"}</dd>
               </div>
               <div>
                 <dt>Cidade</dt>

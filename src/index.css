@@ -1431,6 +1431,12 @@ textarea {
   gap: 10px;
 }
 
+.login-oauth-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .oauth-button {
   min-height: 44px;
   display: inline-flex;
@@ -1446,6 +1452,8 @@ textarea {
   font-weight: 850;
   cursor: pointer;
   transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .oauth-button:hover:not(:disabled) {
@@ -3321,6 +3329,7 @@ textarea {
 }
 
 .scanner-review-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3332,6 +3341,94 @@ textarea {
   background: var(--bg-elevated);
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
   overflow: auto;
+}
+
+.scanner-review-panel > *:not(.scanner-confetti) {
+  position: relative;
+  z-index: 1;
+}
+
+.scanner-confetti {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.scanner-confetti span {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  width: 7px;
+  height: 12px;
+  border-radius: 2px;
+  background: #22c55e;
+  opacity: 0;
+  animation: scanner-confetti-fall 1.55s ease-out forwards;
+}
+
+.scanner-confetti span:nth-child(3n) {
+  background: #0ea5e9;
+}
+
+.scanner-confetti span:nth-child(3n + 1) {
+  background: #f59e0b;
+}
+
+.scanner-confetti span:nth-child(odd) {
+  --confetti-drift: -34px;
+}
+
+.scanner-confetti span:nth-child(even) {
+  --confetti-drift: 34px;
+}
+
+.scanner-confetti span:nth-child(4n) {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #ef4444;
+}
+
+.scanner-confetti span:nth-child(1) { left: 8%; animation-delay: 0s; transform: rotate(18deg); }
+.scanner-confetti span:nth-child(2) { left: 14%; animation-delay: 0.05s; transform: rotate(-26deg); }
+.scanner-confetti span:nth-child(3) { left: 20%; animation-delay: 0.12s; transform: rotate(34deg); }
+.scanner-confetti span:nth-child(4) { left: 26%; animation-delay: 0.02s; transform: rotate(-44deg); }
+.scanner-confetti span:nth-child(5) { left: 31%; animation-delay: 0.16s; transform: rotate(12deg); }
+.scanner-confetti span:nth-child(6) { left: 37%; animation-delay: 0.08s; transform: rotate(-18deg); }
+.scanner-confetti span:nth-child(7) { left: 43%; animation-delay: 0.2s; transform: rotate(42deg); }
+.scanner-confetti span:nth-child(8) { left: 48%; animation-delay: 0.04s; transform: rotate(-32deg); }
+.scanner-confetti span:nth-child(9) { left: 53%; animation-delay: 0.14s; transform: rotate(24deg); }
+.scanner-confetti span:nth-child(10) { left: 59%; animation-delay: 0.01s; transform: rotate(-12deg); }
+.scanner-confetti span:nth-child(11) { left: 64%; animation-delay: 0.18s; transform: rotate(38deg); }
+.scanner-confetti span:nth-child(12) { left: 69%; animation-delay: 0.07s; transform: rotate(-40deg); }
+.scanner-confetti span:nth-child(13) { left: 74%; animation-delay: 0.22s; transform: rotate(16deg); }
+.scanner-confetti span:nth-child(14) { left: 80%; animation-delay: 0.1s; transform: rotate(-22deg); }
+.scanner-confetti span:nth-child(15) { left: 86%; animation-delay: 0.15s; transform: rotate(30deg); }
+.scanner-confetti span:nth-child(16) { left: 92%; animation-delay: 0.03s; transform: rotate(-34deg); }
+.scanner-confetti span:nth-child(17) { left: 11%; animation-delay: 0.28s; transform: rotate(28deg); }
+.scanner-confetti span:nth-child(18) { left: 24%; animation-delay: 0.31s; transform: rotate(-16deg); }
+.scanner-confetti span:nth-child(19) { left: 35%; animation-delay: 0.25s; transform: rotate(48deg); }
+.scanner-confetti span:nth-child(20) { left: 46%; animation-delay: 0.34s; transform: rotate(-46deg); }
+.scanner-confetti span:nth-child(21) { left: 57%; animation-delay: 0.29s; transform: rotate(20deg); }
+.scanner-confetti span:nth-child(22) { left: 68%; animation-delay: 0.36s; transform: rotate(-28deg); }
+.scanner-confetti span:nth-child(23) { left: 79%; animation-delay: 0.27s; transform: rotate(36deg); }
+.scanner-confetti span:nth-child(24) { left: 90%; animation-delay: 0.33s; transform: rotate(-20deg); }
+
+@keyframes scanner-confetti-fall {
+  0% {
+    opacity: 0;
+    translate: 0 0;
+  }
+  12% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    translate: var(--confetti-drift, 0) 260px;
+    rotate: 280deg;
+  }
 }
 
 .scanner-review-header {

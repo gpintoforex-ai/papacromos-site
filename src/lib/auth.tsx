@@ -19,6 +19,7 @@ interface UserProfile {
   username: string;
   email: string | null;
   phone: string | null;
+  region: string | null;
   city: string | null;
   avatar_seed: string;
   is_admin: boolean;
@@ -33,6 +34,7 @@ interface SignUpProfile {
   email: string;
   password: string;
   phone: string;
+  region: string;
   city: string;
 }
 
@@ -42,6 +44,7 @@ interface SignUpResult {
 
 interface ProfileDetailsUpdate {
   phone: string;
+  region: string;
   city: string;
 }
 
@@ -63,6 +66,30 @@ const adminEmails = (import.meta.env.VITE_ADMIN_EMAILS || "admin@admin.pt")
 
 function isBootstrapAdmin(email: string) {
   return adminEmails.includes(email.trim().toLowerCase());
+}
+
+function normalizePhone(phone: string) {
+  return phone.replace(/\D/g, "");
+}
+
+async function ensurePhoneAvailable(phone: string, currentUserId?: string) {
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) return;
+
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("id, phone")
+    .not("phone", "is", null);
+  if (error) throw error;
+
+  const phoneOwner = (data || []).find((row: any) => {
+    if (currentUserId && row.id === currentUserId) return false;
+    return normalizePhone(row.phone || "") === normalizedPhone;
+  });
+
+  if (phoneOwner) {
+    throw new Error("Este telemovel ja esta associado a outra conta.");
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -123,13 +150,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
-  const signUp = async ({ firstName, lastName, username, email, password, phone, city }: SignUpProfile) => {
+  const signUp = async ({ firstName, lastName, username, email, password, phone, region, city }: SignUpProfile) => {
     const cleanFirstName = firstName.trim();
     const cleanLastName = lastName.trim();
     const cleanUsername = username.trim();
     const cleanEmail = email.trim();
     const cleanPhone = phone.trim();
+    const cleanRegion = region.trim();
     const cleanCity = city.trim();
+
+    await ensurePhoneAvailable(cleanPhone);
 
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
@@ -140,6 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           last_name: cleanLastName,
           username: cleanUsername,
           phone: cleanPhone,
+          region: cleanRegion,
           city: cleanCity,
         },
       },
@@ -165,18 +196,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
-  const updateProfileDetails = async ({ phone, city }: ProfileDetailsUpdate) => {
+  const updateProfileDetails = async ({ phone, region, city }: ProfileDetailsUpdate) => {
     if (!user?.id || !profile) throw new Error("Sessao invalida.");
 
     const cleanPhone = phone.trim();
+    const cleanRegion = region.trim();
     const cleanCity = city.trim();
+
+    await ensurePhoneAvailable(cleanPhone, user.id);
+
     const { error } = await supabase
       .from("user_profiles")
-      .update({ phone: cleanPhone, city: cleanCity })
+      .update({ phone: cleanPhone, region: cleanRegion, city: cleanCity })
       .eq("id", user.id);
     if (error) throw error;
 
-    setProfile({ ...profile, phone: cleanPhone, city: cleanCity });
+    setProfile({ ...profile, phone: cleanPhone, region: cleanRegion, city: cleanCity });
   };
 
   const createOrUpdateProfile = async (currentUser: User) => {
@@ -185,23 +220,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const email = currentUser.email || "";
 
     let supportsNameFields = true;
+    let supportsRegionField = true;
     let existing: any = null;
     const { data: selectedProfile, error: profileSelectError } = await supabase
       .from("user_profiles")
-      .select("id, first_name, last_name, username, email, phone, city, avatar_seed, is_admin, is_blocked, created_at")
+      .select("id, first_name, last_name, username, email, phone, region, city, avatar_seed, is_admin, is_blocked, created_at")
       .eq("id", userId)
       .maybeSingle();
     existing = selectedProfile;
 
     if (profileSelectError) {
       const message = String(profileSelectError.message || "").toLowerCase();
-      const nameFieldsMissing = message.includes("first_name") || message.includes("last_name") || profileSelectError.code === "42703" || profileSelectError.code === "PGRST204";
-      if (!nameFieldsMissing) throw profileSelectError;
+      const unknownColumnMissing = profileSelectError.code === "42703" || profileSelectError.code === "PGRST204";
+      const optionalFieldMissing = unknownColumnMissing || message.includes("first_name") || message.includes("last_name") || message.includes("region");
+      if (!optionalFieldMissing) throw profileSelectError;
 
-      supportsNameFields = false;
+      supportsNameFields = !unknownColumnMissing && !message.includes("first_name") && !message.includes("last_name");
+      supportsRegionField = !unknownColumnMissing && !message.includes("region");
+      const fallbackFields = [
+        "id",
+        ...(supportsNameFields ? ["first_name", "last_name"] : []),
+        "username",
+        "email",
+        "phone",
+        ...(supportsRegionField ? ["region"] : []),
+        "city",
+        "avatar_seed",
+        "is_admin",
+        "is_blocked",
+        "created_at",
+      ].join(", ");
       const fallback = await supabase
         .from("user_profiles")
-        .select("id, username, email, phone, city, avatar_seed, is_admin, is_blocked, created_at")
+        .select(fallbackFields)
         .eq("id", userId)
         .maybeSingle();
       if (fallback.error) throw fallback.error;
@@ -214,6 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const lastName = String(metadata.last_name || (supportsNameFields ? existing?.last_name : "") || oauthLastNameParts.join(" ") || "").trim();
     const username = String(metadata.username || existing?.username || fullName || email.split("@")[0] || "utilizador").trim();
     const phone = String(metadata.phone || existing?.phone || "").trim();
+    const region = String(metadata.region || (supportsRegionField ? existing?.region : "") || "").trim();
     const city = String(metadata.city || existing?.city || "").trim();
     const avatarSeed = username;
     const isAdmin = Boolean(existing?.is_admin) || isBootstrapAdmin(email);
@@ -230,11 +282,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         username,
         email,
         phone,
-        city,
         avatar_seed: avatarSeed,
         is_admin: isAdmin,
         is_blocked: false,
       };
+
+      if (supportsRegionField) {
+        insertProfile.region = region;
+      }
+
+      insertProfile.city = city;
 
       if (supportsNameFields) {
         insertProfile.first_name = firstName || null;
@@ -254,6 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         username,
         email,
         phone,
+        region,
         city,
         avatar_seed: avatarSeed,
         is_admin: isAdmin,
@@ -265,9 +323,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const profileUpdates: Record<string, any> = {
       email,
       phone,
-      city,
       ...(isAdmin && !existing.is_admin ? { is_admin: true } : {}),
     };
+
+    if (supportsRegionField) {
+      profileUpdates.region = region;
+    }
+
+    profileUpdates.city = city;
 
     if (supportsNameFields) {
       profileUpdates.first_name = firstName || null;
@@ -286,6 +349,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       last_name: lastName || null,
       email,
       phone,
+      region,
       city,
       avatar_seed: existing.avatar_seed || avatarSeed,
       is_admin: isAdmin,

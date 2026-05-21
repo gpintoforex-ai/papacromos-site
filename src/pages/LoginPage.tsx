@@ -4,31 +4,7 @@ import { useAuth } from "../lib/auth";
 import LegalFooter from "../components/LegalFooter";
 import { supabase } from "../lib/supabase";
 import type { Provider } from "@supabase/supabase-js";
-
-const locationOptions = {
-  Portugal: {
-    Aveiro: ["Aveiro", "Agueda", "Espinho", "Santa Maria da Feira"],
-    Beja: ["Beja", "Moura", "Serpa"],
-    Braga: ["Braga", "Barcelos", "Guimaraes", "Vila Nova de Famalicao"],
-    Braganca: ["Braganca", "Mirandela", "Macedo de Cavaleiros"],
-    "Castelo Branco": ["Castelo Branco", "Covilha", "Fundao"],
-    Coimbra: ["Coimbra", "Figueira da Foz", "Cantanhede", "Pombal"],
-    Evora: ["Evora", "Estremoz", "Montemor-o-Novo"],
-    Faro: ["Faro", "Albufeira", "Loule", "Portimao"],
-    Guarda: ["Guarda", "Seia", "Gouveia"],
-    Leiria: ["Leiria", "Pombal", "Marinha Grande", "Caldas da Rainha", "Peniche"],
-    Lisboa: ["Lisboa", "Amadora", "Cascais", "Loures", "Odivelas", "Sintra"],
-    Portalegre: ["Portalegre", "Elvas", "Ponte de Sor"],
-    Porto: ["Porto", "Gondomar", "Maia", "Matosinhos", "Vila Nova de Gaia"],
-    Santarem: ["Santarem", "Tomar", "Torres Novas", "Entroncamento"],
-    Setubal: ["Setubal", "Almada", "Barreiro", "Sesimbra"],
-    "Viana do Castelo": ["Viana do Castelo", "Ponte de Lima", "Valenca"],
-    "Vila Real": ["Vila Real", "Chaves", "Peso da Regua"],
-    Viseu: ["Viseu", "Lamego", "Tondela"],
-    Acores: ["Ponta Delgada", "Angra do Heroismo", "Horta"],
-    Madeira: ["Funchal", "Camara de Lobos", "Machico"],
-  },
-};
+import { locationOptions } from "../lib/locations";
 
 function getAuthErrorMessage(error: any) {
   const message = String(error?.message || "").toLowerCase();
@@ -119,7 +95,7 @@ export default function LoginPage() {
           return;
         }
 
-        const result = await signUp({ firstName, lastName, username, email, phone, city, password });
+        const result = await signUp({ firstName, lastName, username, email, phone, region, city, password });
         setFirstName("");
         setLastName("");
         setUsername("");
@@ -256,14 +232,16 @@ export default function LoginPage() {
         </div>
 
         <div className="login-oauth">
-          <button className="oauth-button google" type="button" onClick={() => handleOAuth("google")} disabled={loading || Boolean(oauthLoading)}>
-            <span aria-hidden="true">G</span>
-            {oauthLoading === "google" ? "A abrir Google..." : isSignUp ? "Registar com Google" : "Entrar com Google"}
-          </button>
-          <button className="oauth-button facebook" type="button" onClick={() => handleOAuth("facebook")} disabled={loading || Boolean(oauthLoading)}>
-            <span aria-hidden="true">f</span>
-            {oauthLoading === "facebook" ? "A abrir Facebook..." : isSignUp ? "Registar com Facebook" : "Entrar com Facebook"}
-          </button>
+          <div className="login-oauth-row">
+            <button className="oauth-button google" type="button" onClick={() => handleOAuth("google")} disabled={loading || Boolean(oauthLoading)}>
+              <span aria-hidden="true">G</span>
+              {oauthLoading === "google" ? "A abrir Google..." : isSignUp ? "Registar com Google" : "Entrar com Google"}
+            </button>
+            <button className="oauth-button facebook" type="button" onClick={() => handleOAuth("facebook")} disabled={loading || Boolean(oauthLoading)}>
+              <span aria-hidden="true">f</span>
+              {oauthLoading === "facebook" ? "A abrir Facebook..." : isSignUp ? "Registar com Facebook" : "Entrar com Facebook"}
+            </button>
+          </div>
           <div className="login-divider"><span>ou</span></div>
         </div>
 

@@ -1012,7 +1012,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const [voiceText, setVoiceText] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceResult, setVoiceResult] = useState<string | null>(null);
-  const [homeResultMode, setHomeResultMode] = useState<HomeResultMode>("collections");
+  const [homeResultMode, setHomeResultMode] = useState<HomeResultMode>("owned");
   const [neededStickerHolders, setNeededStickerHolders] = useState<NeededStickerHolder[]>([]);
   const [neededStickerHoldersLoading, setNeededStickerHoldersLoading] = useState(false);
   const [codePanelOpen, setCodePanelOpen] = useState(false);
@@ -1054,6 +1054,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     setFilter("all");
     setSelectedStickerId(null);
     setSelectedAlbumTeamName(null);
+    setHomeResultMode("owned");
     loadData();
   }, [homeKey]);
 

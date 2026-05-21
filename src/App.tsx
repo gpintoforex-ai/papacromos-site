@@ -142,7 +142,7 @@ function AppContent() {
     );
   }
 
-  if (profile && (!profile.phone?.trim() || !profile.city?.trim())) {
+  if (profile && (!profile.phone?.trim() || !profile.region?.trim() || !profile.city?.trim())) {
     return (
       <>
         <ProfileCompletionGate />

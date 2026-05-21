@@ -1389,6 +1389,13 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       {scanReviewItems.length > 0 && (
         <div className="scanner-review-overlay" role="dialog" aria-modal="true" aria-labelledby="scanner-review-title">
           <div className="scanner-review-panel">
+            {scanReviewNew.length > 0 && (
+              <div className="scanner-confetti" aria-hidden="true">
+                {Array.from({ length: 24 }).map((_, index) => (
+                  <span key={index} />
+                ))}
+              </div>
+            )}
             <header className="scanner-review-header">
               <div>
                 <h3 id="scanner-review-title">{scanReviewMode === "confirm" ? "Confirmar cromos" : "Cromos adicionados"}</h3>
