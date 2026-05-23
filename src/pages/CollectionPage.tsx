@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { getAvatarColor, getAvatarInitial } from "../lib/avatar";
 import StickerCard from "../components/StickerCard";
-import { Search, Camera, ArrowLeft, X, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, CircleCheck, CircleHelp, CopyPlus, Album, Images, Trophy } from "lucide-react";
+import { Search, Camera, ArrowLeft, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, CircleCheck, CircleHelp, CopyPlus, Album, Images, Trophy, Trash2 } from "lucide-react";
 
 interface Collection {
   id: string;
@@ -352,6 +352,16 @@ function getStickerDisplayName(sticker: Sticker) {
     return `${teamName} - ${detail}`;
   }
   return `${teamName} - ${knownName}`;
+}
+
+function getStickerPlayerName(sticker: Sticker) {
+  const displayName = getStickerDisplayName(sticker);
+  return displayName.includes(" - ") ? displayName.split(" - ").slice(1).join(" - ").trim() : displayName;
+}
+
+function isWorldAlbumPlayerSticker(sticker: Sticker) {
+  const localNumber = getAlbumLocalNumber(sticker);
+  return localNumber !== 1 && localNumber !== 13;
 }
 
 function normalizeSearchText(text: string) {
@@ -2213,6 +2223,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const renderSticker = (sticker: Sticker, compact = false) => {
     const us = getUserSticker(sticker.id);
     const photoInputId = `photo-${sticker.id}`;
+    const showWorldPlayerName = isWorldAlbum && isWorldAlbumPlayerSticker(sticker);
 
     return (
       <StickerCard
@@ -2227,23 +2238,32 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         stickerId={sticker.id}
         selected={selectedStickerId === sticker.id}
         compact={compact}
+        cropPlayerImage={showWorldPlayerName}
+        playerName={showWorldPlayerName ? getStickerPlayerName(sticker) : undefined}
         onClick={() => {
           setSelectedStickerId(sticker.id);
           us ? addQuantity(us.id) : addSticker(sticker.id, "have");
         }}
         onReduceQuantity={us ? () => reduceQuantity(us.id) : undefined}
       >
-        <label className="btn btn-photo btn-xs" htmlFor={photoInputId}>
-          <Camera size={12} /> {uploadingImageId === sticker.id ? "A enviar..." : "Foto"}
+        <label
+          className="btn btn-photo btn-icon btn-xs"
+          htmlFor={photoInputId}
+          title={uploadingImageId === sticker.id ? "A enviar foto..." : "Adicionar foto"}
+          aria-label={uploadingImageId === sticker.id ? "A enviar foto" : "Adicionar foto"}
+        >
+          <Camera size={12} />
         </label>
         {profile?.is_admin && sticker.image_url && (
           <button
-            className="btn btn-danger-soft btn-xs"
+            className="btn btn-danger-soft btn-icon btn-xs"
             type="button"
+            title="Remover foto"
+            aria-label="Remover foto"
             onClick={() => removeStickerImage(sticker.id)}
             disabled={uploadingImageId === sticker.id}
           >
-            <X size={12} /> Remover foto
+            <Trash2 size={12} />
           </button>
         )}
         <input

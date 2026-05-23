@@ -293,6 +293,13 @@ textarea {
 
 .btn-sm { padding: 6px 12px; font-size: 13px; }
 .btn-xs { padding: 4px 8px; font-size: 12px; border-radius: var(--radius-sm); }
+.btn-icon {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+}
 .btn-lg { padding: 12px 24px; font-size: 16px; border-radius: var(--radius-md); }
 
 /* ============================================
@@ -4261,6 +4268,17 @@ textarea {
   line-height: 1.25;
 }
 
+.sticker-card.compact .sticker-player-name-slot {
+  min-height: 32px;
+  padding: 5px 8px;
+}
+
+.sticker-card.compact .sticker-player-name-slot .sticker-name {
+  font-size: 9px;
+  line-height: 1.05;
+  padding: 3px 6px;
+}
+
 .sticker-card.compact .sticker-rarity {
   font-size: 10px;
   padding: 2px 6px;
@@ -4278,12 +4296,28 @@ textarea {
   border-bottom: 3px solid;
 }
 
+.sticker-image-frame {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
 .sticker-card-image img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   transition: transform var(--transition-slow);
+}
+
+.sticker-card.player-crop .sticker-card-image {
+  aspect-ratio: 3 / 3.18;
+}
+
+.sticker-card.player-crop .sticker-card-image img {
+  height: 132%;
+  object-fit: cover;
+  object-position: center top;
 }
 
 .sticker-card.team-photo .sticker-card-image {
@@ -4458,6 +4492,35 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.sticker-player-name-slot {
+  min-height: 36px;
+  justify-content: center;
+  padding: 7px 10px 6px;
+  background: #dfeeed;
+  border-bottom: 1px solid var(--border);
+}
+
+.sticker-player-name-slot .sticker-name {
+  display: -webkit-box;
+  flex: 0 1 auto;
+  width: 100%;
+  max-width: 92%;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(90deg, #d71932 0%, #ef3f2d 52%, #f36b21 100%);
+  font-size: 8.5px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 1px 1px rgba(15, 23, 42, 0.32);
+  white-space: normal;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 1px 2px rgba(15, 23, 42, 0.16);
+}
+
 .sticker-rarity {
   font-size: 11px;
   font-weight: 600;
@@ -4543,6 +4606,12 @@ textarea {
   flex: 0 0 auto;
   padding: 4px 8px;
   line-height: 1.2;
+}
+
+.sticker-card-actions .btn-icon {
+  flex: 0 0 auto;
+  padding: 0;
+  line-height: 1;
 }
 
 .sticker-card-actions .sticker-rarity {
@@ -5117,6 +5186,12 @@ textarea {
 .album-sticker-grid .sticker-card-image img {
   object-fit: cover;
   object-position: center;
+}
+
+.album-sticker-grid .sticker-card.player-crop .sticker-card-image img {
+  height: 132%;
+  object-fit: cover;
+  object-position: center top;
 }
 
 /* ============================================

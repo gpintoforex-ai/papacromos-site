@@ -11,6 +11,8 @@ interface StickerCardProps {
   quantity?: number;
   selected?: boolean;
   compact?: boolean;
+  playerName?: string;
+  cropPlayerImage?: boolean;
   stickerId?: string;
   onClick?: () => void;
   onReduceQuantity?: () => void;
@@ -42,6 +44,8 @@ export default function StickerCard({
   quantity,
   selected,
   compact,
+  playerName,
+  cropPlayerImage,
   stickerId,
   onClick,
   onReduceQuantity,
@@ -56,7 +60,7 @@ export default function StickerCard({
 
   return (
     <div
-      className={`sticker-card ${compact ? "compact" : ""} ${selected ? "selected" : ""} ${isTeamPhoto ? "team-photo" : ""}`}
+      className={`sticker-card ${compact ? "compact" : ""} ${selected ? "selected" : ""} ${isTeamPhoto ? "team-photo" : ""} ${cropPlayerImage ? "player-crop" : ""}`}
       data-sticker-id={stickerId}
       onClick={() => {
         if (!onClick) return;
@@ -69,16 +73,18 @@ export default function StickerCard({
         className={`sticker-card-image ${status === "want" ? "missing" : ""}`}
         style={{ borderColor: r.border }}
       >
-        <img
-          className={isFallbackImage ? "sticker-fallback-logo" : undefined}
-          src={displayImage}
-          alt={name}
-          loading="lazy"
-          onError={(event) => {
-            event.currentTarget.src = fallbackDisplayImage;
-            event.currentTarget.classList.add("sticker-fallback-logo");
-          }}
-        />
+        <div className="sticker-image-frame">
+          <img
+            className={isFallbackImage ? "sticker-fallback-logo" : undefined}
+            src={displayImage}
+            alt={name}
+            loading="lazy"
+            onError={(event) => {
+              event.currentTarget.src = fallbackDisplayImage;
+              event.currentTarget.classList.add("sticker-fallback-logo");
+            }}
+          />
+        </div>
         <span className="sticker-number">
           {number}
         </span>
@@ -102,6 +108,11 @@ export default function StickerCard({
           </button>
         )}
       </div>
+      {playerName && (
+        <div className="sticker-card-body sticker-player-name-slot">
+          <strong className="sticker-name">{playerName}</strong>
+        </div>
+      )}
       {children && (
         <div className="sticker-card-actions" onClick={(event) => event.stopPropagation()}>
           <span className="sticker-rarity" style={{ color: r.text, background: r.bg }}>
