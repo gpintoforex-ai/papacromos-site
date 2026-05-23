@@ -59,6 +59,11 @@ interface ScannedCodeItem {
   count: number;
 }
 
+interface TeamCompletionConfetti {
+  teamName: string;
+  key: number;
+}
+
 interface AlbumTeamPage {
   teamName: string;
   groupName: string;
@@ -172,6 +177,26 @@ const knownWorldPlayerNames: Record<string, Record<number, string>> = {
     16: "Bento",
     17: "Marquinhos",
     19: "Gabriel Magalhaes",
+  },
+  CANADA: {
+    2: "Dayne St. Clair",
+    3: "Alphonso Davies",
+    4: "Alistair Johnston",
+    5: "Samuel Adekugbe",
+    6: "Richie Laryea",
+    7: "Derek Cornelius",
+    8: "Moise Bombito",
+    9: "Kamal Miller",
+    10: "Stephen Eustaquio",
+    11: "Ismael Kone",
+    12: "Jonathan Osorio",
+    14: "Jacob Shaffelburg",
+    15: "Mathieu Choiniere",
+    16: "Niko Sigur",
+    17: "Tajon Buchanan",
+    18: "Liam Millar",
+    19: "Cyle Larin",
+    20: "Jonathan David",
   },
   CURACAO: {
     2: "Kenji Gorre",
@@ -812,6 +837,14 @@ function isSimilarAbbrev(abbrev: string, teamNameNorm: string) {
   return dist <= 1;
 }
 
+function getAlbumTeamDisplayOrder(teamName: string, teamStickers: Sticker[]) {
+  const normalizedTeamName = normalizeAbbrev(teamName);
+  if (normalizedTeamName === "PARAGUAI") return 14;
+  if (normalizedTeamName === "AUSTRALIA") return 15;
+
+  return Math.min(...teamStickers.map((sticker) => getAlbumTeamOrder(sticker)));
+}
+
 function buildAlbumTeamPages(stickers: Sticker[]): AlbumTeamPage[] {
   const teams = new Map<string, Sticker[]>();
   stickers.forEach((sticker) => {
@@ -819,7 +852,10 @@ function buildAlbumTeamPages(stickers: Sticker[]): AlbumTeamPage[] {
     teams.set(teamName, [...(teams.get(teamName) || []), sticker]);
   });
 
-  return Array.from(teams.entries()).map(([teamName, teamStickers], index) => ({
+  return Array.from(teams.entries()).sort(
+    ([teamNameA, teamStickersA], [teamNameB, teamStickersB]) =>
+      getAlbumTeamDisplayOrder(teamNameA, teamStickersA) - getAlbumTeamDisplayOrder(teamNameB, teamStickersB)
+  ).map(([teamName, teamStickers], index) => ({
     teamName,
     groupName: groupByTeam[teamName] || `Grupo ${String.fromCharCode(65 + Math.floor(index / 4))}`,
     flag: teamFlags[teamName] || "🏳️",
@@ -1048,6 +1084,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const [codeResult, setCodeResult] = useState<string | null>(null);
   const [scannedCodes, setScannedCodes] = useState<ScannedCodeItem[]>([]);
   const [albumSlideDirection, setAlbumSlideDirection] = useState<AlbumSlideDirection>(null);
+  const [teamCompletionConfetti, setTeamCompletionConfetti] = useState<TeamCompletionConfetti | null>(null);
   const [collectionOnboardingOpen, setCollectionOnboardingOpen] = useState(false);
   const [collectionOnboardingSelection, setCollectionOnboardingSelection] = useState<string[]>([]);
   const [collectionOnboardingSaving, setCollectionOnboardingSaving] = useState(false);
@@ -1083,6 +1120,16 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     setHomeResultMode("complete");
     loadData();
   }, [homeKey]);
+
+  useEffect(() => {
+    if (!teamCompletionConfetti) return;
+
+    const timer = window.setTimeout(() => {
+      setTeamCompletionConfetti(null);
+    }, 2400);
+
+    return () => window.clearTimeout(timer);
+  }, [teamCompletionConfetti]);
 
   useEffect(() => {
     if (!selectedCollectionId || !user?.id || stickers.length === 0) return;
@@ -1174,10 +1221,42 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     );
   };
 
+  const getCompletedWorldTeamNameAfterHave = (stickerId: string) => {
+    if (!user?.id) return null;
+
+    const sticker = stickers.find((item) => item.id === stickerId);
+    if (!sticker || sticker.collection_id !== WORLD_ALBUM_COLLECTION_ID) return null;
+
+    const alreadyHave = userStickers.some((us) =>
+      us.user_id === user.id &&
+      us.sticker_id === stickerId &&
+      us.status === "have" &&
+      (us.quantity || 0) > 0
+    );
+    if (alreadyHave) return null;
+
+    const teamName = getStickerEffectiveTeamName(sticker);
+    const teamStickers = stickers.filter((item) =>
+      item.collection_id === WORLD_ALBUM_COLLECTION_ID &&
+      getStickerEffectiveTeamName(item) === teamName
+    );
+    if (teamStickers.length === 0) return null;
+
+    const haveIds = new Set(
+      userStickers
+        .filter((us) => us.user_id === user.id && us.status === "have" && (us.quantity || 0) > 0)
+        .map((us) => us.sticker_id)
+    );
+    haveIds.add(stickerId);
+
+    return teamStickers.every((teamSticker) => haveIds.has(teamSticker.id)) ? teamName : null;
+  };
+
   const addSticker = async (stickerId: string, status: "have" | "want") => {
     setError(null);
     try {
       if (!user?.id) throw new Error("Sessao expirada. Entra novamente.");
+      const completedWorldTeamName = status === "have" ? getCompletedWorldTeamNameAfterHave(stickerId) : null;
 
       const existing = userStickers.find((us) => us.user_id === user.id && us.sticker_id === stickerId && us.status === status);
       if (existing) {
@@ -1207,6 +1286,9 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         }
       }
       await loadData();
+      if (completedWorldTeamName) {
+        setTeamCompletionConfetti({ teamName: completedWorldTeamName, key: Date.now() });
+      }
       onCollectionChange?.();
     } catch (err: any) {
       setError(err.message || "Erro ao atualizar cromo.");
@@ -2326,6 +2408,15 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     </div>
   ) : null;
 
+  const teamCompletionConfettiOverlay = teamCompletionConfetti ? (
+    <div className="team-completion-confetti" key={teamCompletionConfetti.key} role="status" aria-live="polite">
+      <div className="team-completion-confetti-burst" aria-hidden="true">
+        {Array.from({ length: 32 }, (_, index) => <span key={index} />)}
+      </div>
+      <strong>{teamCompletionConfetti.teamName} completa!</strong>
+    </div>
+  ) : null;
+
   if (loading) return <div className="loading">A carregar colecao...</div>;
 
   if (collections.length === 0) {
@@ -2342,6 +2433,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     return (
       <div className="collection-page collection-home">
         {collectionOnboardingModal}
+        {teamCompletionConfettiOverlay}
         <section className="collection-home-hero">
           <div>
             <span className="collection-home-kicker">A minha colecao</span>
@@ -2538,6 +2630,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   return (
     <div className="collection-page">
       {collectionOnboardingModal}
+      {teamCompletionConfettiOverlay}
       <section className="collection-detail-hero">
         <div className="collection-detail-main">
           <div className="collection-detail-cover">
