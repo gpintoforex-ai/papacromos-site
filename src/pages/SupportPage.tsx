@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { LifeBuoy, MessageSquare, RefreshCw, Send } from "lucide-react";
+import { Flag, LifeBuoy, MessageSquare, RefreshCw, Send } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
+import { logAuditEvent } from "../lib/audit";
 
 interface SupportTicket {
   id: string;
@@ -30,6 +31,28 @@ const statusLabels: Record<SupportTicket["status"], string> = {
   closed: "Fechado",
 };
 
+const supportDraftKey = "papacromos-last-support-ticket-at";
+const supportReplyKey = "papacromos-last-support-reply-at";
+const supportCooldownMs = 60_000;
+
+const reportTemplates = [
+  {
+    label: "Reportar utilizador",
+    subject: "Reportar utilizador",
+    message: "Utilizador a reportar: \nMotivo: \nLink, ID ou detalhes relevantes: ",
+  },
+  {
+    label: "Remover imagem",
+    subject: "Pedido de remocao de imagem/marca",
+    message: "Imagem, marca ou cromo em causa: \nMotivo do pedido: \nSou titular/representante? ",
+  },
+  {
+    label: "Privacidade",
+    subject: "Pedido sobre privacidade ou dados pessoais",
+    message: "Tipo de pedido: acesso/correcao/eliminacao/oposicao/outro\nDetalhes: ",
+  },
+];
+
 function formatDate(value: string) {
   return new Date(value).toLocaleString("pt-PT", {
     day: "2-digit",
@@ -38,6 +61,15 @@ function formatDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function enforceSupportCooldown(key: string) {
+  const lastValue = Number(localStorage.getItem(key) || "0");
+  const now = Date.now();
+  if (lastValue && now - lastValue < supportCooldownMs) {
+    throw new Error("Aguarda cerca de 1 minuto antes de enviar nova mensagem.");
+  }
+  localStorage.setItem(key, String(now));
 }
 
 export default function SupportPage() {
@@ -152,6 +184,9 @@ export default function SupportPage() {
       const cleanSubject = subject.trim();
       const cleanMessage = newTicketMessage.trim();
       if (!cleanSubject || !cleanMessage) throw new Error("Preenche o assunto e a mensagem.");
+      if (cleanSubject.length > 120) throw new Error("O assunto deve ter no maximo 120 caracteres.");
+      if (cleanMessage.length > 4000) throw new Error("A mensagem deve ter no maximo 4000 caracteres.");
+      enforceSupportCooldown(supportDraftKey);
 
       const { data: ticket, error: ticketError } = await supabase
         .from("support_tickets")
@@ -166,6 +201,12 @@ export default function SupportPage() {
         message: cleanMessage,
       });
       if (messageError) throw messageError;
+      await logAuditEvent({
+        action: cleanSubject.toLowerCase().includes("reportar") ? "support_user_report_created" : "support_ticket_created",
+        entityType: "support_ticket",
+        entityId: ticket.id,
+        metadata: { subject: cleanSubject, message_length: cleanMessage.length },
+      });
 
       setSubject("");
       setNewTicketMessage("");
@@ -190,6 +231,8 @@ export default function SupportPage() {
       if (!user?.id) throw new Error("Sessao expirada. Entra novamente.");
       const cleanReply = reply.trim();
       if (!cleanReply) throw new Error("Escreve uma resposta.");
+      if (cleanReply.length > 4000) throw new Error("A resposta deve ter no maximo 4000 caracteres.");
+      enforceSupportCooldown(supportReplyKey);
 
       const { error: messageError } = await supabase.from("support_ticket_messages").insert({
         ticket_id: selectedTicket.id,
@@ -204,6 +247,13 @@ export default function SupportPage() {
         .update({ status: nextStatus })
         .eq("id", selectedTicket.id);
       if (ticketError) throw ticketError;
+      await logAuditEvent({
+        action: isAdmin ? "support_admin_reply_sent" : "support_user_reply_sent",
+        entityType: "support_ticket",
+        entityId: selectedTicket.id,
+        targetUserId: selectedTicket.user_id,
+        metadata: { status: nextStatus, message_length: cleanReply.length },
+      });
 
       setReply("");
       setSuccess(isAdmin ? "Resposta enviada ao utilizador." : "Resposta enviada ao administrador.");
@@ -225,6 +275,13 @@ export default function SupportPage() {
         .update({ status })
         .eq("id", ticket.id);
       if (statusError) throw statusError;
+      await logAuditEvent({
+        action: "support_ticket_status_updated",
+        entityType: "support_ticket",
+        entityId: ticket.id,
+        targetUserId: ticket.user_id,
+        metadata: { previous_status: ticket.status, next_status: status },
+      });
 
       setSuccess(status === "closed" ? "Ticket fechado." : "Ticket reaberto.");
       await loadSupport();
@@ -259,6 +316,21 @@ export default function SupportPage() {
               <LifeBuoy size={18} />
               <h3>Novo ticket</h3>
             </div>
+            <div className="support-report-actions" aria-label="Atalhos de suporte">
+              {reportTemplates.map((template) => (
+                <button
+                  key={template.subject}
+                  className="btn btn-ghost btn-sm"
+                  type="button"
+                  onClick={() => {
+                    setSubject(template.subject);
+                    setNewTicketMessage(template.message);
+                  }}
+                >
+                  <Flag size={14} /> {template.label}
+                </button>
+              ))}
+            </div>
             <form className="support-form" onSubmit={createTicket}>
               <label>
                 Assunto
@@ -278,6 +350,7 @@ export default function SupportPage() {
                   onChange={(event) => setNewTicketMessage(event.target.value)}
                   placeholder="Descreve o problema com o máximo de detalhe útil."
                   rows={5}
+                  maxLength={4000}
                   required
                 />
               </label>
@@ -354,6 +427,7 @@ export default function SupportPage() {
                     onChange={(event) => setReply(event.target.value)}
                     placeholder={isAdmin ? "Escreve a resposta ao utilizador." : "Acrescenta mais informacao ao ticket."}
                     rows={4}
+                    maxLength={4000}
                     required
                   />
                   <button className="btn btn-primary" type="submit" disabled={saving}>

@@ -10,7 +10,7 @@ export default function CookieConsent() {
   }, []);
 
   const saveConsent = (value: "necessary" | "accepted") => {
-    localStorage.setItem(cookieConsentKey, value);
+    localStorage.setItem(cookieConsentKey, JSON.stringify({ value, savedAt: new Date().toISOString() }));
     setVisible(false);
   };
 
@@ -19,21 +19,22 @@ export default function CookieConsent() {
   return (
     <div className="cookie-consent" role="dialog" aria-labelledby="cookie-consent-title" aria-live="polite">
       <div className="cookie-consent-panel">
-        <h2 id="cookie-consent-title">Consentimento de Cookies</h2>
+        <h2 id="cookie-consent-title">Cookies e armazenamento local</h2>
         <p>
-          Usamos cookies e tecnologias semelhantes para manter a sessão, lembrar preferências e melhorar a experiência.
-          Saiba mais na nossa{" "}
+          Usamos cookies e tecnologias semelhantes essenciais para manter a sessao, guardar preferencias e proteger a
+          conta. Se aceitarmos cookies opcionais no futuro, so serao ativados depois do teu consentimento. Saiba mais na
+          nossa{" "}
           <a href="/privacy.html" target="_blank" rel="noreferrer">
-            Política de Privacidade
+            Politica de Privacidade
           </a>
           .
         </p>
         <div className="cookie-consent-actions">
           <button className="cookie-btn cookie-btn-secondary" type="button" onClick={() => saveConsent("necessary")}>
-            Somente necessários
+            Recusar opcionais
           </button>
           <button className="cookie-btn cookie-btn-primary" type="button" onClick={() => saveConsent("accepted")}>
-            Aceitar cookies
+            Aceitar opcionais
           </button>
         </div>
       </div>

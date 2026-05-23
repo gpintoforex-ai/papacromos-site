@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, KeyRound, PackagePlus, Pencil, RefreshCw, RotateCcw, Send, Settings, Trash2, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
+import { logAuditEvent } from "../lib/audit";
 
 interface Collection {
   id: string;
@@ -49,6 +50,18 @@ interface UserSticker {
   stickers: Sticker | null;
 }
 
+interface AuditLog {
+  id: string;
+  actor_user_id: string | null;
+  target_user_id: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  metadata: Record<string, unknown>;
+  user_agent: string | null;
+  created_at: string;
+}
+
 const emptyCollection = {
   name: "",
   description: "",
@@ -60,11 +73,18 @@ const defaultStickerImage =
   "https://images.pexels.com/photos/46798/the-ball-stadion-football-the-pitch.jpg?auto=compress&cs=tinysrgb&w=400";
 
 const appLogoUrl = "https://hwqexlticbsokpqpqdvk.supabase.co/storage/v1/object/public/sticker-images/collections/new-1760223165876-105a2aec-9f65-47f0-adf1-b44b781e9ae6.png";
+const stickerAssetVersion = "20260523-mexico-names";
+const auditRetentionOptions = [
+  { value: 15, label: "15 dias" },
+  { value: 30, label: "1 mes" },
+  { value: 180, label: "6 meses" },
+  { value: 365, label: "1 ano" },
+];
 
 function getStickerPreviewImageUrl(imageUrl: string) {
   const match = imageUrl.match(/^\/stickers\/([^/]+)\/([^/.]+)\.(png|jpe?g|webp)$/i);
   if (!match) return "";
-  return `/sticker-previews/${match[1]}/${match[2]}.jpg`;
+  return `/sticker-previews/${match[1]}/${match[2]}.jpg?v=${stickerAssetVersion}`;
 }
 
 function getAdminStickerImageUrl(imageUrl: string) {
@@ -114,10 +134,26 @@ function formatAdminDate(dateValue: string | null | undefined) {
   return date.toLocaleDateString("pt-PT");
 }
 
+function formatAdminDateTime(dateValue: string | null | undefined) {
+  if (!dateValue) return "-";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("pt-PT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function AdminPage() {
   const { user, profile } = useAuth();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [users, setUsers] = useState<RegisteredUser[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [openAuditActorIds, setOpenAuditActorIds] = useState<string[]>([]);
+  const [auditRetentionDays, setAuditRetentionDays] = useState(180);
   const [draft, setDraft] = useState(emptyCollection);
   const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
   const [openCollectionSettingsId, setOpenCollectionSettingsId] = useState<string | null>(null);
@@ -170,6 +206,18 @@ export default function AdminPage() {
 
       setCollections((collectionsRes.data || []) as Collection[]);
       setUsers((usersRes.data || []) as RegisteredUser[]);
+      if (profile?.is_admin) {
+        const [auditLogsRes, retentionRes] = await Promise.all([
+          supabase.rpc("admin_list_audit_logs", { p_limit: 80 }),
+          supabase.rpc("admin_get_audit_log_retention_days"),
+        ]);
+
+        if (auditLogsRes.error) throw auditLogsRes.error;
+        if (retentionRes.error) throw retentionRes.error;
+
+        setAuditLogs((auditLogsRes.data || []) as AuditLog[]);
+        setAuditRetentionDays(Number(retentionRes.data) || 180);
+      }
     } catch (err: any) {
       setError(err.message || "Erro ao carregar area de admin.");
     } finally {
@@ -206,6 +254,12 @@ export default function AdminPage() {
       const stickers = buildGeneratedStickers(collection.id, name, totalStickers, imageUrl);
       const { error: stickersError } = await supabase.from("stickers").insert(stickers);
       if (stickersError) throw stickersError;
+      await logAuditEvent({
+        action: "admin_collection_created",
+        entityType: "collection",
+        entityId: collection.id,
+        metadata: { name, total_stickers: totalStickers },
+      });
 
       setDraft(emptyCollection);
       setSuccess(`Colecao adicionada com ${totalStickers} cromos.`);
@@ -249,6 +303,12 @@ export default function AdminPage() {
         .delete()
         .eq("id", collection.id);
       if (deleteError) throw deleteError;
+      await logAuditEvent({
+        action: "admin_collection_deleted",
+        entityType: "collection",
+        entityId: collection.id,
+        metadata: { name: collection.name, total_stickers: collection.total_stickers },
+      });
 
       if (editingCollectionId === collection.id) {
         setEditingCollectionId(null);
@@ -276,6 +336,12 @@ export default function AdminPage() {
         .update({ image_url: "" })
         .eq("collection_id", collection.id);
       if (clearError) throw clearError;
+      await logAuditEvent({
+        action: "admin_collection_sticker_images_cleared",
+        entityType: "collection",
+        entityId: collection.id,
+        metadata: { name: collection.name },
+      });
 
       setSuccess("Imagens dos cromos removidas.");
     } catch (err: any) {
@@ -306,6 +372,12 @@ export default function AdminPage() {
         .update({ image_url: imageUrl })
         .eq("collection_id", collection.id);
       if (restoreError) throw restoreError;
+      await logAuditEvent({
+        action: "admin_collection_sticker_images_restored",
+        entityType: "collection",
+        entityId: collection.id,
+        metadata: { name: collection.name, source, image_url: imageUrl },
+      });
 
       setSuccess(`Imagens dos cromos substituidas por ${sourceLabel}.`);
     } catch (err: any) {
@@ -388,6 +460,17 @@ export default function AdminPage() {
         .update({ image_url: sourceSticker.image_url || "" })
         .eq("id", targetSticker.id);
       if (targetError) throw targetError;
+      await logAuditEvent({
+        action: "admin_sticker_images_swapped",
+        entityType: "collection",
+        entityId: sourceSticker.collection_id,
+        metadata: {
+          source_sticker_id: sourceSticker.id,
+          source_number: sourceSticker.number,
+          target_sticker_id: targetSticker.id,
+          target_number: targetSticker.number,
+        },
+      });
 
       await reloadImageSwapStickers(sourceSticker.collection_id);
       setSuccess(`Imagens trocadas entre #${sourceSticker.number} e #${targetSticker.number}.`);
@@ -460,8 +543,14 @@ export default function AdminPage() {
           imageUrl
         );
         const { error: missingStickersError } = await supabase.from("stickers").insert(missingStickers);
-        if (missingStickersError) throw missingStickersError;
+      if (missingStickersError) throw missingStickersError;
       }
+      await logAuditEvent({
+        action: "admin_collection_updated",
+        entityType: "collection",
+        entityId: editingCollectionId,
+        metadata: { name, total_stickers: totalStickers, image_url: imageUrl },
+      });
 
       setEditingCollectionId(null);
       setDraft(emptyCollection);
@@ -672,6 +761,12 @@ export default function AdminPage() {
       } else {
         setSuccess(`Push enviado para ${registeredUser.username || registeredUser.email || "utilizador"}.`);
       }
+      await logAuditEvent({
+        action: "admin_push_sent",
+        entityType: "push_notification",
+        targetUserId: registeredUser.id,
+        metadata: { title, body_length: body.length },
+      });
 
       closePushComposer();
     } catch (err: any) {
@@ -734,7 +829,66 @@ export default function AdminPage() {
     }
   };
 
+  const updateAuditRetentionDays = async (retentionDays: number) => {
+    const previousRetentionDays = auditRetentionDays;
+    setAuditRetentionDays(retentionDays);
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { data, error: updateError } = await supabase.rpc("admin_set_audit_log_retention_days", {
+        p_retention_days: retentionDays,
+      });
+      if (updateError) throw updateError;
+
+      const { data: savedRetentionDays, error: readError } = await supabase.rpc("admin_get_audit_log_retention_days");
+      if (readError) throw readError;
+
+      const savedDays = Number(savedRetentionDays) || retentionDays;
+      setAuditRetentionDays(savedDays);
+      if (savedDays !== retentionDays) {
+        throw new Error("A base de dados nao confirmou o periodo selecionado.");
+      }
+
+      setOpenAuditActorIds([]);
+      setSuccess(`Retencao de logs atualizada. ${Number(data) || 0} log${Number(data) === 1 ? "" : "s"} antigo${Number(data) === 1 ? "" : "s"} eliminado${Number(data) === 1 ? "" : "s"}.`);
+      await loadAdminData();
+    } catch (err: any) {
+      setAuditRetentionDays(previousRetentionDays);
+      setError(err.message || "Erro ao atualizar retencao dos logs.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const selectedCollectionUser = users.find((registeredUser) => registeredUser.id === selectedCollectionUserId);
+  const usersById = new Map(users.map((registeredUser) => [registeredUser.id, registeredUser]));
+  const auditGroups = Array.from(
+    auditLogs.reduce((groups, log) => {
+      const key = log.actor_user_id || "system";
+      const current = groups.get(key) || [];
+      current.push(log);
+      groups.set(key, current);
+      return groups;
+    }, new Map<string, AuditLog[]>())
+  ).map(([actorId, logs]) => {
+    const actor = actorId === "system" ? null : usersById.get(actorId);
+    return {
+      actorId,
+      actor,
+      logs,
+      latestLog: logs[0],
+    };
+  });
+
+  const toggleAuditActor = (actorId: string) => {
+    setOpenAuditActorIds((currentIds) =>
+      currentIds.includes(actorId)
+        ? currentIds.filter((currentId) => currentId !== actorId)
+        : [...currentIds, actorId]
+    );
+  };
+
   const selectedUserCollectionSummaries = collections.map((collection) => {
     const collectionEntries = selectedUserStickers.filter((entry) => entry.stickers?.collection_id === collection.id);
     const haveEntries = collectionEntries.filter((entry) => entry.status === "have");
@@ -1058,6 +1212,77 @@ export default function AdminPage() {
           )}
         </section>
       )}
+
+      <section className="admin-panel admin-audit-panel">
+        <div className="admin-panel-title">
+          <Settings size={18} />
+          <h3>Logs de auditoria</h3>
+        </div>
+        <p className="muted-text">Registo das acoes criticas de utilizadores e administradores.</p>
+        <div className="admin-audit-cleanup">
+          <label>
+            Eliminar automaticamente apos
+            <select
+              value={auditRetentionDays}
+              onChange={(event) => updateAuditRetentionDays(Number(event.target.value))}
+              disabled={saving}
+            >
+              {auditRetentionOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span>A limpeza e aplicada automaticamente quando novos logs sao registados.</span>
+        </div>
+        <div className="admin-audit-list">
+          {auditGroups.map((group) => {
+            const isOpen = openAuditActorIds.includes(group.actorId);
+            const actorLabel = group.actor
+              ? group.actor.username || group.actor.email || group.actor.id
+              : group.actorId === "system"
+                ? "Sistema"
+                : group.actorId;
+            const actorEmail = group.actor?.email || (group.actorId !== "system" ? group.actorId : "");
+
+            return (
+              <article className={`admin-audit-group ${isOpen ? "open" : ""}`} key={group.actorId}>
+                <button
+                  className="admin-audit-group-trigger"
+                  type="button"
+                  onClick={() => toggleAuditActor(group.actorId)}
+                  aria-expanded={isOpen}
+                >
+                  <div>
+                    <strong>{actorLabel}</strong>
+                    <span>{actorEmail}</span>
+                  </div>
+                  <em>{group.logs.length} evento{group.logs.length === 1 ? "" : "s"}</em>
+                  <small>{formatAdminDateTime(group.latestLog?.created_at)}</small>
+                  <ChevronDown size={16} />
+                </button>
+
+                {isOpen && (
+                  <div className="admin-audit-group-body">
+                    {group.logs.map((log) => (
+                      <div className="admin-audit-row" key={log.id}>
+                        <div>
+                          <strong>{log.action}</strong>
+                          <span>{log.entity_type}{log.entity_id ? ` - ${log.entity_id}` : ""}</span>
+                        </div>
+                        <small>{formatAdminDateTime(log.created_at)}</small>
+                        {log.target_user_id && <em>alvo {log.target_user_id}</em>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+            );
+          })}
+          {auditLogs.length === 0 && <p className="muted-text">Ainda nao ha logs ou a migration de auditoria ainda nao foi aplicada.</p>}
+        </div>
+      </section>
 
       <section className="admin-panel admin-maintenance-panel">
         <div className="admin-panel-title">

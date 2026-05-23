@@ -51,6 +51,7 @@ type AlbumSlideDirection = "previous" | "next" | null;
 type CodeOcrCanvasMode = "normal" | "inverted";
 
 const WORLD_ALBUM_COLLECTION_ID = "b2026000-0000-4000-8000-000000000001";
+const stickerAssetVersion = "20260523-mexico-names";
 
 interface ScannedCodeItem {
   rawValue: string;
@@ -250,13 +251,24 @@ const knownWorldPlayerNames: Record<string, Record<number, string>> = {
     18: "Noussair Mazraoui",
   },
   MEXICO: {
-    6: "Jorge Sanchez",
-    8: "Jesus Gallardo",
-    10: "Hirving Lozano",
-    11: "Santiago Gimenez",
-    12: "Jesus Gallardo",
-    14: "Raul Reyes",
-    20: "Alexis Vega",
+    2: "Luis Malagon",
+    3: "Johan Vasquez",
+    4: "Jorge Sanchez",
+    5: "Cesar Montes",
+    6: "Jesus Gallardo",
+    7: "Israel Reyes",
+    8: "Diego Lainez",
+    9: "Carlos Rodriguez",
+    10: "Edson Alvarez",
+    11: "Orbelin Pineda",
+    12: "Marcel Ruiz",
+    14: "Erick Sanchez",
+    15: "Hirving Lozano",
+    16: "Santiago Gimenez",
+    17: "Raul Jimenez",
+    18: "Alexis Vega",
+    19: "Roberto Alvarado",
+    20: "Cesar Huerta",
   },
   PARAGUAI: {
     6: "Orlando Gill",
@@ -326,12 +338,16 @@ function getStickerDisplayName(sticker: Sticker) {
   if (localNumber === 1) return `${teamName} - Escudo`;
   if (localNumber === 13) return `${teamName} - Foto de equipa`;
 
+  const knownName = getKnownWorldPlayerName(sticker);
+  if (normalizeAbbrev(teamName) === "MEXICO" && knownName) {
+    return `${teamName} - ${knownName}`;
+  }
+
   const detail = sticker.name.includes(" - ") ? sticker.name.split(" - ").slice(1).join(" - ").trim() : sticker.name;
   if (detail && !/^Jogador\s+\d+$/i.test(detail)) {
     return `${teamName} - ${detail}`;
   }
 
-  const knownName = getKnownWorldPlayerName(sticker);
   if (!knownName) {
     return `${teamName} - ${detail}`;
   }
@@ -429,7 +445,7 @@ function getStickerFallbackImage(sticker: Sticker) {
 function getStickerPreviewImageUrl(imageUrl: string) {
   const match = imageUrl.match(/^\/stickers\/([^/]+)\/([^/.]+)\.(png|jpe?g|webp)$/i);
   if (!match) return "";
-  return `/sticker-previews/${match[1]}/${match[2]}.jpg`;
+  return `/sticker-previews/${match[1]}/${match[2]}.jpg?v=${stickerAssetVersion}`;
 }
 
 function isGenericSeedStickerImage(imageUrl: string) {
@@ -1012,7 +1028,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const [voiceText, setVoiceText] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceResult, setVoiceResult] = useState<string | null>(null);
-  const [homeResultMode, setHomeResultMode] = useState<HomeResultMode>("owned");
+  const [homeResultMode, setHomeResultMode] = useState<HomeResultMode>("complete");
   const [neededStickerHolders, setNeededStickerHolders] = useState<NeededStickerHolder[]>([]);
   const [neededStickerHoldersLoading, setNeededStickerHoldersLoading] = useState(false);
   const [codePanelOpen, setCodePanelOpen] = useState(false);
@@ -1054,7 +1070,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     setFilter("all");
     setSelectedStickerId(null);
     setSelectedAlbumTeamName(null);
-    setHomeResultMode("owned");
+    setHomeResultMode("complete");
     loadData();
   }, [homeKey]);
 
@@ -2312,7 +2328,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           </div>
           <div className="collection-home-stats">
             <button
-              className={`collection-home-stat ${homeResultMode === "collections" ? "active" : ""}`}
+              className={`collection-home-stat collection-home-stat-featured ${homeResultMode === "collections" ? "active" : ""}`}
               type="button"
               onClick={showHomeCollections}
             >
