@@ -142,10 +142,14 @@ function AppContent() {
     );
   }
 
-  if (profile && (!profile.phone?.trim() || !profile.region?.trim() || !profile.city?.trim())) {
+  if (profile && (!profile.region?.trim() || !profile.city?.trim())) {
     return (
       <>
-        <ProfileCompletionGate />
+        <ProfileCompletionGate
+          requiredFields={["region", "city"]}
+          title="Completa a tua localizacao"
+          description="Indica distrito e cidade para podermos sugerir trocas e parceiros proximos."
+        />
         <CookieConsent />
       </>
     );
@@ -165,7 +169,19 @@ function AppContent() {
           />
         )}
         {page === "scanner" && <ScannerPage onCollectionChange={refreshMatchCount} onClose={() => setPage("collection")} />}
-        {page === "matches" && <MatchesPage onMatchesChange={setMatchCount} />}
+        {page === "matches" && (
+          profile?.phone?.trim() ? (
+            <MatchesPage onMatchesChange={setMatchCount} />
+          ) : (
+            <ProfileCompletionGate
+              requiredFields={["phone"]}
+              title="Adiciona o teu telemovel"
+              description="Para aceder aos Matches, associa um numero de telemovel ao teu perfil. Isto ajuda a validar contactos para trocas."
+              submitLabel="Guardar e ver Matches"
+              showSignOut={false}
+            />
+          )
+        )}
         {page === "trades" && <TradesPage onPendingTradeCountChange={setPendingTradeCount} />}
         {page === "share" && <SharePage sharedUserId={sharedUserId} onOpenSharedUser={setSharedUserId} />}
         {page === "partners" && <PartnersPage />}

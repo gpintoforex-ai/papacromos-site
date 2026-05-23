@@ -60,7 +60,6 @@ export default function LoginPage() {
           ...(!lastName.trim() ? ["lastName"] : []),
           ...(!username.trim() ? ["username"] : []),
           ...(!email.trim() ? ["email"] : []),
-          ...(!phone.trim() ? ["phone"] : []),
           ...(!country.trim() ? ["country"] : []),
           ...(!region.trim() ? ["region"] : []),
           ...(!city.trim() ? ["city"] : []),
@@ -306,7 +305,7 @@ export default function LoginPage() {
             <>
               <input
                 type="tel"
-                placeholder="Telefone"
+                placeholder="Telefone (opcional)"
                 className={isMissing("phone") ? "field-error" : ""}
                 value={phone}
                 onChange={(e) => {
