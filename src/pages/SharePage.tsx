@@ -34,6 +34,11 @@ interface Collection {
   total_stickers: number;
 }
 
+interface UserCollectionPreference {
+  collection_id: string;
+  is_active: boolean;
+}
+
 interface SharedProfile {
   id: string;
   username?: string;
@@ -55,6 +60,7 @@ interface TradeOption {
 
 const stickerSelect = "user_id, sticker_id, status, quantity, stickers(id, name, number, image_url, rarity, collection_id)";
 const DATA_PAGE_SIZE = 1000;
+const WORLD_ALBUM_COLLECTION_ID = "b2026000-0000-4000-8000-000000000001";
 
 function WhatsAppIcon({ size = 14 }: { size?: number }) {
   return (
@@ -73,6 +79,122 @@ function WhatsAppIcon({ size = 14 }: { size?: number }) {
 
 function getSticker(row: UserStickerRow) {
   return Array.isArray(row.stickers) ? row.stickers[0] : row.stickers;
+}
+
+function getSharedStickerTeamName(stickerName: string) {
+  return stickerName.includes(" - ") ? stickerName.split(" - ")[0].trim() : "";
+}
+
+function getSharedStickerDetailName(stickerName: string) {
+  return stickerName.includes(" - ") ? stickerName.split(" - ").slice(1).join(" - ").trim() : stickerName;
+}
+
+function getSharedStickerLocalNumber(sticker: StickerInfo) {
+  if (sticker.collection_id !== WORLD_ALBUM_COLLECTION_ID) return sticker.number;
+  if (sticker.name.includes("Escudo")) return 1;
+  if (sticker.name.includes("Foto de equipa")) return 13;
+  return ((sticker.number - 1) % 20) + 1;
+}
+
+function getSharedStickerDisplay(sticker: StickerInfo) {
+  const teamName = sticker.collection_id === WORLD_ALBUM_COLLECTION_ID ? getSharedStickerTeamName(sticker.name) : "";
+  const detailName = teamName ? getSharedStickerDetailName(sticker.name) : sticker.name;
+  return {
+    number: getSharedStickerLocalNumber(sticker),
+    teamName,
+    detailName,
+  };
+}
+
+function normalizeSharedTeamName(text: string) {
+  return text
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toUpperCase();
+}
+
+const sharedTeamCountryCodes: Record<string, string> = {
+  AFRICADOSUL: "ZA",
+  ALEMANHA: "DE",
+  ARABIASAUDITA: "SA",
+  ARGELIA: "DZ",
+  ARGENTINA: "AR",
+  AUSTRALIA: "AU",
+  AUSTRIA: "AT",
+  BELGICA: "BE",
+  BOSNIAEHERZEGOVINA: "BA",
+  BRASIL: "BR",
+  CABOVERDE: "CV",
+  CANADA: "CA",
+  CATAR: "QA",
+  CHILE: "CL",
+  COLOMBIA: "CO",
+  COREIADOSUL: "KR",
+  COSTADOMARFIM: "CI",
+  CROACIA: "HR",
+  CURACAU: "CW",
+  DINAMARCA: "DK",
+  EGITO: "EG",
+  EQUADOR: "EC",
+  ESCOCIA: "GB",
+  ESPANHA: "ES",
+  ESTADOSUNIDOS: "US",
+  FRANCA: "FR",
+  GANA: "GH",
+  HAITI: "HT",
+  HOLANDA: "NL",
+  INGLETERRA: "GB",
+  IRAQUE: "IQ",
+  ITALIA: "IT",
+  JAMAICA: "JM",
+  JAPAO: "JP",
+  JORDANIA: "JO",
+  MARROCOS: "MA",
+  MEXICO: "MX",
+  NORUEGA: "NO",
+  NOVAZELANDIA: "NZ",
+  PAISBAIXOS: "NL",
+  PAISESBAIXOS: "NL",
+  PANAMA: "PA",
+  PARAGUAI: "PY",
+  PERU: "PE",
+  POLONIA: "PL",
+  PORTUGAL: "PT",
+  QATAR: "QA",
+  RDDOCONGO: "CD",
+  RIDOIRA: "IR",
+  REPUBLICADACOREIA: "KR",
+  SENEGAL: "SN",
+  SUECIA: "SE",
+  SUICA: "CH",
+  TCHEQUIA: "CZ",
+  TUNISIA: "TN",
+  TURQUIA: "TR",
+  UCRANIA: "UA",
+  URUGUAI: "UY",
+  UZBEQUISTAO: "UZ",
+};
+
+function countryCodeToFlag(countryCode: string) {
+  if (!/^[A-Z]{2}$/.test(countryCode)) return "";
+  return Array.from(countryCode)
+    .map((letter) => String.fromCodePoint(127397 + letter.charCodeAt(0)))
+    .join("");
+}
+
+function getSharedStickerFlag(sticker: StickerInfo) {
+  const teamName = getSharedStickerDisplay(sticker).teamName;
+  if (!teamName) return "";
+  const countryCode = sharedTeamCountryCodes[normalizeSharedTeamName(teamName)];
+  return countryCode ? countryCodeToFlag(countryCode) : "";
+}
+
+function formatSharedStickerLine(sticker: StickerInfo, quantity: number) {
+  const display = getSharedStickerDisplay(sticker);
+  const flag = getSharedStickerFlag(sticker);
+  const teamPrefix = display.teamName ? `${flag ? `${flag} ` : ""}${display.teamName} - ` : "";
+  return `- #${String(display.number).padStart(3, "0")} ${teamPrefix}${display.detailName} (x${quantity})`;
 }
 
 async function fetchUserStickerRows(userId: string) {
@@ -107,6 +229,15 @@ function buildShareUrl(userId?: string) {
   return url.toString();
 }
 
+function getActiveCollectionIds(collections: Collection[], preferences: UserCollectionPreference[]) {
+  const inactiveIds = new Set(
+    preferences
+      .filter((preference) => preference.is_active === false)
+      .map((preference) => preference.collection_id)
+  );
+  return new Set(collections.filter((collection) => !inactiveIds.has(collection.id)).map((collection) => collection.id));
+}
+
 function normalizePhone(phone: string) {
   return phone.replace(/\D/g, "");
 }
@@ -120,7 +251,7 @@ function getWhatsappPhone(phone: string) {
 }
 
 export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageProps) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [shareUrl, setShareUrl] = useState("");
   const [friendPhone, setFriendPhone] = useState("");
   const [invitePhone, setInvitePhone] = useState("");
@@ -131,11 +262,13 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
   const [friendRows, setFriendRows] = useState<UserStickerRow[]>([]);
   const [myRows, setMyRows] = useState<UserStickerRow[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [friendCollectionPreferences, setFriendCollectionPreferences] = useState<UserCollectionPreference[]>([]);
   const [selectedFriendCollectionId, setSelectedFriendCollectionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [addingFriend, setAddingFriend] = useState(false);
   const [removingFriendId, setRemovingFriendId] = useState<string | null>(null);
+  const [sharingFriendId, setSharingFriendId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [proposingKey, setProposingKey] = useState<string | null>(null);
@@ -156,6 +289,7 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
       setFriendRows([]);
       setMyRows([]);
       setCollections([]);
+      setFriendCollectionPreferences([]);
       setSelectedFriendCollectionId(null);
       loadFriends();
     }
@@ -171,9 +305,18 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
     && "contacts" in navigator
     && typeof (navigator as any).contacts?.select === "function";
 
-  const friendExtras = useMemo(() => friendRows
+  const activeFriendCollectionIds = useMemo(() => {
+    return getActiveCollectionIds(collections, friendCollectionPreferences);
+  }, [collections, friendCollectionPreferences]);
+
+  const activeFriendRows = useMemo(() => friendRows.filter((row) => {
+    const sticker = getSticker(row);
+    return sticker?.collection_id ? activeFriendCollectionIds.has(sticker.collection_id) : false;
+  }), [friendRows, activeFriendCollectionIds]);
+
+  const friendExtras = useMemo(() => activeFriendRows
     .filter((row) => row.status === "have" && row.quantity > 1)
-    .map((row) => ({ ...getSticker(row), availableQuantity: row.quantity - 1 })), [friendRows]);
+    .map((row) => ({ ...getSticker(row), availableQuantity: row.quantity - 1 })), [activeFriendRows]);
 
   const myHaveStickerIds = useMemo(() => new Set(
     myRows.filter((row) => row.status === "have" && (row.quantity || 0) > 0).map((row) => row.sticker_id)
@@ -183,16 +326,16 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
     myRows.filter((row) => row.status === "have" && row.quantity > 1).map((row) => row.sticker_id)
   ), [myRows]);
 
-  const friendWants = useMemo(() => friendRows
+  const friendWants = useMemo(() => activeFriendRows
     .filter((row) => row.status === "want")
-    .map((row) => getSticker(row)), [friendRows]);
+    .map((row) => getSticker(row)), [activeFriendRows]);
 
   const tradeOptions = useMemo(() => {
     const myWantIds = new Set(myRows.filter((row) => row.status === "want").map((row) => row.sticker_id));
     const myExtras = myRows
       .filter((row) => row.status === "have" && row.quantity > 1)
       .map((row) => getSticker(row));
-    const friendWantIds = new Set(friendRows.filter((row) => row.status === "want").map((row) => row.sticker_id));
+    const friendWantIds = new Set(activeFriendRows.filter((row) => row.status === "want").map((row) => row.sticker_id));
     const matchingFriendExtras = friendExtras.filter((sticker) => myWantIds.has(sticker.id));
     const matchingMyExtras = myExtras.filter((sticker) => friendWantIds.has(sticker.id));
     const options: TradeOption[] = [];
@@ -204,7 +347,7 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
     });
 
     return options;
-  }, [friendRows, friendExtras, myRows]);
+  }, [activeFriendRows, friendExtras, myRows]);
 
   const copyShareLink = async () => {
     if (!shareUrl) return;
@@ -219,13 +362,21 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
   };
 
   const nativeShare = async () => {
-    if (!shareUrl || !navigator.share) return;
+    if (!shareUrl) return;
     setMessage(null);
     setError(null);
     try {
+      const text = await buildOwnShareText();
+      if (!navigator.share) {
+        openWhatsappShare(text);
+        const copied = await copyTextToClipboard(text).catch(() => false);
+        setMessage(copied ? "Resumo copiado. O WhatsApp foi aberto em nova aba." : "O WhatsApp foi aberto em nova aba.");
+        return;
+      }
+
       await navigator.share({
         title: "A minha caderneta Papa Cromos",
-        text: shareText,
+        text,
         url: shareUrl,
       });
     } catch (err: any) {
@@ -235,33 +386,76 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
     }
   };
 
+  const buildOwnShareText = async () => {
+    if (!user?.id) return shareText;
+
+    const [rows, collectionsData, preferencesData] = await Promise.all([
+      fetchUserStickerRows(user.id),
+      supabase.from("collections").select("id, name, description, total_stickers").order("name", { ascending: true }),
+      supabase.from("user_collection_preferences").select("collection_id, is_active").eq("user_id", user.id),
+    ]);
+
+    if (collectionsData.error) throw collectionsData.error;
+    if (preferencesData.error) throw preferencesData.error;
+
+    const activeCollectionIds = getActiveCollectionIds(
+      (collectionsData.data || []) as Collection[],
+      (preferencesData.data || []) as UserCollectionPreference[]
+    );
+    const repeatedLines = rows
+      .filter((row) => {
+        const sticker = getSticker(row);
+        return row.status === "have"
+          && row.quantity > 1
+          && Boolean(sticker?.collection_id && activeCollectionIds.has(sticker.collection_id));
+      })
+      .map((row) => formatSharedStickerLine(getSticker(row), row.quantity - 1));
+
+    return [
+      "A minha caderneta Papa Cromos",
+      shareUrl ? `Link Papa Cromos: ${shareUrl}` : "",
+      "",
+      "Cromos repetidos nas minhas colecoes ativas:",
+      repeatedLines.length ? repeatedLines.join("\n") : "Ainda nao tenho repetidos nas colecoes ativas.",
+      "",
+      "Abre o link para veres a minha caderneta e propor uma troca.",
+    ].filter((line) => line !== "").join("\n");
+  };
+
   const buildFriendExportText = () => {
     const friendHaveStickerIds = new Set(
-      friendRows.filter((row) => row.status === "have" && row.quantity > 0).map((row) => row.sticker_id)
+      activeFriendRows.filter((row) => row.status === "have" && row.quantity > 0).map((row) => row.sticker_id)
     );
 
     const myRepeatedThatFriendDoesNotHave = myRows
-      .filter((row) => row.status === "have" && row.quantity > 1 && !friendHaveStickerIds.has(row.sticker_id))
+      .filter((row) => {
+        const sticker = getSticker(row);
+        return row.status === "have"
+          && row.quantity > 1
+          && !friendHaveStickerIds.has(row.sticker_id)
+          && Boolean(sticker?.collection_id && activeFriendCollectionIds.has(sticker.collection_id));
+      })
       .map((row) => ({ sticker: getSticker(row), quantity: row.quantity - 1 }));
 
-    const friendRepeated = friendRows
+    const friendRepeated = activeFriendRows
       .filter((row) => row.status === "have" && row.quantity > 1)
       .map((row) => ({ sticker: getSticker(row), quantity: row.quantity - 1 }));
 
     const friendName = friendProfile?.username || "esse amigo";
     const repeatedLines = myRepeatedThatFriendDoesNotHave.length
       ? myRepeatedThatFriendDoesNotHave
-          .map((item) => `- #${String(item.sticker.number).padStart(3, "0")} ${item.sticker.name} (x${item.quantity})`)
+          .map((item) => formatSharedStickerLine(item.sticker, item.quantity))
           .join("\n")
       : "Nenhum repetido disponível que o amigo nao tem.";
 
     const friendOfferLines = friendRepeated.length
       ? friendRepeated
-          .map((item) => `- #${String(item.sticker.number).padStart(3, "0")} ${item.sticker.name} (x${item.quantity})`)
+          .map((item) => formatSharedStickerLine(item.sticker, item.quantity))
           .join("\n")
       : "O amigo ainda nao tem repetidos para oferecer.";
 
     return [
+      shareUrl ? `Link Papa Cromos: ${shareUrl}` : "",
       `Papa Cromos — Exportação de cromos para ${friendName}`,
       "",
       "Cromos repetidos que tenho e o amigo nao tem:",
@@ -271,7 +465,7 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
       friendOfferLines,
       "",
       "Partilha este resumo para encontrar trocas mais rapido.",
-    ].join("\n");
+    ].filter((line) => line !== "").join("\n");
   };
 
   const copyTextToClipboard = async (text: string) => {
@@ -346,18 +540,21 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
         .maybeSingle();
       if (profileError) throw profileError;
 
-      const [friendData, myData, collectionsData] = await Promise.all([
+      const [friendData, myData, collectionsData, preferencesData] = await Promise.all([
         fetchUserStickerRows(sharedUserId),
         fetchUserStickerRows(user.id),
         supabase.from("collections").select("id, name, description, total_stickers").order("name", { ascending: true }),
+        supabase.from("user_collection_preferences").select("collection_id, is_active").eq("user_id", sharedUserId),
       ]);
 
       if (collectionsData.error) throw collectionsData.error;
+      if (preferencesData.error) throw preferencesData.error;
 
       setFriendProfile(profileData as SharedProfile | null);
       setFriendRows(friendData);
       setMyRows(myData);
       setCollections((collectionsData.data || []) as Collection[]);
+      setFriendCollectionPreferences((preferencesData.data || []) as UserCollectionPreference[]);
     } catch (err: any) {
       setError(err.message || "Erro ao carregar caderneta partilhada.");
     } finally {
@@ -567,6 +764,57 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
     onOpenSharedUser?.(friendId);
   };
 
+  const shareFriendRepeated = async (friend: FriendRow) => {
+    const friendId = friend.friend_id;
+    setSharingFriendId(friendId);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const [rows, collectionsData, preferencesData] = await Promise.all([
+        fetchUserStickerRows(friendId),
+        supabase.from("collections").select("id, name, description, total_stickers").order("name", { ascending: true }),
+        supabase.from("user_collection_preferences").select("collection_id, is_active").eq("user_id", friendId),
+      ]);
+
+      if (collectionsData.error) throw collectionsData.error;
+      if (preferencesData.error) throw preferencesData.error;
+
+      const activeCollectionIds = getActiveCollectionIds(
+        (collectionsData.data || []) as Collection[],
+        (preferencesData.data || []) as UserCollectionPreference[]
+      );
+      const repeatedLines = rows
+        .filter((row) => {
+          const sticker = getSticker(row);
+          return row.status === "have"
+            && row.quantity > 1
+            && Boolean(sticker?.collection_id && activeCollectionIds.has(sticker.collection_id));
+        })
+        .map((row) => formatSharedStickerLine(getSticker(row), row.quantity - 1));
+
+      const friendName = friend.profile?.username || "amigo";
+      const friendShareUrl = buildShareUrl(friendId);
+      const exportText = [
+        `O meu amigo ${friendName} tem repetidos no Papa Cromos`,
+        friendShareUrl ? `Link Papa Cromos: ${friendShareUrl}` : "",
+        "",
+        `Repetidos do ${friendName} nas colecoes ativas:`,
+        repeatedLines.length ? repeatedLines.join("\n") : "Este amigo ainda nao tem repetidos nas colecoes ativas.",
+        "",
+        "Abre o link para veres a caderneta e propor uma troca.",
+      ].filter((line) => line !== "").join("\n");
+
+      openWhatsappShare(exportText);
+      const copied = await copyTextToClipboard(exportText).catch(() => false);
+      setMessage(copied ? "Repetidos do amigo copiados. O WhatsApp foi aberto em nova aba." : "O WhatsApp foi aberto em nova aba.");
+    } catch (err: any) {
+      setError(err.message || "Erro ao partilhar repetidos do amigo.");
+    } finally {
+      setSharingFriendId(null);
+    }
+  };
+
   const friendCollectionSummaries = useMemo(() => {
     const collectionMap = new Map<string, {
       collection: Collection;
@@ -576,7 +824,7 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
       stickers: StickerInfo[];
     }>();
 
-    collections.forEach((collection) => {
+    collections.filter((collection) => activeFriendCollectionIds.has(collection.id)).forEach((collection) => {
       collectionMap.set(collection.id, {
         collection,
         have: 0,
@@ -586,7 +834,7 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
       });
     });
 
-    friendRows.forEach((row) => {
+    activeFriendRows.forEach((row) => {
       const sticker = getSticker(row);
       if (!sticker || !sticker.collection_id) return;
       const summary = collectionMap.get(sticker.collection_id);
@@ -605,7 +853,7 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
     });
 
     return Array.from(collectionMap.values()).sort((a, b) => a.collection.name.localeCompare(b.collection.name));
-  }, [collections, friendRows]);
+  }, [collections, activeFriendCollectionIds, activeFriendRows]);
 
   const selectedFriendCollection = useMemo(() => {
     if (!selectedFriendCollectionId) return friendCollectionSummaries[0] || null;
@@ -613,7 +861,14 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
   }, [friendCollectionSummaries, selectedFriendCollectionId]);
 
   useEffect(() => {
-    if (!selectedFriendCollectionId && friendCollectionSummaries.length > 0) {
+    if (friendCollectionSummaries.length === 0) {
+      if (selectedFriendCollectionId) {
+        setSelectedFriendCollectionId(null);
+      }
+      return;
+    }
+
+    if (!selectedFriendCollectionId || !friendCollectionSummaries.some((item) => item.collection.id === selectedFriendCollectionId)) {
       setSelectedFriendCollectionId(friendCollectionSummaries[0].collection.id);
     }
   }, [friendCollectionSummaries, selectedFriendCollectionId]);
@@ -663,15 +918,10 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
             {qrUrl ? <img src={qrUrl} alt="QR da tua caderneta" /> : <QrCode size={120} />}
           </div>
           <div className="share-details">
-            <span>A tua caderneta</span>
-            <strong>{profile?.username || user?.email?.split("@")[0] || "Utilizador"}</strong>
-            <input value={shareUrl} readOnly onFocus={(event) => event.currentTarget.select()} />
             <div className="share-actions">
-              {"share" in navigator && (
-                <button className="btn btn-primary" type="button" onClick={nativeShare}>
-                  <Share2 size={16} /> Partilhar
-                </button>
-              )}
+              <button className="btn btn-primary" type="button" onClick={nativeShare}>
+                <Share2 size={16} /> Partilhar
+              </button>
               <button className="btn btn-primary" type="button" onClick={copyShareLink}>
                 <Copy size={16} /> Copiar link
               </button>
@@ -710,6 +960,14 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
                       onClick={() => openFriendAlbum(friend.friend_id)}
                     >
                       <BookOpen size={14} /> Coleção
+                    </button>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      type="button"
+                      onClick={() => shareFriendRepeated(friend)}
+                      disabled={sharingFriendId === friend.friend_id}
+                    >
+                      <WhatsAppIcon size={14} /> {sharingFriendId === friend.friend_id ? "A preparar..." : "Repetidos"}
                     </button>
                     <button
                       className="btn btn-danger-soft btn-xs"
@@ -827,6 +1085,14 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
                         onClick={() => openFriendAlbum(friend.friend_id)}
                       >
                         <BookOpen size={14} /> Colecao
+                      </button>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        type="button"
+                        onClick={() => shareFriendRepeated(friend)}
+                        disabled={sharingFriendId === friend.friend_id}
+                      >
+                        <WhatsAppIcon size={14} /> {sharingFriendId === friend.friend_id ? "A preparar..." : "Repetidos"}
                       </button>
                       <button
                         className="btn btn-danger-soft btn-xs"
@@ -970,10 +1236,10 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
                       {selectedFriendCollection.stickers
                         .sort((a, b) => a.number - b.number)
                         .map((sticker) => {
-                          const isWant = friendRows.some(
+                          const isWant = activeFriendRows.some(
                             (row) => row.sticker_id === sticker.id && row.status === "want"
                           );
-                          const quantity = friendRows
+                          const quantity = activeFriendRows
                             .find((row) => row.sticker_id === sticker.id && row.status === "have")?.quantity || 0;
                           const label = isWant ? "procura" : quantity > 1 ? "repetido" : "tenho";
                           const pillClass = isWant ? "admin-user-sticker-pill want" : quantity > 1 ? "admin-user-sticker-pill have multi" : "admin-user-sticker-pill have";
@@ -1049,6 +1315,7 @@ function MiniSticker({
   highlightNotice?: string;
 }) {
   const cardStateClass = notice ? "has-notice" : highlightNotice ? "has-positive-notice" : "";
+  const display = getSharedStickerDisplay(sticker);
 
   return (
     <div className={`shared-mini-sticker ${cardStateClass}`}>
@@ -1060,8 +1327,10 @@ function MiniSticker({
           event.currentTarget.src = "/logo.png";
         }}
       />
-      <strong>#{String(sticker.number).padStart(3, "0")}</strong>
-      <span>{sticker.name}</span>
+      <strong title={display.teamName ? `${display.teamName} #${display.number}` : `#${display.number}`}>
+        #{String(display.number).padStart(3, "0")}{display.teamName ? ` ${display.teamName}` : ""}
+      </strong>
+      <span title={sticker.name}>{display.detailName}</span>
       {notice && <small>{notice}</small>}
       {highlightNotice && <small>{highlightNotice}</small>}
     </div>

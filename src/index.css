@@ -1170,8 +1170,54 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .share-page {
+    gap: 12px;
+  }
+
+  .share-header {
+    gap: 10px;
+  }
+
+  .share-header h2 {
+    font-size: 21px;
+  }
+
+  .share-header p {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .share-page > .share-panel:first-of-type {
+    gap: 10px;
+    padding: 12px;
+  }
+
   .share-qr-card {
-    min-height: 240px;
+    width: min(190px, 58vw);
+    max-width: 190px;
+    min-height: 0;
+    aspect-ratio: 1;
+    justify-self: center;
+  }
+
+  .share-qr-card img {
+    width: min(168px, calc(100% - 18px));
+  }
+
+  .share-details {
+    gap: 8px;
+  }
+
+  .share-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .share-actions .btn {
+    min-height: 40px;
+    padding-inline: 8px;
+    font-size: 12px;
   }
 
   .share-trade-arrow {
@@ -8257,6 +8303,8 @@ button.sticker-wikipedia-link {
   grid-area: number;
   color: var(--text-heading);
   font-size: 12px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .shared-mini-sticker span {
@@ -8264,9 +8312,11 @@ button.sticker-wikipedia-link {
   min-width: 0;
   color: var(--text);
   font-size: 12px;
+  line-height: 1.25;
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .shared-mini-sticker small {
@@ -8367,14 +8417,14 @@ button.sticker-wikipedia-link {
 
   .share-qr-card {
     width: 100%;
-    max-width: 360px;
+    max-width: 260px;
     min-height: 0;
     aspect-ratio: 1;
     justify-self: center;
   }
 
   .share-qr-card img {
-    width: min(280px, calc(100% - 32px));
+    width: min(220px, calc(100% - 28px));
   }
 
   .share-details {
@@ -9636,6 +9686,26 @@ button.sticker-wikipedia-link {
   .admin-list-actions .btn,
   .account-password-actions .btn {
     width: 100%;
+  }
+
+  .share-page > .share-panel:first-of-type .share-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .share-page > .share-panel:first-of-type .share-actions .btn {
+    width: 100%;
+    min-height: 38px;
+    padding-inline: 6px;
+    font-size: 11.5px;
+  }
+
+  .share-page > .share-panel:first-of-type .share-qr-card {
+    width: min(172px, 54vw);
+    max-width: 172px;
+  }
+
+  .share-page > .share-panel:first-of-type .share-qr-card img {
+    width: min(152px, calc(100% - 18px));
   }
 
   .share-panel,
