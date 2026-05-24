@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, KeyRound, PackagePlus, Pencil, RefreshCw, RotateCcw, Send, Settings, Trash2, Users, X } from "lucide-react";
+import { ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, KeyRound, Mail, PackagePlus, Pencil, RefreshCw, RotateCcw, Send, Settings, Trash2, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { logAuditEvent } from "../lib/audit";
@@ -776,6 +776,44 @@ export default function AdminPage() {
     }
   };
 
+  const sendRepeatedStickersEmail = async () => {
+    if (!window.confirm("Enviar por email a lista atual de repetidos para todos os utilizadores registados com email?")) return;
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("send-repeated-stickers-email", {
+        body: {},
+      });
+      if (invokeError) throw invokeError;
+
+      const sent = Number(data?.sent || 0);
+      const recipients = Number(data?.recipients || 0);
+      const repeatedStickers = Number(data?.repeated_stickers || 0);
+      const failed = Number(data?.failed || 0);
+
+      await logAuditEvent({
+        action: "admin_repeated_stickers_email_sent",
+        entityType: "email",
+        metadata: { sent, recipients, repeated_stickers: repeatedStickers, failed },
+      });
+
+      setSuccess(
+        failed > 0
+          ? `Emails enviados para ${sent} de ${recipients} utilizadores. ${failed} falharam.`
+          : `Emails enviados para ${sent} utilizadores com ${repeatedStickers} repetidos listados.`
+      );
+    } catch (err: any) {
+      const message = err?.context?.error || err?.message || "Erro ao enviar emails dos repetidos.";
+      setError(String(message).includes("RESEND_API_KEY")
+        ? "Falta configurar RESEND_API_KEY na Edge Function para enviar emails."
+        : message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const loadUserCollection = async (registeredUser: RegisteredUser) => {
     setSelectedCollectionUserId(registeredUser.id);
     setSelectedUserStickers([]);
@@ -1294,6 +1332,19 @@ export default function AdminPage() {
         </p>
         <button className="btn btn-danger-soft admin-maintenance-btn" type="button" onClick={resetTradeData} disabled={saving}>
           <RotateCcw size={16} /> Reinicializar dados das trocas
+        </button>
+      </section>
+
+      <section className="admin-panel admin-email-panel">
+        <div className="admin-panel-title">
+          <Mail size={18} />
+          <h3>Email de repetidos</h3>
+        </div>
+        <p className="muted-text">
+          Envia a todos os utilizadores registados a lista atual de cromos repetidos disponiveis na aplicacao, com um template moderno e pronto para combinar trocas.
+        </p>
+        <button className="btn btn-primary admin-email-btn" type="button" onClick={sendRepeatedStickersEmail} disabled={saving}>
+          <Mail size={16} /> {saving ? "A enviar..." : "Enviar lista de repetidos"}
         </button>
       </section>
 

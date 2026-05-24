@@ -5348,6 +5348,29 @@ button.sticker-wikipedia-link {
   font-weight: 900;
 }
 
+.album-team-special-icon {
+  color: var(--text-heading);
+}
+
+.album-team-special-icon svg {
+  stroke-width: 2.6;
+}
+
+.album-team-special-icon.fwc {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.album-team-special-icon.extras {
+  background: #fff7ed;
+  color: #f59e0b;
+}
+
+.album-team-special-icon.cc {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
 .album-team-button strong {
   position: relative;
   z-index: 2;
@@ -7561,6 +7584,16 @@ button.sticker-wikipedia-link {
 }
 
 .admin-maintenance-btn {
+  width: fit-content;
+}
+
+.admin-email-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-email-btn {
   width: fit-content;
 }
 
