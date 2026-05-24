@@ -18,9 +18,9 @@ function findRegionForCity(city: string) {
 }
 
 export default function ProfileCompletionGate({
-  requiredFields = ["phone", "region", "city"],
-  title = "Precisamos destes dados para as trocas",
-  description = "O login Google/Facebook nao fornece telemovel, distrito nem cidade. Estes campos ajudam a combinar trocas e parceiros proximos.",
+  requiredFields = ["region", "city"],
+  title = "Completa a tua localizacao",
+  description = "Indica distrito e cidade para podermos sugerir trocas e parceiros proximos.",
   submitLabel = "Guardar e continuar",
   showSignOut = true,
 }: ProfileCompletionGateProps) {

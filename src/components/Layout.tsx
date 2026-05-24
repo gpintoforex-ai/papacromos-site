@@ -152,6 +152,15 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                       <span>{profile?.is_admin ? "Administrador" : "Utilizador"}</span>
                     </div>
                     <button
+                      className="header-icon-btn profile-popover-close"
+                      type="button"
+                      onClick={() => setProfileOpen(false)}
+                      title="Fechar"
+                      aria-label="Fechar janela"
+                    >
+                      <X size={16} />
+                    </button>
+                    <button
                       className="btn btn-ghost btn-sm profile-logout-btn"
                       type="button"
                       onClick={() => {

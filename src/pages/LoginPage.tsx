@@ -234,11 +234,11 @@ export default function LoginPage() {
           <div className="login-oauth-row">
             <button className="oauth-button google" type="button" onClick={() => handleOAuth("google")} disabled={loading || Boolean(oauthLoading)}>
               <span aria-hidden="true">G</span>
-              {oauthLoading === "google" ? "A abrir Google..." : isSignUp ? "Registar com Google" : "Entrar com Google"}
+              {oauthLoading === "google" ? "A abrir Google..." : isSignUp ? "Registar com Google" : "Google"}
             </button>
             <button className="oauth-button facebook" type="button" onClick={() => handleOAuth("facebook")} disabled={loading || Boolean(oauthLoading)}>
               <span aria-hidden="true">f</span>
-              {oauthLoading === "facebook" ? "A abrir Facebook..." : isSignUp ? "Registar com Facebook" : "Entrar com Facebook"}
+              {oauthLoading === "facebook" ? "A abrir Facebook..." : isSignUp ? "Registar com Facebook" : "Facebook"}
             </button>
           </div>
           <div className="login-divider"><span>ou</span></div>

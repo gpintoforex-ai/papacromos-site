@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "./supabase";
 import type { Provider, User } from "@supabase/supabase-js";
+import { logAuditEvent } from "./audit";
 
 interface AuthContextType {
   user: User | null;
@@ -72,6 +73,18 @@ function normalizePhone(phone: string) {
   return phone.replace(/\D/g, "");
 }
 
+function logUserLogin(currentUser: User) {
+  logAuditEvent({
+    action: "user_login",
+    entityType: "auth",
+    targetUserId: currentUser.id,
+    metadata: {
+      email: currentUser.email || null,
+      provider: currentUser.app_metadata?.provider || "email",
+    },
+  });
+}
+
 async function ensurePhoneAvailable(phone: string, currentUserId?: string) {
   const normalizedPhone = normalizePhone(phone);
   if (!normalizedPhone) return;
@@ -114,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       if (currentUser) {
@@ -122,6 +135,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const nextProfile = await createOrUpdateProfile(currentUser);
             setProfile(nextProfile);
+            if (event === "SIGNED_IN") {
+              logUserLogin(currentUser);
+            }
           } catch (error) {
             console.error("Failed to load user profile", error);
             setProfile(null);

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Minus } from "lucide-react";
+import { Info, Minus } from "lucide-react";
 
 interface StickerCardProps {
   number: number;
@@ -13,6 +13,9 @@ interface StickerCardProps {
   compact?: boolean;
   playerName?: string;
   cropPlayerImage?: boolean;
+  wikipediaUrl?: string;
+  infoAnimationKey?: string | number;
+  onWikipediaClick?: () => void;
   stickerId?: string;
   onClick?: () => void;
   onReduceQuantity?: () => void;
@@ -46,6 +49,9 @@ export default function StickerCard({
   compact,
   playerName,
   cropPlayerImage,
+  wikipediaUrl,
+  infoAnimationKey,
+  onWikipediaClick,
   stickerId,
   onClick,
   onReduceQuantity,
@@ -110,6 +116,36 @@ export default function StickerCard({
       </div>
       {playerName && (
         <div className="sticker-card-body sticker-player-name-slot">
+          {(wikipediaUrl || onWikipediaClick) && (
+            onWikipediaClick ? (
+              <button
+                className="sticker-wikipedia-link"
+                key={infoAnimationKey}
+                type="button"
+                title={`Ver informacao de ${playerName || name} na Wikipedia`}
+                aria-label={`Ver informacao de ${playerName || name} na Wikipedia`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onWikipediaClick();
+                }}
+              >
+                <Info size={13} />
+              </button>
+            ) : (
+              <a
+              className="sticker-wikipedia-link"
+              key={infoAnimationKey}
+              href={wikipediaUrl || "#"}
+              target="_blank"
+              rel="noreferrer"
+              title={`Pesquisar ${playerName || name} na Wikipedia`}
+              aria-label={`Pesquisar ${playerName || name} na Wikipedia`}
+              onClick={(event) => event.stopPropagation()}
+              >
+                <Info size={13} />
+              </a>
+            )
+          )}
           <strong className="sticker-name">{playerName}</strong>
         </div>
       )}

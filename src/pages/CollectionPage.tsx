@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { getAvatarColor, getAvatarInitial } from "../lib/avatar";
 import StickerCard from "../components/StickerCard";
-import { Search, Camera, ArrowLeft, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, CircleCheck, CircleHelp, CopyPlus, Album, Images, Trophy, Trash2 } from "lucide-react";
+import { Search, Camera, ArrowLeft, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, ChevronDown, CircleCheck, CircleHelp, CopyPlus, Album, Images, Trophy, Trash2, X, ExternalLink, Newspaper, CalendarDays } from "lucide-react";
 
 interface Collection {
   id: string;
@@ -53,15 +53,79 @@ type CodeOcrCanvasMode = "normal" | "inverted";
 const WORLD_ALBUM_COLLECTION_ID = "b2026000-0000-4000-8000-000000000001";
 const stickerAssetVersion = "20260523-mexico-names";
 
+const worldCupNewsFallback: WorldCupNewsItem[] = [
+  {
+    title: "Calendario completo do FIFA World Cup 2026",
+    link: "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/articles/match-schedule-fixtures-results-teams-stadiums",
+    source: "FIFA",
+    publishedAt: "Atualizado",
+    description: "Consulta o calendario oficial do FIFA World Cup 2026, com jogos, datas, estadios e resultados.",
+  },
+  {
+    title: "Noticias oficiais do FIFA World Cup 2026",
+    link: "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
+    source: "FIFA",
+    publishedAt: "Oficial",
+    description: "Acompanha as noticias oficiais, informacoes das selecoes e novidades do Mundial 2026.",
+  },
+];
+
+const worldCupUpcomingMatches = [
+  {
+    date: "11 Jun 2026",
+    time: "20:00 Lisboa",
+    match: "Mexico vs Africa do Sul",
+    venue: "Mexico City Stadium",
+  },
+  {
+    date: "12 Jun 2026",
+    time: "02:00 Lisboa",
+    match: "Estados Unidos vs Paraguai",
+    venue: "SoFi Stadium",
+  },
+  {
+    date: "12 Jun 2026",
+    time: "20:00 Lisboa",
+    match: "Qatar vs Suica",
+    venue: "Levi's Stadium",
+  },
+];
+
 interface ScannedCodeItem {
   rawValue: string;
   sticker: Sticker | null;
   count: number;
 }
 
-interface TeamCompletionConfetti {
+interface TeamCompletionFireworks {
   teamName: string;
   key: number;
+}
+
+interface WikipediaModalState {
+  searchTerm: string;
+  title: string;
+  extract: string;
+  url: string;
+  thumbnailUrl: string;
+  loading: boolean;
+  error: string | null;
+}
+
+interface WorldCupNewsItem {
+  title: string;
+  link: string;
+  source: string;
+  publishedAt: string;
+  description: string;
+}
+
+interface WorldCupFeedModalState {
+  type: "news" | "match";
+  title: string;
+  subtitle: string;
+  description: string;
+  url: string;
 }
 
 interface AlbumTeamPage {
@@ -75,6 +139,77 @@ interface AlbumTeamPage {
 
 const collectionFallbackImage =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect width='400' height='400' fill='%23f3f4f6'/%3E%3Crect x='92' y='70' width='216' height='260' rx='18' fill='%23ffffff' stroke='%23d1d5db' stroke-width='10'/%3E%3Cpath d='M132 132h136v24H132zm0 58h136v24H132zm0 58h92v24h-92z' fill='%239ca3af'/%3E%3C/svg%3E";
+
+function playFireworksSound() {
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  const audioContext = new AudioContextClass();
+  const masterGain = audioContext.createGain();
+  masterGain.gain.setValueAtTime(0.22, audioContext.currentTime);
+  masterGain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 2.2);
+  masterGain.connect(audioContext.destination);
+
+  const playBurst = (delay: number, frequency: number) => {
+    const startAt = audioContext.currentTime + delay;
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    oscillator.type = "triangle";
+    oscillator.frequency.setValueAtTime(frequency, startAt);
+    oscillator.frequency.exponentialRampToValueAtTime(frequency * 2.4, startAt + 0.18);
+    gain.gain.setValueAtTime(0.001, startAt);
+    gain.gain.exponentialRampToValueAtTime(0.16, startAt + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.34);
+
+    oscillator.connect(gain);
+    gain.connect(masterGain);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + 0.36);
+
+    const noiseLength = Math.floor(audioContext.sampleRate * 0.42);
+    const buffer = audioContext.createBuffer(1, noiseLength, audioContext.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let index = 0; index < noiseLength; index += 1) {
+      data[index] = (Math.random() * 2 - 1) * (1 - index / noiseLength);
+    }
+
+    const noise = audioContext.createBufferSource();
+    const noiseGain = audioContext.createGain();
+    noise.buffer = buffer;
+    noiseGain.gain.setValueAtTime(0.001, startAt + 0.15);
+    noiseGain.gain.exponentialRampToValueAtTime(0.18, startAt + 0.2);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.72);
+    noise.connect(noiseGain);
+    noiseGain.connect(masterGain);
+    noise.start(startAt + 0.15);
+    noise.stop(startAt + 0.75);
+  };
+
+  playBurst(0, 320);
+  playBurst(0.34, 420);
+  playBurst(0.72, 260);
+  window.setTimeout(() => void audioContext.close(), 2600);
+}
+
+function parseWorldCupNews(xmlText: string): WorldCupNewsItem[] {
+  const xml = new DOMParser().parseFromString(xmlText, "text/xml");
+  return Array.from(xml.querySelectorAll("item")).slice(0, 3).map((item) => ({
+    title: item.querySelector("title")?.textContent?.trim() || "Noticia do Mundial",
+    link: item.querySelector("link")?.textContent?.trim() || "https://news.google.com/search?q=FIFA%20World%20Cup%202026",
+    source: item.querySelector("source")?.textContent?.trim() || "Noticias",
+    publishedAt: item.querySelector("pubDate")?.textContent
+      ? new Date(item.querySelector("pubDate")?.textContent || "").toLocaleDateString("pt-PT", { day: "2-digit", month: "short" })
+      : "",
+    description: cleanFeedDescription(item.querySelector("description")?.textContent || ""),
+  }));
+}
+
+function cleanFeedDescription(description: string) {
+  const parsed = new DOMParser().parseFromString(description, "text/html");
+  const text = parsed.body.textContent?.replace(/\s+/g, " ").trim() || "";
+  return text || "Abre a fonte para consultar a noticia completa.";
+}
 
 function applyFallbackImage(event: SyntheticEvent<HTMLImageElement>, sticker?: Sticker) {
   event.currentTarget.src = sticker ? getStickerFallbackImage(sticker) : collectionFallbackImage;
@@ -382,6 +517,21 @@ function getStickerDisplayName(sticker: Sticker) {
 function getStickerPlayerName(sticker: Sticker) {
   const displayName = getStickerDisplayName(sticker);
   return displayName.includes(" - ") ? displayName.split(" - ").slice(1).join(" - ").trim() : displayName;
+}
+
+function getStickerWikipediaSearchTerm(sticker: Sticker) {
+  const teamName = getStickerEffectiveTeamName(sticker);
+  const localNumber = getAlbumLocalNumber(sticker);
+  return sticker.collection_id === WORLD_ALBUM_COLLECTION_ID
+    ? localNumber === 1 || localNumber === 13
+      ? `${teamName} national football team`
+      : getStickerPlayerName(sticker)
+    : getStickerDisplayName(sticker);
+}
+
+function getStickerWikipediaUrl(sticker: Sticker) {
+  const searchTerm = getStickerWikipediaSearchTerm(sticker);
+  return `https://pt.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(searchTerm)}`;
 }
 
 function isWorldAlbumPlayerSticker(sticker: Sticker) {
@@ -1067,6 +1217,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const [filter, setFilter] = useState<FilterMode>("all");
   const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
   const [selectedAlbumTeamName, setSelectedAlbumTeamName] = useState<string | null>(null);
+  const [albumTeamInfoAnimationKey, setAlbumTeamInfoAnimationKey] = useState(0);
   const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [voicePanelOpen, setVoicePanelOpen] = useState(false);
@@ -1074,9 +1225,13 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const [voiceText, setVoiceText] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceResult, setVoiceResult] = useState<string | null>(null);
-  const [homeResultMode, setHomeResultMode] = useState<HomeResultMode>("complete");
+  const [homeResultMode, setHomeResultMode] = useState<HomeResultMode>("collections");
   const [neededStickerHolders, setNeededStickerHolders] = useState<NeededStickerHolder[]>([]);
   const [neededStickerHoldersLoading, setNeededStickerHoldersLoading] = useState(false);
+  const [worldCupNews, setWorldCupNews] = useState<WorldCupNewsItem[]>(worldCupNewsFallback);
+  const [worldCupNewsLoading, setWorldCupNewsLoading] = useState(false);
+  const [worldCupFeedModal, setWorldCupFeedModal] = useState<WorldCupFeedModalState | null>(null);
+  const [worldCupFeedOpenPanel, setWorldCupFeedOpenPanel] = useState<"news" | "matches" | null>(null);
   const [codePanelOpen, setCodePanelOpen] = useState(false);
   const [codeText, setCodeText] = useState("");
   const [codeScanning, setCodeScanning] = useState(false);
@@ -1084,7 +1239,8 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const [codeResult, setCodeResult] = useState<string | null>(null);
   const [scannedCodes, setScannedCodes] = useState<ScannedCodeItem[]>([]);
   const [albumSlideDirection, setAlbumSlideDirection] = useState<AlbumSlideDirection>(null);
-  const [teamCompletionConfetti, setTeamCompletionConfetti] = useState<TeamCompletionConfetti | null>(null);
+  const [teamCompletionFireworks, setTeamCompletionFireworks] = useState<TeamCompletionFireworks | null>(null);
+  const [wikipediaModal, setWikipediaModal] = useState<WikipediaModalState | null>(null);
   const [collectionOnboardingOpen, setCollectionOnboardingOpen] = useState(false);
   const [collectionOnboardingSelection, setCollectionOnboardingSelection] = useState<string[]>([]);
   const [collectionOnboardingSaving, setCollectionOnboardingSaving] = useState(false);
@@ -1117,19 +1273,43 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     setFilter("all");
     setSelectedStickerId(null);
     setSelectedAlbumTeamName(null);
-    setHomeResultMode("complete");
+    setHomeResultMode("collections");
     loadData();
   }, [homeKey]);
 
   useEffect(() => {
-    if (!teamCompletionConfetti) return;
+    if (!teamCompletionFireworks) return;
 
     const timer = window.setTimeout(() => {
-      setTeamCompletionConfetti(null);
-    }, 2400);
+      setTeamCompletionFireworks(null);
+    }, 3200);
 
     return () => window.clearTimeout(timer);
-  }, [teamCompletionConfetti]);
+  }, [teamCompletionFireworks]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadWorldCupNews = async () => {
+      setWorldCupNewsLoading(true);
+      try {
+        const rssUrl = "https://news.google.com/rss/search?q=FIFA%20World%20Cup%202026&hl=pt-PT&gl=PT&ceid=PT:pt-150";
+        const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`);
+        if (!response.ok) throw new Error("Noticias indisponiveis.");
+        const items = parseWorldCupNews(await response.text());
+        if (!cancelled && items.length > 0) setWorldCupNews(items);
+      } catch {
+        if (!cancelled) setWorldCupNews(worldCupNewsFallback);
+      } finally {
+        if (!cancelled) setWorldCupNewsLoading(false);
+      }
+    };
+
+    loadWorldCupNews();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedCollectionId || !user?.id || stickers.length === 0) return;
@@ -1287,7 +1467,8 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       }
       await loadData();
       if (completedWorldTeamName) {
-        setTeamCompletionConfetti({ teamName: completedWorldTeamName, key: Date.now() });
+        playFireworksSound();
+        setTeamCompletionFireworks({ teamName: completedWorldTeamName, key: Date.now() });
       }
       onCollectionChange?.();
     } catch (err: any) {
@@ -2270,6 +2451,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     setSearch("");
     setFilter("all");
     setSelectedStickerId(null);
+    setAlbumTeamInfoAnimationKey((key) => key + 1);
   };
 
   const openStickerCollection = (sticker: Sticker) => {
@@ -2302,6 +2484,50 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     setSelectedAlbumTeamName(isStickerWorldAlbum ? getStickerEffectiveTeamName(sticker) : null);
   };
 
+  const openWikipediaModal = async (sticker: Sticker) => {
+    const searchTerm = getStickerWikipediaSearchTerm(sticker);
+    const searchUrl = `https://pt.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(searchTerm)}`;
+
+    setWikipediaModal({
+      searchTerm,
+      title: searchTerm,
+      extract: "",
+      url: searchUrl,
+      thumbnailUrl: "",
+      loading: true,
+      error: null,
+    });
+
+    try {
+      const searchResponse = await fetch(
+        `https://pt.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchTerm)}&format=json&origin=*&srlimit=1`
+      );
+      if (!searchResponse.ok) throw new Error("Nao foi possivel pesquisar na Wikipedia.");
+
+      const searchData = await searchResponse.json();
+      const pageTitle = searchData?.query?.search?.[0]?.title || searchTerm;
+      const summaryResponse = await fetch(`https://pt.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(pageTitle)}`);
+      if (!summaryResponse.ok) throw new Error("Nao foi possivel carregar o resumo da Wikipedia.");
+
+      const summaryData = await summaryResponse.json();
+      setWikipediaModal({
+        searchTerm,
+        title: summaryData?.title || pageTitle,
+        extract: summaryData?.extract || "Sem resumo disponivel.",
+        url: summaryData?.content_urls?.desktop?.page || searchUrl,
+        thumbnailUrl: summaryData?.thumbnail?.source || "",
+        loading: false,
+        error: null,
+      });
+    } catch (err: any) {
+      setWikipediaModal((current) => current ? {
+        ...current,
+        loading: false,
+        error: err.message || "Nao foi possivel carregar informacao da Wikipedia.",
+      } : null);
+    }
+  };
+
   const renderSticker = (sticker: Sticker, compact = false) => {
     const us = getUserSticker(sticker.id);
     const photoInputId = `photo-${sticker.id}`;
@@ -2322,6 +2548,9 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         compact={compact}
         cropPlayerImage={showWorldPlayerName}
         playerName={showWorldPlayerName ? getStickerPlayerName(sticker) : undefined}
+        wikipediaUrl={getStickerWikipediaUrl(sticker)}
+        infoAnimationKey={`${albumTeamInfoAnimationKey}-${sticker.id}`}
+        onWikipediaClick={() => openWikipediaModal(sticker)}
         onClick={() => {
           setSelectedStickerId(sticker.id);
           us ? addQuantity(us.id) : addSticker(sticker.id, "have");
@@ -2408,14 +2637,165 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     </div>
   ) : null;
 
-  const teamCompletionConfettiOverlay = teamCompletionConfetti ? (
-    <div className="team-completion-confetti" key={teamCompletionConfetti.key} role="status" aria-live="polite">
-      <div className="team-completion-confetti-burst" aria-hidden="true">
-        {Array.from({ length: 32 }, (_, index) => <span key={index} />)}
+  const teamCompletionFireworksOverlay = teamCompletionFireworks ? (
+    <div className="team-completion-fireworks" key={teamCompletionFireworks.key} role="status" aria-live="polite">
+      <div className="team-completion-fireworks-sky" aria-hidden="true">
+        {Array.from({ length: 5 }, (_, burstIndex) => (
+          <div className="team-firework" key={burstIndex}>
+            {Array.from({ length: 14 }, (_, sparkIndex) => <span key={sparkIndex} />)}
+          </div>
+        ))}
       </div>
-      <strong>{teamCompletionConfetti.teamName} completa!</strong>
+      <strong>{teamCompletionFireworks.teamName} completa!</strong>
     </div>
   ) : null;
+
+  const wikipediaInfoModal = wikipediaModal ? (
+    <div className="wikipedia-info-overlay" role="presentation" onClick={() => setWikipediaModal(null)}>
+      <section
+        className="wikipedia-info-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wikipedia-info-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="wikipedia-info-header">
+          <div>
+            <span>Wikipedia</span>
+            <h3 id="wikipedia-info-title">{wikipediaModal.title}</h3>
+          </div>
+          <button className="header-icon-btn" type="button" onClick={() => setWikipediaModal(null)} title="Fechar" aria-label="Fechar">
+            <X size={18} />
+          </button>
+        </div>
+
+        {wikipediaModal.loading ? (
+          <div className="wikipedia-info-loading">A carregar informacao...</div>
+        ) : wikipediaModal.error ? (
+          <div className="wikipedia-info-error">
+            <p>{wikipediaModal.error}</p>
+            <a href={wikipediaModal.url} target="_blank" rel="noreferrer">
+              <ExternalLink size={14} /> Pesquisar na Wikipedia
+            </a>
+          </div>
+        ) : (
+          <>
+            {wikipediaModal.thumbnailUrl && (
+              <img className="wikipedia-info-image" src={wikipediaModal.thumbnailUrl} alt="" loading="lazy" />
+            )}
+            <div className="wikipedia-info-sections">
+              <section>
+                <h4>Informacoes pessoais</h4>
+                <p>{wikipediaModal.extract}</p>
+              </section>
+            </div>
+            <a className="wikipedia-info-link" href={wikipediaModal.url} target="_blank" rel="noreferrer">
+              <ExternalLink size={14} /> Abrir artigo completo
+            </a>
+          </>
+        )}
+      </section>
+    </div>
+  ) : null;
+
+  const worldCupFeedInfoModal = worldCupFeedModal ? (
+    <div className="world-cup-feed-modal-overlay" role="presentation" onClick={() => setWorldCupFeedModal(null)}>
+      <section
+        className="world-cup-feed-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="world-cup-feed-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="world-cup-feed-modal-header">
+          <div>
+            <span>{worldCupFeedModal.type === "news" ? "Noticia" : "Proximo jogo"}</span>
+            <h3 id="world-cup-feed-modal-title">{worldCupFeedModal.title}</h3>
+            <small>{worldCupFeedModal.subtitle}</small>
+          </div>
+          <button className="header-icon-btn" type="button" onClick={() => setWorldCupFeedModal(null)} title="Fechar" aria-label="Fechar">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="world-cup-feed-modal-body">
+          <p>{worldCupFeedModal.description}</p>
+          <a className="world-cup-feed-modal-link" href={worldCupFeedModal.url} target="_blank" rel="noreferrer">
+            <ExternalLink size={15} /> Abrir fonte
+          </a>
+        </div>
+      </section>
+    </div>
+  ) : null;
+
+  const collectionCoverSection = (
+    <>
+      <section className="collection-home-section" ref={collectionsSectionRef}>
+        <div className="collection-home-section-title">
+          <h3>{homeResultMode === "complete" ? "Colecoes completas" : "Colecoes"}</h3>
+          <span>{homeResultMode === "complete" ? completedCollections : activeCollections.length}</span>
+        </div>
+      </section>
+
+      <div className="collection-cover-grid">
+        {(homeResultMode === "complete" ? completeCollectionSummaries.map((summary) => summary.collection) : collections).map((collection) => {
+          const active = isCollectionActive(collection.id);
+          const summary = activeCollectionSummaries.find((item) => item.collection.id === collection.id);
+
+          return (
+            <article key={collection.id} className={`collection-cover-card ${active ? "" : "inactive"}`}>
+              <button
+                className="collection-cover-main"
+                type="button"
+                disabled={!active}
+                onClick={() => {
+                  setSelectedCollectionId(collection.id);
+                  setSearch("");
+                  setFilter("all");
+                  setSelectedAlbumTeamName(null);
+                }}
+              >
+                <div className="collection-cover-image">
+                  <img
+                    src={collection.image_url || collectionFallbackImage}
+                    alt={collection.name}
+                    loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.src = collectionFallbackImage;
+                    }}
+                  />
+                </div>
+                <div className="collection-cover-body">
+                  <strong>{collection.name}</strong>
+                  <span>{summary ? `${summary.have}/${summary.total} cromos` : `${collection.total_stickers || 0} cromos`}</span>
+                  {summary && (
+                    <div className="collection-cover-progress">
+                      <span style={{ width: `${summary.progress}%` }} />
+                    </div>
+                  )}
+                </div>
+              </button>
+              <div className="collection-cover-actions">
+                <span className={`collection-status-pill ${active ? "active" : "inactive"}`}>
+                  {active ? "Ativa" : "Desativada"}
+                </span>
+                <button
+                  className={`btn btn-xs ${active ? "btn-error" : "btn-primary"}`}
+                  type="button"
+                  onClick={() => toggleCollectionActive(collection.id, !active)}
+                >
+                  {active ? <EyeOff size={12} /> : <Eye size={12} />}
+                  {active ? "Desativar" : "Ativar"}
+                </button>
+              </div>
+            </article>
+          );
+        })}
+        {homeResultMode === "complete" && completeCollectionSummaries.length === 0 && (
+          <p className="muted-text">Ainda nao tens colecoes completas.</p>
+        )}
+      </div>
+    </>
+  );
 
   if (loading) return <div className="loading">A carregar colecao...</div>;
 
@@ -2433,7 +2813,9 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     return (
       <div className="collection-page collection-home">
         {collectionOnboardingModal}
-        {teamCompletionConfettiOverlay}
+        {teamCompletionFireworksOverlay}
+        {wikipediaInfoModal}
+        {worldCupFeedInfoModal}
         <section className="collection-home-hero">
           <div>
             <span className="collection-home-kicker">A minha colecao</span>
@@ -2527,6 +2909,87 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           </section>
         )}
 
+        <section className="world-cup-feed-box" aria-label="Noticias e proximos jogos do Mundial">
+          <div className={`world-cup-feed-panel ${worldCupFeedOpenPanel === "news" ? "open" : ""}`}>
+            <button
+              className="world-cup-feed-title"
+              type="button"
+              aria-expanded={worldCupFeedOpenPanel === "news"}
+              onClick={() => setWorldCupFeedOpenPanel((current) => current === "news" ? null : "news")}
+            >
+              <Newspaper size={18} aria-hidden="true" />
+              <div>
+                <span>Mundial 2026</span>
+                <strong>Noticias</strong>
+              </div>
+              <em>{worldCupNews.length}</em>
+              <ChevronDown size={18} className="world-cup-feed-chevron" aria-hidden="true" />
+            </button>
+            {worldCupFeedOpenPanel === "news" && (
+              <div className="world-cup-feed-list">
+                {worldCupNewsLoading && <span className="world-cup-feed-loading">A atualizar noticias...</span>}
+                {worldCupNews.map((item) => (
+                  <button
+                    className="world-cup-feed-item"
+                    type="button"
+                    key={`${item.title}-${item.link}`}
+                    onClick={() => setWorldCupFeedModal({
+                      type: "news",
+                      title: item.title,
+                      subtitle: `${item.source}${item.publishedAt ? ` - ${item.publishedAt}` : ""}`,
+                      description: item.description,
+                      url: item.link,
+                    })}
+                  >
+                    <strong>{item.title}</strong>
+                    <span>{item.source}{item.publishedAt ? ` - ${item.publishedAt}` : ""}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className={`world-cup-feed-panel ${worldCupFeedOpenPanel === "matches" ? "open" : ""}`}>
+            <button
+              className="world-cup-feed-title"
+              type="button"
+              aria-expanded={worldCupFeedOpenPanel === "matches"}
+              onClick={() => setWorldCupFeedOpenPanel((current) => current === "matches" ? null : "matches")}
+            >
+              <CalendarDays size={18} aria-hidden="true" />
+              <div>
+                <span>Calendario</span>
+                <strong>Proximos jogos</strong>
+              </div>
+              <em>{worldCupUpcomingMatches.length}</em>
+              <ChevronDown size={18} className="world-cup-feed-chevron" aria-hidden="true" />
+            </button>
+            {worldCupFeedOpenPanel === "matches" && (
+              <div className="world-cup-feed-list">
+                {worldCupUpcomingMatches.map((match) => (
+                  <button
+                    className="world-cup-feed-item"
+                    type="button"
+                    key={`${match.date}-${match.match}`}
+                    onClick={() => setWorldCupFeedModal({
+                      type: "match",
+                      title: match.match,
+                      subtitle: `${match.date} - ${match.time}`,
+                      description: `Estadio: ${match.venue}. Consulta a fonte oficial para confirmar o calendario completo e eventuais alteracoes.`,
+                      url: "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/articles/match-schedule-fixtures-results-teams-stadiums",
+                    })}
+                  >
+                    <strong>{match.match}</strong>
+                    <span>{match.date} - {match.time} - {match.venue}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {collectionCoverSection}
+
         <section className="collection-home-section">
           <div className="collection-home-section-title">
             <h3>Em falta</h3>
@@ -2557,72 +3020,6 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
             ))}
           </CollectionHomeCarousel>
         </section>
-
-        <section className="collection-home-section" ref={collectionsSectionRef}>
-          <div className="collection-home-section-title">
-            <h3>{homeResultMode === "complete" ? "Colecoes completas" : "Colecoes"}</h3>
-            <span>{homeResultMode === "complete" ? completedCollections : activeCollections.length}</span>
-          </div>
-        </section>
-
-        <div className="collection-cover-grid">
-          {(homeResultMode === "complete" ? completeCollectionSummaries.map((summary) => summary.collection) : collections).map((collection) => {
-            const active = isCollectionActive(collection.id);
-            const summary = activeCollectionSummaries.find((item) => item.collection.id === collection.id);
-
-            return (
-              <article key={collection.id} className={`collection-cover-card ${active ? "" : "inactive"}`}>
-                <button
-                  className="collection-cover-main"
-                  type="button"
-                  disabled={!active}
-                  onClick={() => {
-                    setSelectedCollectionId(collection.id);
-                    setSearch("");
-                    setFilter("all");
-                    setSelectedAlbumTeamName(null);
-                  }}
-                >
-                  <div className="collection-cover-image">
-                    <img
-                      src={collection.image_url || collectionFallbackImage}
-                      alt={collection.name}
-                      loading="lazy"
-                      onError={(event) => {
-                        event.currentTarget.src = collectionFallbackImage;
-                      }}
-                    />
-                  </div>
-                  <div className="collection-cover-body">
-                    <strong>{collection.name}</strong>
-                    <span>{summary ? `${summary.have}/${summary.total} cromos` : `${collection.total_stickers || 0} cromos`}</span>
-                    {summary && (
-                      <div className="collection-cover-progress">
-                        <span style={{ width: `${summary.progress}%` }} />
-                      </div>
-                    )}
-                  </div>
-                </button>
-                <div className="collection-cover-actions">
-                  <span className={`collection-status-pill ${active ? "active" : "inactive"}`}>
-                    {active ? "Ativa" : "Desativada"}
-                  </span>
-                  <button
-                    className={`btn btn-xs ${active ? "btn-error" : "btn-primary"}`}
-                    type="button"
-                    onClick={() => toggleCollectionActive(collection.id, !active)}
-                  >
-                    {active ? <EyeOff size={12} /> : <Eye size={12} />}
-                    {active ? "Desativar" : "Ativar"}
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-          {homeResultMode === "complete" && completeCollectionSummaries.length === 0 && (
-            <p className="muted-text">Ainda nao tens colecoes completas.</p>
-          )}
-        </div>
       </div>
     );
   }
@@ -2630,7 +3027,8 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   return (
     <div className="collection-page">
       {collectionOnboardingModal}
-      {teamCompletionConfettiOverlay}
+      {teamCompletionFireworksOverlay}
+      {wikipediaInfoModal}
       <section className="collection-detail-hero">
         <div className="collection-detail-main">
           <div className="collection-detail-cover">
