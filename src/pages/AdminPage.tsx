@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, KeyRound, Mail, PackagePlus, Pencil, RefreshCw, RotateCcw, Send, Settings, Trash2, Users, X } from "lucide-react";
+import { Activity, ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, KeyRound, Mail, PackagePlus, Pencil, RefreshCw, RotateCcw, Send, Settings, Trash2, UserCheck, UserPlus, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { logAuditEvent } from "../lib/audit";
@@ -61,6 +61,8 @@ interface AuditLog {
   user_agent: string | null;
   created_at: string;
 }
+
+type AdminStatsPanel = "users" | "new-users" | "activity" | "logins";
 
 const emptyCollection = {
   name: "",
@@ -147,6 +149,13 @@ function formatAdminDateTime(dateValue: string | null | undefined) {
   });
 }
 
+function isDateWithinDays(dateValue: string | null | undefined, days: number) {
+  if (!dateValue) return false;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return false;
+  return date.getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
+}
+
 export default function AdminPage() {
   const { user, profile } = useAuth();
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -154,6 +163,7 @@ export default function AdminPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [openAuditActorIds, setOpenAuditActorIds] = useState<string[]>([]);
   const [auditRetentionDays, setAuditRetentionDays] = useState(180);
+  const [activeStatsPanel, setActiveStatsPanel] = useState<AdminStatsPanel | null>(null);
   const [draft, setDraft] = useState(emptyCollection);
   const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
   const [openCollectionSettingsId, setOpenCollectionSettingsId] = useState<string | null>(null);
@@ -208,7 +218,7 @@ export default function AdminPage() {
       setUsers((usersRes.data || []) as RegisteredUser[]);
       if (profile?.is_admin) {
         const [auditLogsRes, retentionRes] = await Promise.all([
-          supabase.rpc("admin_list_audit_logs", { p_limit: 80 }),
+          supabase.rpc("admin_list_audit_logs", { p_limit: 300 }),
           supabase.rpc("admin_get_audit_log_retention_days"),
         ]);
 
@@ -927,6 +937,52 @@ export default function AdminPage() {
     );
   };
 
+  const activeUsersCount = users.filter((registeredUser) => !registeredUser.is_blocked).length;
+  const blockedUsersCount = users.filter((registeredUser) => registeredUser.is_blocked).length;
+  const adminUsersCount = users.filter((registeredUser) => registeredUser.is_admin).length;
+  const newUsersLast7DaysList = users.filter((registeredUser) => isDateWithinDays(registeredUser.created_at, 7));
+  const newUsersLast7Days = newUsersLast7DaysList.length;
+  const auditLogsLast7Days = auditLogs.filter((log) => isDateWithinDays(log.created_at, 7));
+  const loginLogsLast7Days = auditLogsLast7Days.filter((log) => log.action === "user_login");
+  const loginsLast7Days = loginLogsLast7Days.length;
+  const activeActorIdsLast7Days = new Set(
+    auditLogsLast7Days
+      .map((log) => log.actor_user_id || log.target_user_id)
+      .filter((actorId): actorId is string => Boolean(actorId))
+  );
+  const lastActivityLog = auditLogs[0] || null;
+  const adminStats = [
+    {
+      id: "users" as const,
+      label: "Utilizadores",
+      value: users.length,
+      detail: `${activeUsersCount} ativos · ${blockedUsersCount} bloqueados`,
+      icon: <Users size={18} />,
+    },
+    {
+      id: "new-users" as const,
+      label: "Novos 7 dias",
+      value: newUsersLast7Days,
+      detail: `${adminUsersCount} administradores no total`,
+      icon: <UserPlus size={18} />,
+    },
+    {
+      id: "activity" as const,
+      label: "Atividade 7 dias",
+      value: auditLogsLast7Days.length,
+      detail: `${activeActorIdsLast7Days.size} utilizadores com atividade`,
+      icon: <Activity size={18} />,
+    },
+    {
+      id: "logins" as const,
+      label: "Entradas 7 dias",
+      value: loginsLast7Days,
+      detail: lastActivityLog ? `Ultima: ${formatAdminDateTime(lastActivityLog.created_at)}` : "Sem atividade registada",
+      icon: <UserCheck size={18} />,
+    },
+  ];
+  const activeStatsTitle = adminStats.find((stat) => stat.id === activeStatsPanel)?.label || "";
+
   const selectedUserCollectionSummaries = collections.map((collection) => {
     const collectionEntries = selectedUserStickers.filter((entry) => entry.stickers?.collection_id === collection.id);
     const haveEntries = collectionEntries.filter((entry) => entry.status === "have");
@@ -990,6 +1046,94 @@ export default function AdminPage() {
 
       {error && <p className="error-text">{error}</p>}
       {success && <p className="success-text">{success}</p>}
+
+      <section className="admin-stats-grid" aria-label="Resumo de utilizacao">
+        {adminStats.map((stat) => (
+          <button
+            className={`admin-stat-card ${activeStatsPanel === stat.id ? "active" : ""}`}
+            key={stat.label}
+            type="button"
+            onClick={() => setActiveStatsPanel((currentPanel) => currentPanel === stat.id ? null : stat.id)}
+            aria-pressed={activeStatsPanel === stat.id}
+          >
+            <span className="admin-stat-icon">{stat.icon}</span>
+            <div>
+              <span>{stat.label}</span>
+              <strong>{stat.value}</strong>
+              <em>{stat.detail}</em>
+            </div>
+          </button>
+        ))}
+      </section>
+
+      {activeStatsPanel && (
+        <section className="admin-panel admin-stats-results">
+          <div className="admin-panel-title admin-stats-results-title">
+            <span>
+              <Activity size={18} />
+              <h3>Resultados - {activeStatsTitle}</h3>
+            </span>
+            <button className="btn btn-ghost btn-xs" type="button" onClick={() => setActiveStatsPanel(null)}>
+              <X size={12} /> Fechar
+            </button>
+          </div>
+
+          {activeStatsPanel === "users" && (
+            <div className="admin-stats-result-list">
+              {users.map((registeredUser) => (
+                <div className="admin-stats-result-row" key={registeredUser.id}>
+                  <div>
+                    <strong>{registeredUser.username || registeredUser.email || "Utilizador"}</strong>
+                    <span>{registeredUser.email || "-"}{registeredUser.city ? ` - ${registeredUser.city}` : ""}</span>
+                  </div>
+                  <em className={registeredUser.is_blocked ? "status-blocked" : "status-active"}>
+                    {registeredUser.is_blocked ? "Bloqueado" : "Ativo"}
+                  </em>
+                  <small>{formatAdminDate(registeredUser.created_at)}</small>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeStatsPanel === "new-users" && (
+            <div className="admin-stats-result-list">
+              {newUsersLast7DaysList.map((registeredUser) => (
+                <div className="admin-stats-result-row" key={registeredUser.id}>
+                  <div>
+                    <strong>{registeredUser.username || registeredUser.email || "Utilizador"}</strong>
+                    <span>{registeredUser.email || "-"}{registeredUser.city ? ` - ${registeredUser.city}` : ""}</span>
+                  </div>
+                  <em>{registeredUser.is_admin ? "Admin" : "Utilizador"}</em>
+                  <small>{formatAdminDateTime(registeredUser.created_at)}</small>
+                </div>
+              ))}
+              {newUsersLast7DaysList.length === 0 && <p className="muted-text">Sem novos utilizadores nos ultimos 7 dias.</p>}
+            </div>
+          )}
+
+          {(activeStatsPanel === "activity" || activeStatsPanel === "logins") && (
+            <div className="admin-stats-result-list">
+              {(activeStatsPanel === "activity" ? auditLogsLast7Days : loginLogsLast7Days).map((log) => {
+                const actor = log.actor_user_id ? usersById.get(log.actor_user_id) : null;
+                const target = log.target_user_id ? usersById.get(log.target_user_id) : null;
+                return (
+                  <div className="admin-stats-result-row" key={log.id}>
+                    <div>
+                      <strong>{log.action}</strong>
+                      <span>{actor?.username || actor?.email || target?.username || target?.email || log.actor_user_id || log.target_user_id || "Sistema"}</span>
+                    </div>
+                    <em>{log.entity_type}</em>
+                    <small>{formatAdminDateTime(log.created_at)}</small>
+                  </div>
+                );
+              })}
+              {(activeStatsPanel === "activity" ? auditLogsLast7Days : loginLogsLast7Days).length === 0 && (
+                <p className="muted-text">Sem resultados nos ultimos 7 dias.</p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="admin-grid">
         <section className="admin-panel">

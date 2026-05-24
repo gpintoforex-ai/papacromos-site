@@ -1,9 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
-import { ChevronDown, Handshake, KeyRound, LifeBuoy, LogOut, QrCode, RefreshCw, ScanLine, Shield, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
+import { ChevronDown, Handshake, KeyRound, LifeBuoy, LogOut, Moon, QrCode, RefreshCw, ScanLine, Shield, Sun, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
 type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
+type ThemeMode = "light" | "dark";
+
+const themeStorageKey = "papacromos:theme";
+
+function getInitialTheme(): ThemeMode {
+  if (typeof localStorage === "undefined") return "light";
+  return localStorage.getItem(themeStorageKey) === "dark" ? "dark" : "light";
+}
 
 interface LayoutProps {
   currentPage: Page;
@@ -15,6 +23,7 @@ interface LayoutProps {
 
 export default function Layout({ currentPage, onNavigate, matchCount, pendingTradeCount, children }: LayoutProps) {
   const { user, profile, signOut } = useAuth();
+  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileActionsOpen, setProfileActionsOpen] = useState(false);
   const [dataModalOpen, setDataModalOpen] = useState(false);
@@ -32,6 +41,12 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
   const createdLabel = accountCreatedAt
     ? new Date(accountCreatedAt).toLocaleDateString("pt-PT")
     : "-";
+  const isDarkTheme = theme === "dark";
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(themeStorageKey, theme);
+  }, [theme]);
 
   const navItems: { page: Page; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
     { page: "collection", label: "Colecao", icon: <Trophy size={18} /> },
@@ -129,6 +144,16 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
             ))}
           </nav>
           <div className="header-actions">
+            <button
+              className="header-icon-btn theme-toggle-btn"
+              type="button"
+              onClick={() => setTheme((currentTheme) => currentTheme === "dark" ? "light" : "dark")}
+              title={isDarkTheme ? "Mudar para tema claro" : "Mudar para tema escuro"}
+              aria-label={isDarkTheme ? "Mudar para tema claro" : "Mudar para tema escuro"}
+              aria-pressed={isDarkTheme}
+            >
+              {isDarkTheme ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
             <div className="profile-menu">
               <button
                 className={`user-id user-menu-trigger ${profileOpen ? "open" : ""}`}
