@@ -1726,6 +1726,17 @@ textarea {
   box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
 }
 
+.password-guidance {
+  margin: -4px 0 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.password-guidance-weak {
+  color: var(--error);
+}
+
 .login-form input.field-error,
 .login-form select.field-error {
   border-color: var(--error);
@@ -8184,6 +8195,27 @@ button.sticker-wikipedia-link {
 .admin-push-composer textarea {
   min-height: 86px;
   resize: vertical;
+}
+
+.admin-push-broadcast {
+  margin-bottom: 12px;
+  border-color: rgba(13, 148, 136, 0.24);
+  background: var(--primary-50);
+}
+
+.admin-push-schedule {
+  display: grid;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-push-schedule em {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
 }
 
 .status-active {

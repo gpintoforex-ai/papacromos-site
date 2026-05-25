@@ -186,6 +186,8 @@ Deno.serve(async () => {
     .from("app_notifications")
     .select("id, user_id, title, body, data, attempts")
     .eq("status", "pending")
+    .lte("scheduled_at", new Date().toISOString())
+    .order("scheduled_at", { ascending: true })
     .order("created_at", { ascending: true })
     .limit(25);
 

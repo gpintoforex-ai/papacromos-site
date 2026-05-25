@@ -32,6 +32,10 @@ function getAuthErrorMessage(error: any) {
   return error?.message || "Erro ao autenticar. Tenta novamente.";
 }
 
+const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+
+const isSecurePassword = (password: string) => passwordPattern.test(password);
+
 export default function LoginPage() {
   const { signIn, signInWithProvider, signUp } = useAuth();
   const [firstName, setFirstName] = useState("");
@@ -70,6 +74,12 @@ export default function LoginPage() {
         if (nextMissingFields.length > 0) {
           setMissingFields(nextMissingFields);
           setError("Preenche os campos assinalados para criar a conta.");
+          return;
+        }
+
+        if (!isSecurePassword(password)) {
+          setMissingFields((current) => Array.from(new Set([...current, "password"])));
+          setError("A password deve ter pelo menos 8 caracteres, uma letra maiúscula, uma letra minúscula, um número e um símbolo.");
           return;
         }
       }
@@ -389,6 +399,11 @@ export default function LoginPage() {
             onKeyDown={handleKeyPress}
             disabled={loading}
           />
+          {isSignUp && (
+            <p className={`password-guidance ${(!password || isSecurePassword(password)) ? "" : "password-guidance-weak"}`}>
+              A password deve ter pelo menos 8 caracteres, uma letra maiúscula, uma letra minúscula, um número e um símbolo.
+            </p>
+          )}
         </div>
 
         {error && <p className="error-text">{error}</p>}

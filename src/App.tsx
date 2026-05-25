@@ -176,6 +176,29 @@ function AppContent() {
     setMessageRefreshKey((key) => key + 1);
   }, [refreshUnreadMessageCount]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const openNotificationTarget = () => {
+      setPage("trades");
+      refreshMessageState();
+      refreshPendingTradeCount();
+    };
+    const handleWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type === "push-notification-click") {
+        openNotificationTarget();
+      }
+    };
+
+    window.addEventListener("papa-cromos:open-notifications", openNotificationTarget);
+    navigator.serviceWorker?.addEventListener("message", handleWorkerMessage);
+
+    return () => {
+      window.removeEventListener("papa-cromos:open-notifications", openNotificationTarget);
+      navigator.serviceWorker?.removeEventListener("message", handleWorkerMessage);
+    };
+  }, [refreshMessageState, user?.id]);
+
   const navigate = (nextPage: Page) => {
     if (nextPage === "collection") {
       setCollectionHomeKey((key) => key + 1);

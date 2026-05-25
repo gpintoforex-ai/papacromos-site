@@ -174,6 +174,8 @@ export default function AdminPage() {
   const [pushUserId, setPushUserId] = useState<string | null>(null);
   const [pushTitle, setPushTitle] = useState("Papa Cromos");
   const [pushMessage, setPushMessage] = useState("");
+  const [pushScheduledAt, setPushScheduledAt] = useState("");
+  const [broadcastPushOpen, setBroadcastPushOpen] = useState(false);
   const [imageSwapCollection, setImageSwapCollection] = useState<Collection | null>(null);
   const [imageSwapStickers, setImageSwapStickers] = useState<Sticker[]>([]);
   const [imageSwapTeamFilter, setImageSwapTeamFilter] = useState("");
@@ -723,9 +725,11 @@ export default function AdminPage() {
 
   const openPushComposer = (registeredUser: RegisteredUser) => {
     setOpenUserDetailsId(registeredUser.id);
+    setBroadcastPushOpen(false);
     setPushUserId(registeredUser.id);
     setPushTitle("Papa Cromos");
     setPushMessage("");
+    setPushScheduledAt("");
     setError(null);
     setSuccess(null);
   };
@@ -734,6 +738,33 @@ export default function AdminPage() {
     setPushUserId(null);
     setPushTitle("Papa Cromos");
     setPushMessage("");
+    setPushScheduledAt("");
+  };
+
+  const openBroadcastPushComposer = () => {
+    setPushUserId(null);
+    setBroadcastPushOpen(true);
+    setPushTitle("Papa Cromos");
+    setPushMessage("");
+    setPushScheduledAt("");
+    setError(null);
+    setSuccess(null);
+  };
+
+  const closeBroadcastPushComposer = () => {
+    setBroadcastPushOpen(false);
+    setPushTitle("Papa Cromos");
+    setPushMessage("");
+    setPushScheduledAt("");
+  };
+
+  const getPushScheduledAtIso = () => {
+    if (!pushScheduledAt) return null;
+    const date = new Date(pushScheduledAt);
+    if (Number.isNaN(date.getTime())) {
+      throw new Error("Data/hora de envio invalida.");
+    }
+    return date.toISOString();
   };
 
   const sendPushMessage = async (registeredUser: RegisteredUser) => {
@@ -762,23 +793,87 @@ export default function AdminPage() {
           type: "admin_message",
           sent_by: user?.id || null,
         },
+        p_scheduled_at: getPushScheduledAtIso(),
       });
       if (queueError) throw queueError;
 
-      const { error: invokeError } = await supabase.functions.invoke("send-push-notifications");
-      if (invokeError) {
+      const scheduled = Boolean(pushScheduledAt);
+      const { error: invokeError } = scheduled
+        ? { error: null }
+        : await supabase.functions.invoke("send-push-notifications");
+      if (scheduled) {
+        setSuccess(`Push agendado para ${registeredUser.username || registeredUser.email || "utilizador"}.`);
+      } else if (invokeError) {
         setSuccess("Notificacao guardada na fila. A entrega sera tentada pelo servidor.");
       } else {
         setSuccess(`Push enviado para ${registeredUser.username || registeredUser.email || "utilizador"}.`);
       }
       await logAuditEvent({
-        action: "admin_push_sent",
+        action: scheduled ? "admin_push_scheduled" : "admin_push_sent",
         entityType: "push_notification",
         targetUserId: registeredUser.id,
-        metadata: { title, body_length: body.length },
+        metadata: { title, body_length: body.length, scheduled_at: getPushScheduledAtIso() },
       });
 
       closePushComposer();
+    } catch (err: any) {
+      setError(err.message || "Erro ao enviar push.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendBroadcastPushMessage = async () => {
+    const title = pushTitle.trim();
+    const body = pushMessage.trim();
+
+    if (!title) {
+      setError("Indica o titulo da notificacao.");
+      return;
+    }
+
+    if (!body) {
+      setError("Escreve a mensagem da notificacao.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const scheduledAt = getPushScheduledAtIso();
+      const scheduled = Boolean(scheduledAt);
+      if (!window.confirm(`${scheduled ? "Agendar" : "Enviar"} esta mensagem push para todos os utilizadores ativos?`)) {
+        setSaving(false);
+        return;
+      }
+
+      const { data: queued, error: queueError } = await supabase.rpc("admin_queue_broadcast_push_notification", {
+        p_title: title,
+        p_body: body,
+        p_data: {
+          type: "admin_broadcast",
+          sent_by: user?.id || null,
+        },
+        p_scheduled_at: scheduledAt,
+      });
+      if (queueError) throw queueError;
+
+      const queuedCount = Number(queued || 0);
+      if (!scheduled) {
+        await supabase.functions.invoke("send-push-notifications");
+      }
+
+      await logAuditEvent({
+        action: scheduled ? "admin_broadcast_push_scheduled" : "admin_broadcast_push_sent",
+        entityType: "push_notification",
+        metadata: { title, body_length: body.length, queued_count: queuedCount, scheduled_at: scheduledAt },
+      });
+
+      setSuccess(scheduled
+        ? `Push agendado para ${queuedCount} utilizador(es).`
+        : `Push colocado em envio para ${queuedCount} utilizador(es).`);
+      closeBroadcastPushComposer();
     } catch (err: any) {
       setError(err.message || "Erro ao enviar push.");
     } finally {
@@ -1494,9 +1589,54 @@ export default function AdminPage() {
 
       <section className="admin-panel admin-users-panel">
         <div className="admin-panel-title">
-          <Users size={18} />
-          <h3>Utilizadores registados</h3>
+          <span>
+            <Users size={18} />
+            <h3>Utilizadores registados</h3>
+          </span>
+          <button className="btn btn-ghost btn-xs" type="button" onClick={openBroadcastPushComposer} disabled={saving}>
+            <Send size={12} /> Push global
+          </button>
         </div>
+
+        {broadcastPushOpen && (
+          <div className="admin-push-composer admin-push-broadcast">
+            <div className="admin-push-composer-title">
+              <strong>Mensagem push para todos</strong>
+              <button className="btn btn-ghost btn-xs" type="button" onClick={closeBroadcastPushComposer} disabled={saving}>
+                <X size={12} /> Fechar
+              </button>
+            </div>
+            <input
+              className="admin-table-input"
+              type="text"
+              value={pushTitle}
+              onChange={(event) => setPushTitle(event.target.value)}
+              placeholder="Titulo"
+              disabled={saving}
+            />
+            <textarea
+              className="admin-table-input"
+              value={pushMessage}
+              onChange={(event) => setPushMessage(event.target.value)}
+              placeholder="Mensagem para os utilizadores"
+              disabled={saving}
+            />
+            <label className="admin-push-schedule">
+              <span>Agendar envio</span>
+              <input
+                className="admin-table-input"
+                type="datetime-local"
+                value={pushScheduledAt}
+                onChange={(event) => setPushScheduledAt(event.target.value)}
+                disabled={saving}
+              />
+              <em>Deixa vazio para enviar agora.</em>
+            </label>
+            <button className="btn btn-primary btn-xs" type="button" onClick={sendBroadcastPushMessage} disabled={saving}>
+              <Send size={12} /> {saving ? "A guardar..." : pushScheduledAt ? "Agendar push" : "Enviar agora"}
+            </button>
+          </div>
+        )}
 
         <div className="admin-users-list">
           {users.map((registeredUser) => {
@@ -1633,8 +1773,19 @@ export default function AdminPage() {
                           placeholder="Mensagem para o utilizador"
                           disabled={saving}
                         />
+                        <label className="admin-push-schedule">
+                          <span>Agendar envio</span>
+                          <input
+                            className="admin-table-input"
+                            type="datetime-local"
+                            value={pushScheduledAt}
+                            onChange={(event) => setPushScheduledAt(event.target.value)}
+                            disabled={saving}
+                          />
+                          <em>Deixa vazio para enviar agora.</em>
+                        </label>
                         <button className="btn btn-primary btn-xs" type="button" onClick={() => sendPushMessage(registeredUser)} disabled={saving}>
-                          <Send size={12} /> {saving ? "A enviar..." : "Enviar push"}
+                          <Send size={12} /> {saving ? "A guardar..." : pushScheduledAt ? "Agendar push" : "Enviar agora"}
                         </button>
                       </div>
                     )}
