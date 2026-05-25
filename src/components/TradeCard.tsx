@@ -120,18 +120,28 @@ export default function TradeCard({
           const target = localMessages.find((m) => m.id === openMessageId);
           if (target && !target.is_read && target.user_id !== currentUserId) {
             // mark read directly
-            import("../lib/supabase").then(({ supabase }) => {
-              supabase
-                .from("trade_messages")
-                .update({ is_read: true })
-                .eq("id", openMessageId)
-                .then(({ error }) => {
-                  if (!error) {
-                    setLocalMessages((prev) => prev.map((p) => (p.id === openMessageId ? { ...p, is_read: true } : p)));
-                  }
-                })
-                .catch((e) => console.error(e));
-            });
+          (async () => {
+  try {
+    const { supabase } = await import("../lib/supabase");
+
+    const { error } = await supabase
+      .from("trade_messages")
+      .update({ is_read: true })
+      .eq("id", openMessageId);
+
+    if (!error) {
+      setLocalMessages((prev) =>
+        prev.map((p) =>
+          p.id === openMessageId
+            ? { ...p, is_read: true }
+            : p
+        )
+      );
+    }
+  } catch (e: unknown) {
+    console.error(e);
+  }
+})();  
           }
         }, 150);
       }

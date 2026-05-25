@@ -41,7 +41,6 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
   const [recentMessages, setRecentMessages] = useState<any[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
-  const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null);
   const displayName = profile?.username || user?.email?.split("@")[0] || "Utilizador";
   const displayEmail = profile?.email || user?.email || "-";
   const accountCreatedAt = profile?.created_at || user?.created_at;
