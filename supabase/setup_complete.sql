@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS trade_messages (
   trade_id uuid NOT NULL REFERENCES trade_offers(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   message text NOT NULL,
+  is_read boolean NOT NULL DEFAULT false,
   created_at timestamptz DEFAULT now()
 );
 
@@ -91,6 +92,7 @@ CREATE INDEX IF NOT EXISTS idx_trade_offers_from_user ON trade_offers(from_user_
 CREATE INDEX IF NOT EXISTS idx_trade_offers_to_user ON trade_offers(to_user_id);
 CREATE INDEX IF NOT EXISTS idx_trade_messages_trade_id ON trade_messages(trade_id);
 CREATE INDEX IF NOT EXISTS idx_trade_messages_user_id ON trade_messages(user_id);
+CREATE INDEX IF NOT EXISTS idx_trade_messages_is_read ON trade_messages(is_read);
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
@@ -250,6 +252,43 @@ CREATE POLICY "Users can create messages for their trades"
   ON trade_messages FOR INSERT
   TO authenticated
   WITH CHECK (
+    auth.uid() = user_id
+    AND EXISTS (
+      SELECT 1
+      FROM trade_offers
+      WHERE trade_offers.id = trade_messages.trade_id
+        AND (trade_offers.from_user_id = auth.uid() OR trade_offers.to_user_id = auth.uid())
+    )
+  );
+
+DROP POLICY IF EXISTS "Users can update received trade messages" ON trade_messages;
+
+CREATE POLICY "Users can update received trade messages"
+  ON trade_messages FOR UPDATE
+  TO authenticated
+  USING (
+    auth.uid() <> user_id
+    AND EXISTS (
+      SELECT 1
+      FROM trade_offers
+      WHERE trade_offers.id = trade_messages.trade_id
+        AND (trade_offers.from_user_id = auth.uid() OR trade_offers.to_user_id = auth.uid())
+    )
+  )
+  WITH CHECK (
+    auth.uid() <> user_id
+    AND EXISTS (
+      SELECT 1
+      FROM trade_offers
+      WHERE trade_offers.id = trade_messages.trade_id
+        AND (trade_offers.from_user_id = auth.uid() OR trade_offers.to_user_id = auth.uid())
+    )
+  );
+
+CREATE POLICY "Users can delete own trade messages"
+  ON trade_messages FOR DELETE
+  TO authenticated
+  USING (
     auth.uid() = user_id
     AND EXISTS (
       SELECT 1

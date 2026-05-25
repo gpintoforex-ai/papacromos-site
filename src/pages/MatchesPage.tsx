@@ -2,7 +2,7 @@
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { getAvatarColor, getAvatarInitial } from "../lib/avatar";
-import { ArrowRightLeft, ChevronDown, Minus, Plus, RefreshCw } from "lucide-react";
+import { ArrowRightLeft, ChevronDown, MapPin, MessageCircle, Minus, Plus, RefreshCw } from "lucide-react";
 import { countUniqueRequestedStickers, findUserMatches, type Match } from "../lib/matches";
 import type { DeliveryMethod } from "../lib/trades";
 
@@ -39,9 +39,21 @@ interface MatchUserGroup {
   otherUserId: string;
   otherUsername: string;
   otherAvatarSeed: string;
+  otherCity: string;
+  otherRegion: string;
   offeredStickers: MatchSticker[];
   requestedStickers: MatchSticker[];
   matchCount: number;
+}
+
+type MatchLocationFilter = "all" | "near";
+
+function normalizeLocation(value: string | null | undefined) {
+  return (value || "")
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toLowerCase();
 }
 
 function distanceKm(from: UserLocation, partner: Partner) {
@@ -58,7 +70,7 @@ function distanceKm(from: UserLocation, partner: Partner) {
 }
 
 export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [matches, setMatches] = useState<Match[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
@@ -76,6 +88,7 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
   const [tradeErrors, setTradeErrors] = useState<Record<string, string>>({});
   const [tradeSuccesses, setTradeSuccesses] = useState<Record<string, string>>({});
   const [activeMatchTabs, setActiveMatchTabs] = useState<Record<string, MatchDetailTab>>({});
+  const [locationFilter, setLocationFilter] = useState<MatchLocationFilter>("all");
 
   useEffect(() => {
     findMatches();
@@ -90,6 +103,8 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
         otherUserId: match.otherUserId,
         otherUsername: match.otherUsername,
         otherAvatarSeed: match.otherAvatarSeed,
+        otherCity: match.otherCity || "",
+        otherRegion: match.otherRegion || "",
         offeredStickers: [],
         requestedStickers: [],
         matchCount: 0,
@@ -107,6 +122,20 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
 
     return Array.from(groups.values()).sort((a, b) => b.matchCount - a.matchCount);
   }, [matches]);
+
+  const currentUserCity = normalizeLocation(profile?.city);
+  const currentUserRegion = normalizeLocation(profile?.region);
+  const hasOwnLocation = Boolean(currentUserCity || currentUserRegion);
+  const isNearMatch = (group: MatchUserGroup) => {
+    const otherCity = normalizeLocation(group.otherCity);
+    const otherRegion = normalizeLocation(group.otherRegion);
+    if (currentUserCity && otherCity && currentUserCity === otherCity) return true;
+    if (currentUserRegion && otherRegion && currentUserRegion === otherRegion) return true;
+    return false;
+  };
+  const visibleMatchGroups = locationFilter === "near"
+    ? matchGroups.filter(isNearMatch)
+    : matchGroups;
 
   const loadPartners = async () => {
     const { data, error } = await supabase
@@ -183,8 +212,7 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
     return Array.from({ length: qty }, () => sticker);
   });
 
-  const countAvailableUnits = (stickers: MatchSticker[]) =>
-    stickers.reduce((total, sticker) => total + (sticker.available_quantity || 1), 0);
+  const countSuggestedUnits = (stickers: MatchSticker[]) => stickers.length;
 
   const buildSuggestedQuantities = (group: MatchUserGroup, stickers: MatchSticker[], targetUnits: number) => {
     const next: Record<string, number> = {};
@@ -192,8 +220,7 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
 
     stickers.forEach((sticker) => {
       if (remaining <= 0) return;
-      const max = sticker.available_quantity || 1;
-      const quantity = Math.min(max, remaining);
+      const quantity = Math.min(1, remaining);
       if (quantity > 0) {
         next[quantityKey(group.otherUserId, sticker.id)] = quantity;
         remaining -= quantity;
@@ -205,8 +232,8 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
 
   const applySuggestedTrade = (group: MatchUserGroup) => {
     const suggestedCount = Math.min(
-      countAvailableUnits(group.offeredStickers),
-      countAvailableUnits(group.requestedStickers),
+      countSuggestedUnits(group.offeredStickers),
+      countSuggestedUnits(group.requestedStickers),
     );
     const groupStickerIds = new Set([
       ...group.offeredStickers.map((sticker) => quantityKey(group.otherUserId, sticker.id)),
@@ -322,6 +349,35 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
         </button>
       </div>
 
+      <div className="matches-filter-bar">
+        <div className="delivery-toggle matches-location-filter" role="group" aria-label="Filtro de localizacao">
+          <button
+            type="button"
+            className={`delivery-toggle-btn ${locationFilter === "all" ? "active" : ""}`}
+            onClick={() => setLocationFilter("all")}
+          >
+            Todos
+          </button>
+          <button
+            type="button"
+            className={`delivery-toggle-btn ${locationFilter === "near" ? "active" : ""}`}
+            onClick={() => setLocationFilter("near")}
+            disabled={!hasOwnLocation}
+            title={hasOwnLocation ? "Mostrar utilizadores da mesma cidade ou distrito" : "Completa a tua cidade ou distrito no perfil"}
+          >
+            <MapPin size={14} /> Perto de mim
+          </button>
+        </div>
+        <span>
+          {locationFilter === "near"
+            ? `${visibleMatchGroups.length} perto de ${profile?.city || profile?.region || "ti"}`
+            : `${matchGroups.length} utilizador${matchGroups.length === 1 ? "" : "es"} com matches`}
+        </span>
+      </div>
+      {!hasOwnLocation && (
+        <p className="muted-text matches-location-hint">Completa a tua cidade ou distrito no perfil para ativar o filtro perto de mim.</p>
+      )}
+
       {error && <p className="error-text">{error}</p>}
       {success && <p className="success-text">{success}</p>}
 
@@ -333,7 +389,7 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
         </div>
       ) : (
         <div className="matches-list">
-          {matchGroups.map((group) => {
+          {visibleMatchGroups.map((group) => {
             const tradeKey = group.otherUserId;
             const isOpen = openUserId === group.otherUserId;
             const selectedMethod = deliveryMethods[tradeKey] || "presencial";
@@ -359,9 +415,14 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
                       <small>{group.matchCount} match{group.matchCount === 1 ? "" : "es"} possiveis</small>
                     </div>
                   </div>
+                  <span className="match-location match-location-summary">
+                    <MapPin size={12} />
+                    {group.otherCity || group.otherRegion || "Localidade nao indicada"}
+                  </span>
                   <div className="match-user-counts">
-                    <span>{group.offeredStickers.length} para entregar</span>
-                    <span>{group.requestedStickers.length} para receber</span>
+                    <span className="match-count-gives">{group.offeredStickers.length} para entregar</span>
+                    <ArrowRightLeft size={15} className="match-count-swap-icon" aria-hidden="true" />
+                    <span className="match-count-receives">{group.requestedStickers.length} para receber</span>
                     <ChevronDown size={18} className={isOpen ? "open" : ""} />
                   </div>
                 </button>
@@ -397,7 +458,7 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
                           </button>
                         </div>
                         <div className="match-suggestion-grid">
-                          <div className="match-suggestion-column">
+                          <div className="match-suggestion-column gives">
                             <span className="match-label">Tu das</span>
                             <MatchStickerSelectorList
                               group={group}
@@ -409,7 +470,10 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
                               emptyText="Sem cromos selecionados para entregar."
                             />
                           </div>
-                          <div className="match-suggestion-column">
+                          <div className="match-suggestion-swap-icon" aria-hidden="true">
+                            <ArrowRightLeft size={18} />
+                          </div>
+                          <div className="match-suggestion-column receives">
                             <span className="match-label">Tu recebes</span>
                             <MatchStickerSelectorList
                               group={group}
@@ -489,17 +553,19 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
                           </button>
                         ))}
                       </div>
-                      <input
-                        type="text"
-                        value={tradeNotes[tradeKey] || ""}
-                        placeholder="Mensagem para negociar..."
-                        onChange={(event) =>
-                          setTradeNotes((current) => ({
-                            ...current,
-                            [tradeKey]: event.target.value,
-                          }))
-                        }
-                      />
+                      <div className="message-textarea-wrap">
+                        <MessageCircle size={15} aria-hidden="true" />
+                        <textarea
+                          value={tradeNotes[tradeKey] || ""}
+                          placeholder="Mensagem para negociar..."
+                          onChange={(event) =>
+                            setTradeNotes((current) => ({
+                              ...current,
+                              [tradeKey]: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
                     </div>
 
                     {selectedMethod === "outro" && (
@@ -552,6 +618,13 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
               </div>
             );
           })}
+          {visibleMatchGroups.length === 0 && locationFilter === "near" && (
+            <div className="empty-state">
+              <span className="empty-icon">⌖</span>
+              <h3>Sem matches perto de ti</h3>
+              <p>Nao ha utilizadores da mesma cidade ou distrito com troca possivel neste momento.</p>
+            </div>
+          )}
         </div>
       )}
     </div>

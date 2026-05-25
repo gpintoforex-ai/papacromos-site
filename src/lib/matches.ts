@@ -4,6 +4,8 @@ export interface Match {
   otherUserId: string;
   otherUsername: string;
   otherAvatarSeed: string;
+  otherCity?: string;
+  otherRegion?: string;
   offeredSticker: {
     id: string;
     name: string;
@@ -31,6 +33,8 @@ function mapRpcMatches(rows: any[]): Match[] {
     otherUserId: row.other_user_id,
     otherUsername: row.other_username || "Utilizador",
     otherAvatarSeed: row.other_avatar_seed || row.other_user_id,
+    otherCity: row.other_city || "",
+    otherRegion: row.other_region || "",
     offeredSticker: {
       id: row.offered_sticker_id,
       name: row.offered_sticker_name,
@@ -187,12 +191,12 @@ async function fetchUsersWhoMissStickerIds(stickerIds: string[], currentUserId: 
 }
 
 async function fetchProfilesByIds(userIds: string[]) {
-  const profilesById = new Map<string, { username?: string; avatar_seed?: string }>();
+  const profilesById = new Map<string, { username?: string; avatar_seed?: string; city?: string; region?: string }>();
 
   for (const chunk of chunkIds(userIds)) {
     const { data: profiles, error: profilesError } = await supabase
       .from("user_profiles")
-      .select("id, username, avatar_seed")
+      .select("id, username, avatar_seed, city, region")
       .in("id", chunk);
     if (profilesError) throw profilesError;
 
@@ -316,7 +320,7 @@ export async function findUserMatches(userId: string): Promise<Match[]> {
   const otherUsersWant = filterActiveCollectionRows(otherUsersWantRows, inactiveOtherCollections);
   const otherUsersHave = filterActiveCollectionRows(otherUsersHaveRows, inactiveOtherCollections);
 
-  const profilesById = otherUserIds.length ? await fetchProfilesByIds(otherUserIds) : new Map<string, { username?: string; avatar_seed?: string }>();
+  const profilesById = otherUserIds.length ? await fetchProfilesByIds(otherUserIds) : new Map<string, { username?: string; avatar_seed?: string; city?: string; region?: string }>();
 
   const matchList: Match[] = [];
   const haveByUser = new Map<string, any[]>();
@@ -341,6 +345,8 @@ export async function findUserMatches(userId: string): Promise<Match[]> {
         otherUserId: w.user_id,
         otherUsername: profile?.username || "Utilizador",
         otherAvatarSeed: profile?.avatar_seed || w.user_id,
+        otherCity: profile?.city || "",
+        otherRegion: profile?.region || "",
         offeredSticker: {
           ...offeredSticker,
           available_quantity: myHaveQuantities.get(w.sticker_id) || 1,

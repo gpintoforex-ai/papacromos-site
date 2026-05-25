@@ -12,7 +12,7 @@ import ScannerPage from "./pages/ScannerPage";
 import CookieConsent from "./components/CookieConsent";
 import InstallAppPrompt from "./components/InstallAppPrompt";
 import ProfileCompletionGate from "./components/ProfileCompletionGate";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { countUniqueRequestedStickers, findUserMatches } from "./lib/matches";
 import { supabase } from "./lib/supabase";
 import { setupPushNotifications } from "./lib/pushNotifications";
@@ -25,7 +25,46 @@ function AppContent() {
   const [collectionHomeKey, setCollectionHomeKey] = useState(0);
   const [matchCount, setMatchCount] = useState(0);
   const [pendingTradeCount, setPendingTradeCount] = useState(0);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [messageRefreshKey, setMessageRefreshKey] = useState(0);
   const [sharedUserId, setSharedUserId] = useState<string | null>(null);
+  const [pendingTradesAlertOpen, setPendingTradesAlertOpen] = useState(false);
+  const [pendingTradesAlertCount, setPendingTradesAlertCount] = useState(0);
+  const pendingTradesAlertShown = useRef(false);
+  const previousUserId = useRef<string | null>(null);
+
+  const refreshUnreadMessageCount = useCallback(async () => {
+    if (!user?.id) {
+      setUnreadMessageCount(0);
+      return;
+    }
+
+    try {
+      const { data: trades, error: tradesError } = await supabase
+        .from("trade_offers")
+        .select("id")
+        .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`);
+      if (tradesError) throw tradesError;
+
+      const tradeIds = (trades || []).map((trade) => trade.id);
+      if (!tradeIds.length) {
+        setUnreadMessageCount(0);
+        return;
+      }
+
+      const { count, error: messagesError } = await supabase
+        .from("trade_messages")
+        .select("id", { count: "exact", head: true })
+        .in("trade_id", tradeIds)
+        .neq("user_id", user.id)
+        .eq("is_read", false);
+      if (messagesError) throw messagesError;
+
+      setUnreadMessageCount(count || 0);
+    } catch {
+      setUnreadMessageCount(0);
+    }
+  }, [user?.id]);
 
   const refreshMatchCount = async () => {
     if (!user?.id) {
@@ -41,10 +80,10 @@ function AppContent() {
     }
   };
 
-  const refreshPendingTradeCount = async () => {
+  const refreshPendingTradeCount = async (): Promise<number> => {
     if (!user?.id) {
       setPendingTradeCount(0);
-      return;
+      return 0;
     }
 
     try {
@@ -54,13 +93,18 @@ function AppContent() {
         .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
         .eq("status", "pending");
       if (error) throw error;
-      setPendingTradeCount(data?.length || 0);
+      const count = data?.length || 0;
+      setPendingTradeCount(count);
+      return count;
     } catch {
       setPendingTradeCount(0);
+      return 0;
     }
   };
 
   useEffect(() => {
+    const isFirstLogin = !!user?.id && !previousUserId.current;
+
     if (user?.id) {
       setPage("collection");
       setSharedUserId(null);
@@ -74,19 +118,31 @@ function AppContent() {
     }
 
     refreshMatchCount();
-    refreshPendingTradeCount();
+    refreshPendingTradeCount().then((count) => {
+      if (isFirstLogin && count > 0 && !pendingTradesAlertShown.current) {
+        pendingTradesAlertShown.current = true;
+        setPendingTradesAlertCount(count);
+        setPendingTradesAlertOpen(true);
+      }
+    });
+    refreshUnreadMessageCount();
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         refreshPendingTradeCount();
+        refreshUnreadMessageCount();
       }
     };
     const intervalId = window.setInterval(refreshPendingTradeCount, 30000);
+    const messageIntervalId = window.setInterval(refreshUnreadMessageCount, 30000);
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
+    previousUserId.current = user?.id || null;
+
     return () => {
       window.clearInterval(intervalId);
+      window.clearInterval(messageIntervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [user]);
@@ -114,6 +170,11 @@ function AppContent() {
       cleanup?.();
     };
   }, [user?.id]);
+
+  const refreshMessageState = useCallback(async () => {
+    await refreshUnreadMessageCount();
+    setMessageRefreshKey((key) => key + 1);
+  }, [refreshUnreadMessageCount]);
 
   const navigate = (nextPage: Page) => {
     if (nextPage === "collection") {
@@ -157,7 +218,14 @@ function AppContent() {
 
   return (
     <>
-      <Layout currentPage={page} onNavigate={navigate} matchCount={matchCount} pendingTradeCount={pendingTradeCount}>
+      <Layout
+        currentPage={page}
+        onNavigate={navigate}
+        matchCount={matchCount}
+        pendingTradeCount={pendingTradeCount}
+        unreadMessageCount={unreadMessageCount}
+        onMessagesChange={refreshMessageState}
+      >
         {page === "collection" && (
           <CollectionPage
             homeKey={collectionHomeKey}
@@ -182,7 +250,13 @@ function AppContent() {
             />
           )
         )}
-        {page === "trades" && <TradesPage onPendingTradeCountChange={setPendingTradeCount} />}
+        {page === "trades" && (
+          <TradesPage
+            onPendingTradeCountChange={setPendingTradeCount}
+            onMessagesChange={refreshUnreadMessageCount}
+            refreshKey={messageRefreshKey}
+          />
+        )}
         {page === "share" && <SharePage sharedUserId={sharedUserId} onOpenSharedUser={setSharedUserId} />}
         {page === "partners" && <PartnersPage />}
         {page === "support" && <SupportPage />}
@@ -190,6 +264,32 @@ function AppContent() {
       </Layout>
       <InstallAppPrompt />
       <CookieConsent />
+      {pendingTradesAlertOpen && (
+        <div className="account-data-overlay" role="dialog" aria-modal="true" aria-labelledby="pending-trades-alert-title">
+          <div className="account-data-modal pending-trades-alert-modal">
+            <div className="account-data-header">
+              <div>
+                <h2 id="pending-trades-alert-title">Tem propostas pendentes</h2>
+                <p><strong>{pendingTradesAlertCount}</strong> proposta{pendingTradesAlertCount === 1 ? " pendente" : "s pendentes"} esperando a tua decisao.</p>
+              </div>
+              <button className="header-icon-btn" type="button" onClick={() => setPendingTradesAlertOpen(false)} title="Fechar" aria-label="Fechar aviso">
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
+            <div className="pending-trades-alert-body">
+              <p>Para manteres o controlo das tuas trocas, vê as propostas pendentes agora mesmo.</p>
+              <div className="pending-trades-alert-actions">
+                <button className="btn btn-primary btn-sm" type="button" onClick={() => { setPendingTradesAlertOpen(false); setPage("trades"); }}>
+                  Ver trocas pendentes
+                </button>
+                <button className="btn btn-ghost btn-sm" type="button" onClick={() => setPendingTradesAlertOpen(false)}>
+                  Mais tarde
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

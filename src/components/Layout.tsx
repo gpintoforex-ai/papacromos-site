@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
-import { ChevronDown, Handshake, KeyRound, LifeBuoy, LogOut, Moon, QrCode, RefreshCw, ScanLine, Shield, Sun, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
+import { ChevronDown, Handshake, KeyRound, LifeBuoy, LogOut, Mail, MessageCircle, Moon, QrCode, RefreshCw, ScanLine, Shield, Sun, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
 type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
@@ -18,10 +18,12 @@ interface LayoutProps {
   onNavigate: (page: Page) => void;
   matchCount: number;
   pendingTradeCount: number;
+  unreadMessageCount: number;
+  onMessagesChange?: () => void;
   children: React.ReactNode;
 }
 
-export default function Layout({ currentPage, onNavigate, matchCount, pendingTradeCount, children }: LayoutProps) {
+export default function Layout({ currentPage, onNavigate, matchCount, pendingTradeCount, unreadMessageCount, onMessagesChange, children }: LayoutProps) {
   const { user, profile, signOut } = useAuth();
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -35,6 +37,11 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [messagesModalOpen, setMessagesModalOpen] = useState(false);
+  const [recentMessages, setRecentMessages] = useState<any[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null);
   const displayName = profile?.username || user?.email?.split("@")[0] || "Utilizador";
   const displayEmail = profile?.email || user?.email || "-";
   const accountCreatedAt = profile?.created_at || user?.created_at;
@@ -79,6 +86,24 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
     } catch (err: any) {
       setAccountError(err.message || "Erro ao eliminar a conta.");
       setDeletingAccount(false);
+    }
+  };
+
+  const deleteOwnMessages = async () => {
+    if (!window.confirm("Apagar todas as tuas mensagens de troca?")) return;
+    if (!user?.id) return;
+
+    setAccountError(null);
+    try {
+      const { error } = await supabase
+        .from("trade_messages")
+        .delete()
+        .eq("user_id", user.id);
+      if (error) throw error;
+      await onMessagesChange?.();
+      setProfileOpen(false);
+    } catch (err: any) {
+      setAccountError(err.message || "Erro ao apagar mensagens.");
     }
   };
 
@@ -259,6 +284,13 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                         <KeyRound size={14} /> Alterar senha
                       </button>
                       <button
+                        className="btn btn-ghost btn-sm"
+                        type="button"
+                        onClick={deleteOwnMessages}
+                      >
+                        <Mail size={14} /> Apagar mensagens
+                      </button>
+                      <button
                         className="btn btn-danger-soft btn-sm"
                         type="button"
                         onClick={deleteOwnAccount}
@@ -275,6 +307,92 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
         </div>
       </header>
       <main className="app-main">{children}</main>
+      {unreadMessageCount > 0 && (
+        <button
+          className="global-message-shortcut"
+          type="button"
+            onClick={async () => {
+              // load unread messages summary and show simple list entries
+              setMessagesModalOpen(true);
+              try {
+                setMessagesError(null);
+                setMessagesLoading(true);
+                if (!user?.id) {
+                  setRecentMessages([]);
+                  return;
+                }
+
+                const { data: msgs, error: msgsError } = await supabase
+                  .from("trade_messages")
+                  .select("id, trade_id, user_id, created_at, is_read")
+                  .neq("user_id", user.id)
+                  .eq("is_read", false)
+                  .order("created_at", { ascending: false })
+                  .limit(50);
+                if (msgsError) throw msgsError;
+
+                setRecentMessages((msgs || []) as any[]);
+              } catch (err: any) {
+                setMessagesError(err.message || "Erro ao carregar mensagens.");
+                setRecentMessages([]);
+              } finally {
+                setMessagesLoading(false);
+              }
+            }}
+          title={`${unreadMessageCount} mensagem${unreadMessageCount === 1 ? "" : "s"} nova${unreadMessageCount === 1 ? "" : "s"}`}
+          aria-label={`Abrir mensagens. ${unreadMessageCount} mensagem${unreadMessageCount === 1 ? "" : "s"} nova${unreadMessageCount === 1 ? "" : "s"}.`}
+        >
+          <MessageCircle size={22} />
+          <span>{unreadMessageCount > 99 ? "99+" : unreadMessageCount}</span>
+        </button>
+      )}
+      {messagesModalOpen && (
+        <div className="trade-message-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="recent-messages-title" onClick={() => setMessagesModalOpen(false)}>
+          <div className="trade-message-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="trade-message-modal-header">
+              <div>
+                <h3 id="recent-messages-title">Mensagens recentes</h3>
+                <span>{recentMessages.length} mensagem{recentMessages.length === 1 ? "" : "s"}</span>
+              </div>
+              <button className="header-icon-btn" type="button" onClick={() => setMessagesModalOpen(false)} title="Fechar" aria-label="Fechar mensagens">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="trade-chat trade-chat-modal">
+              <div className="trade-messages">
+                {messagesLoading ? (
+                  <span className="trade-empty-message">A carregar...</span>
+                ) : messagesError ? (
+                  <p className="profile-error">{messagesError}</p>
+                ) : recentMessages.length === 0 ? (
+                  <span className="trade-empty-message">Sem mensagens.</span>
+                ) : (
+                  <div className="trade-messages-list">
+                    {recentMessages.map((m) => (
+                      <div
+                        key={m.id}
+                        className={`trade-message-summary-row ${m.is_read ? "read" : "unread"}`}
+                        onClick={() => {
+                          // navigate to Trades page and include params to open specific message
+                          const url = new URL(window.location.href);
+                          url.searchParams.set("openTradeId", m.trade_id);
+                          url.searchParams.set("openMessageId", m.id);
+                          window.history.replaceState({}, "", url.toString());
+                          setMessagesModalOpen(false);
+                          onNavigate("trades");
+                        }}
+                      >
+                        <span className="unread-pill">Tem mensagens não lidas</span>
+                        <time className="trade-message-time">{new Date(m.created_at).toLocaleString()}</time>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {dataModalOpen && (
         <div className="account-data-overlay" role="dialog" aria-modal="true" aria-labelledby="account-data-title">
           <div className="account-data-modal">

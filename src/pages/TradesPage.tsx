@@ -7,6 +7,8 @@ import type { DeliveryMethod } from "../lib/trades";
 
 interface TradesPageProps {
   onPendingTradeCountChange?: (count: number) => void;
+  onMessagesChange?: () => void;
+  refreshKey?: number;
 }
 
 interface TradeWithDetails {
@@ -58,6 +60,7 @@ interface TradeMessage {
   user_id: string;
   message: string;
   created_at: string;
+  is_read?: boolean;
   username?: string;
 }
 
@@ -129,16 +132,18 @@ function groupTradeProposals(trades: TradeWithDetails[]): GroupedTradeWithDetail
   return Array.from(groups.values());
 }
 
-export default function TradesPage({ onPendingTradeCountChange }: TradesPageProps) {
+export default function TradesPage({ onPendingTradeCountChange, onMessagesChange, refreshKey }: TradesPageProps) {
   const { user, profile } = useAuth();
   const [trades, setTrades] = useState<TradeWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<TradeFilter>("all");
+  const [filter, setFilter] = useState<TradeFilter>("pending");
   const [error, setError] = useState<string | null>(null);
+  const [openTradeId, setOpenTradeId] = useState<string | null>(null);
+  const [openMessageId, setOpenMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     loadTrades();
-  }, [user]);
+  }, [user, refreshKey]);
 
   const loadTrades = async () => {
     setLoading(true);
@@ -204,6 +209,24 @@ export default function TradesPage({ onPendingTradeCountChange }: TradesPageProp
         messages: messagesByTradeId.get(t.id) || [],
       }));
       setTrades(enriched as TradeWithDetails[]);
+      // check URL params for openTradeId/openMessageId
+      try {
+        const params = new URL(window.location.href).searchParams;
+        const t = params.get("openTradeId");
+        const m = params.get("openMessageId");
+        if (t && m) {
+          setOpenTradeId(t);
+          setOpenMessageId(m);
+          // remove params so they don't persist
+          params.delete("openTradeId");
+          params.delete("openMessageId");
+          const url = new URL(window.location.href);
+          url.search = params.toString();
+          window.history.replaceState({}, "", url.toString());
+        }
+      } catch (e) {
+        // ignore
+      }
       onPendingTradeCountChange?.(groupTradeProposals(enriched as TradeWithDetails[]).filter((trade) => trade.status === "pending").length);
     } catch (err: any) {
       setTrades([]);
@@ -278,11 +301,37 @@ export default function TradesPage({ onPendingTradeCountChange }: TradesPageProp
       return;
     }
     await loadTrades();
+    onMessagesChange?.();
+  };
+
+  const toggleTradeReadStatus = async (tradeIds: string | string[], read: boolean) => {
+    if (!user?.id) return;
+    const ids = Array.isArray(tradeIds) ? tradeIds : [tradeIds];
+    const { error } = await supabase
+      .from("trade_messages")
+      .update({ is_read: read })
+      .in("trade_id", ids)
+      .neq("user_id", user.id);
+    if (error) {
+      setError(error.message || "Erro ao atualizar estado da mensagem.");
+      return;
+    }
+    await loadTrades();
+    onMessagesChange?.();
   };
 
   const groupedTrades = groupTradeProposals(trades);
   const filteredTrades = groupedTrades.filter((t) => filter === "all" || t.status === filter);
   const pendingCount = groupedTrades.filter((t) => t.status === "pending").length;
+
+  // clear open ids once used
+  useEffect(() => {
+    if (openTradeId && openMessageId) {
+      // after giving to TradeCard, clear so repeated renders don't re-open
+      setOpenTradeId(null);
+      setOpenMessageId(null);
+    }
+  }, [trades]);
 
   if (loading) return <div className="loading">A carregar trocas...</div>;
 
@@ -320,30 +369,37 @@ export default function TradesPage({ onPendingTradeCountChange }: TradesPageProp
         </div>
       ) : (
         <div className="trades-list">
-          {filteredTrades.map((trade) => (
-            <TradeCard
-              key={trade.id}
-              id={trade.id}
-              ids={trade.ids}
-              offeredStickers={trade.offeredStickers}
-              requestedStickers={trade.requestedStickers}
-              proposalItems={trade.items}
-              fromUser={trade.from_user_id === user?.id ? trade.to_user_id : trade.from_user_id}
-              fromUsername={trade.from_user_id === user?.id ? trade.to_username : trade.from_username}
-              fromAvatarSeed={trade.from_user_id === user?.id ? trade.to_avatar_seed : trade.from_avatar_seed}
-              status={trade.status}
-              isIncoming={trade.to_user_id === user?.id}
-              currentUserId={user?.id}
-              deliveryMethod={trade.delivery_method}
-              note={trade.note}
-              messages={trade.messages}
-              onAccept={(id) => updateTradeStatus(id, "accepted")}
-              onReject={(id) => updateTradeStatus(id, "rejected")}
-              onCancel={(id) => updateTradeStatus(id, "rejected")}
-              onComplete={(id) => updateTradeStatus(id, "completed")}
-              onSendMessage={sendTradeMessage}
-            />
-          ))}
+          {filteredTrades.map((trade) => {
+            const unreadCount = trade.messages.filter((message) => message.user_id !== user?.id && !message.is_read).length;
+            return (
+              <TradeCard
+                key={trade.id}
+                id={trade.id}
+                ids={trade.ids}
+                offeredStickers={trade.offeredStickers}
+                requestedStickers={trade.requestedStickers}
+                proposalItems={trade.items}
+                fromUser={trade.from_user_id === user?.id ? trade.to_user_id : trade.from_user_id}
+                fromUsername={trade.from_user_id === user?.id ? trade.to_username : trade.from_username}
+                fromAvatarSeed={trade.from_user_id === user?.id ? trade.to_avatar_seed : trade.from_avatar_seed}
+                status={trade.status}
+                isIncoming={trade.to_user_id === user?.id}
+                currentUserId={user?.id}
+                deliveryMethod={trade.delivery_method}
+                note={trade.note}
+                messages={trade.messages}
+                unreadCount={unreadCount}
+                onToggleReadStatus={toggleTradeReadStatus}
+                onAccept={(id) => updateTradeStatus(id, "accepted")}
+                onReject={(id) => updateTradeStatus(id, "rejected")}
+                onCancel={(id) => updateTradeStatus(id, "rejected")}
+                onComplete={(id) => updateTradeStatus(id, "completed")}
+                onSendMessage={sendTradeMessage}
+                openModal={openTradeId === trade.id && Boolean(openMessageId)}
+                openMessageId={openTradeId === trade.id ? openMessageId : null}
+              />
+            );
+          })}
         </div>
       )}
     </div>
