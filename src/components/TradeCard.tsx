@@ -502,7 +502,7 @@ export default function TradeCard({
 
 function MiniTradeSticker({ title, sticker }: { title: string; sticker: TradeSticker }) {
   return (
-    <span className="trade-counter-mini">
+    <span className={`trade-counter-mini ${isPreviewImage(sticker.imageUrl) ? "preview-watermark" : ""}`}>
       <em>{title}</em>
       <img
         src={sticker.imageUrl || "/logo.png"}
@@ -541,7 +541,7 @@ function TradeStickerList({ title, stickers }: { title: string; stickers: TradeS
       <div className="trade-sticker-list">
         {groupedStickers.map((sticker) => (
           <div className="trade-sticker" key={`${sticker.number}:${sticker.name}:${sticker.imageUrl}`}>
-            <div className="trade-sticker-image-wrap">
+            <div className={`trade-sticker-image-wrap ${isPreviewImage(sticker.imageUrl) ? "preview-watermark" : ""}`}>
               <img
                 src={sticker.imageUrl || "/logo.png"}
                 alt={sticker.name}
@@ -557,4 +557,8 @@ function TradeStickerList({ title, stickers }: { title: string; stickers: TradeS
       </div>
     </div>
   );
+}
+
+function isPreviewImage(imageUrl: string) {
+  return imageUrl.startsWith("/stickers/");
 }

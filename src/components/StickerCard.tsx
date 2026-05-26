@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Info, Minus } from "lucide-react";
 
 interface StickerCardProps {
@@ -15,6 +15,7 @@ interface StickerCardProps {
   cropPlayerImage?: boolean;
   wikipediaUrl?: string;
   infoAnimationKey?: string | number;
+  previewWatermark?: boolean;
   onWikipediaClick?: () => void;
   stickerId?: string;
   onClick?: () => void;
@@ -33,7 +34,7 @@ const fallbackImage = "/logo.png";
 
 function vibrateOnStickerAction() {
   if ("vibrate" in navigator) {
-    navigator.vibrate(35);
+    navigator.vibrate([45, 18, 30]);
   }
 }
 
@@ -51,29 +52,73 @@ export default function StickerCard({
   cropPlayerImage,
   wikipediaUrl,
   infoAnimationKey,
+  previewWatermark,
   onWikipediaClick,
   stickerId,
   onClick,
   onReduceQuantity,
   children,
 }: StickerCardProps) {
+  const [pressed, setPressed] = useState(false);
+  const pressTimeoutRef = useRef<number | null>(null);
   const r = rarityConfig[rarity] || rarityConfig.common;
   const isHave = status === "have";
   const fallbackDisplayImage = fallbackImageUrl || fallbackImage;
   const displayImage = imageUrl || fallbackDisplayImage;
   const isFallbackImage = !imageUrl;
   const isTeamPhoto = name.includes("Foto de equipa");
+  const showPreviewWatermark = previewWatermark || displayImage.startsWith("/stickers/");
+
+  useEffect(() => {
+    return () => {
+      if (pressTimeoutRef.current !== null) {
+        window.clearTimeout(pressTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const showPressFeedback = () => {
+    if (!onClick) return;
+
+    if (pressTimeoutRef.current !== null) {
+      window.clearTimeout(pressTimeoutRef.current);
+    }
+
+    setPressed(true);
+    vibrateOnStickerAction();
+    pressTimeoutRef.current = window.setTimeout(() => {
+      setPressed(false);
+      pressTimeoutRef.current = null;
+    }, 180);
+  };
+
+  const clearPressFeedback = () => {
+    if (pressTimeoutRef.current !== null) {
+      window.clearTimeout(pressTimeoutRef.current);
+      pressTimeoutRef.current = null;
+    }
+    setPressed(false);
+  };
 
   return (
     <div
-      className={`sticker-card ${compact ? "compact" : ""} ${selected ? "selected" : ""} ${isTeamPhoto ? "team-photo" : ""} ${cropPlayerImage ? "player-crop" : ""}`}
+      className={`sticker-card ${onClick ? "interactive" : ""} ${pressed ? "pressed" : ""} ${compact ? "compact" : ""} ${selected ? "selected" : ""} ${isTeamPhoto ? "team-photo" : ""} ${cropPlayerImage ? "player-crop" : ""} ${showPreviewWatermark ? "preview-watermark" : ""}`}
       data-sticker-id={stickerId}
-      onClick={() => {
-        if (!onClick) return;
-        vibrateOnStickerAction();
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onPointerDown={showPressFeedback}
+      onPointerCancel={clearPressFeedback}
+      onPointerLeave={clearPressFeedback}
+      onKeyDown={(event) => {
+        if (!onClick || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        showPressFeedback();
         onClick();
       }}
-      style={onClick ? { cursor: "pointer" } : undefined}
+      onClick={() => {
+        if (!onClick) return;
+        onClick();
+      }}
     >
       <div
         className={`sticker-card-image ${status === "want" ? "missing" : ""}`}

@@ -53,6 +53,10 @@ type CodeOcrCanvasMode = "normal" | "inverted";
 const WORLD_ALBUM_COLLECTION_ID = "b2026000-0000-4000-8000-000000000001";
 const stickerAssetVersion = "20260523-mexico-names";
 
+function isWorldAlbumSticker(sticker: Pick<Sticker, "collection_id">) {
+  return sticker.collection_id === WORLD_ALBUM_COLLECTION_ID;
+}
+
 const worldCupNewsFallback: WorldCupNewsItem[] = [
   {
     title: "Calendario completo do FIFA World Cup 2026",
@@ -1025,6 +1029,27 @@ const abbrevToTeam: Record<string, string> = {
   TUN: "Tunísia",
 };
 
+function getTeamAbbrev(teamName: string) {
+  const normalizedTeamName = normalizeAbbrev(teamName);
+  const match = Object.entries(abbrevToTeam).find(([, mappedTeam]) => normalizeAbbrev(mappedTeam) === normalizedTeamName);
+  return match?.[0] || normalizedTeamName.slice(0, 3);
+}
+
+function getStickerShortCode(sticker: Sticker) {
+  if (sticker.collection_id !== WORLD_ALBUM_COLLECTION_ID) {
+    return `#${String(sticker.number).padStart(3, "0")}`;
+  }
+
+  const teamName = getStickerEffectiveTeamName(sticker);
+  const localNumber = String(getAlbumLocalNumber(sticker)).padStart(2, "0");
+
+  if (teamName === "FWC") return `FWC ${localNumber}`;
+  if (teamName === "Extras") return `EXT ${localNumber}`;
+  if (teamName === "CC") return `CC ${localNumber}`;
+
+  return `${getTeamAbbrev(teamName)} ${localNumber}`;
+}
+
 function levenshtein(a: string, b: string) {
   const alen = a.length;
   const blen = b.length;
@@ -1500,65 +1525,93 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     return teamStickers.every((teamSticker) => haveIds.has(teamSticker.id)) ? teamName : null;
   };
 
+  const updateLocalUserStickerQuantity = (userStickerId: string, quantity: number) => {
+    setUserStickers((current) =>
+      current.map((item) => item.id === userStickerId ? { ...item, quantity } : item)
+    );
+  };
+
+  const removeLocalUserSticker = (userStickerId: string) => {
+    setUserStickers((current) => current.filter((item) => item.id !== userStickerId));
+  };
+
+  const upsertLocalUserSticker = (nextUserSticker: UserSticker) => {
+    setUserStickers((current) => {
+      const existingIndex = current.findIndex((item) =>
+        item.user_id === nextUserSticker.user_id &&
+        item.sticker_id === nextUserSticker.sticker_id &&
+        item.status === nextUserSticker.status
+      );
+
+      if (existingIndex === -1) return [...current, nextUserSticker];
+
+      return current.map((item, index) => index === existingIndex ? { ...item, ...nextUserSticker } : item);
+    });
+  };
+
   const addSticker = async (stickerId: string, status: "have" | "want") => {
     setError(null);
     try {
       if (!user?.id) throw new Error("Sessao expirada. Entra novamente.");
       const completedWorldTeamName = status === "have" ? getCompletedWorldTeamNameAfterHave(stickerId) : null;
 
-      const existing = userStickers.find((us) => us.user_id === user.id && us.sticker_id === stickerId && us.status === status);
+      const existing = userStickers.find((us) =>
+        us.user_id === user.id &&
+        us.sticker_id === stickerId &&
+        us.status === status &&
+        (status !== "have" || (us.quantity || 0) > 0)
+      );
       if (existing) {
+        const nextQuantity = existing.quantity + 1;
+        updateLocalUserStickerQuantity(existing.id, nextQuantity);
         const { error: updateError } = await supabase
           .from("user_stickers")
-          .update({ quantity: existing.quantity + 1 })
+          .update({ quantity: nextQuantity })
           .eq("id", existing.id);
         if (updateError) throw updateError;
       } else {
-        const { error: insertError } = await supabase.from("user_stickers").upsert({
-          user_id: user.id,
-          sticker_id: stickerId,
-          status,
-          quantity: 1,
-        }, {
-          onConflict: "user_id,sticker_id,status",
-          ignoreDuplicates: true,
-        });
+        const sticker = stickers.find((item) => item.id === stickerId);
+        if (!sticker) throw new Error("Cromo nao encontrado.");
+
+        const { data: insertedUserSticker, error: insertError } = await supabase
+          .from("user_stickers")
+          .upsert({
+            user_id: user.id,
+            sticker_id: stickerId,
+            status,
+            quantity: 1,
+          }, {
+            onConflict: "user_id,sticker_id,status",
+            ignoreDuplicates: false,
+          })
+          .select("id, user_id, sticker_id, status, quantity")
+          .single();
         if (insertError) throw insertError;
+        if (!insertedUserSticker) throw new Error("Nao foi possivel gravar o cromo.");
+
+        upsertLocalUserSticker({
+          ...insertedUserSticker,
+          stickers: sticker,
+        } as UserSticker);
       }
 
       if (status === "have") {
         const existingWant = userStickers.find((us) => us.user_id === user.id && us.sticker_id === stickerId && us.status === "want");
         if (existingWant) {
+          removeLocalUserSticker(existingWant.id);
           const { error: deleteWantError } = await supabase.from("user_stickers").delete().eq("id", existingWant.id);
           if (deleteWantError) throw deleteWantError;
         }
       }
-      await loadData();
       if (completedWorldTeamName) {
         playFireworksSound();
         setTeamCompletionFireworks({ teamName: completedWorldTeamName, key: Date.now() });
       }
       onCollectionChange?.();
     } catch (err: any) {
+      await loadData();
       setError(err.message || "Erro ao atualizar cromo.");
     }
-  };
-
-  const ensureWantSticker = async (stickerId: string) => {
-    if (!user?.id) return;
-    const existingWant = userStickers.find((us) => us.user_id === user.id && us.sticker_id === stickerId && us.status === "want");
-    if (existingWant) return;
-
-    const { error: insertError } = await supabase.from("user_stickers").upsert({
-      user_id: user.id,
-      sticker_id: stickerId,
-      status: "want",
-      quantity: 1,
-    }, {
-      onConflict: "user_id,sticker_id,status",
-      ignoreDuplicates: true,
-    });
-    if (insertError) throw insertError;
   };
 
   const syncWantedForCollection = async (collectionId: string) => {
@@ -1618,17 +1671,36 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   };
 
   const removeSticker = async (userStickerId: string) => {
+    setError(null);
     const userSticker = userStickers.find((us) => us.user_id === user?.id && us.id === userStickerId);
-    const { error: deleteError } = await supabase.from("user_stickers").delete().eq("id", userStickerId);
-    if (deleteError) {
-      setError(deleteError.message);
-      return;
+
+    try {
+      if (userSticker?.status === "have" && (filter === "have" || filter === "repeated")) {
+        setFilter("all");
+      }
+
+      if (userSticker?.status === "have") {
+        updateLocalUserStickerQuantity(userStickerId, 0);
+
+        const { error: updateError } = await supabase
+          .from("user_stickers")
+          .update({ quantity: 0 })
+          .eq("id", userStickerId);
+        if (updateError) throw updateError;
+      } else {
+        removeLocalUserSticker(userStickerId);
+
+        const { error: deleteError } = await supabase.from("user_stickers").delete().eq("id", userStickerId);
+        if (deleteError) throw deleteError;
+      }
+
+      onCollectionChange?.();
+    } catch (err: any) {
+      if (userSticker) {
+        upsertLocalUserSticker(userSticker);
+      }
+      setError(err.message || "Erro ao retirar cromo.");
     }
-    if (userSticker?.status === "have") {
-      await ensureWantSticker(userSticker.sticker_id);
-    }
-    await loadData();
-    onCollectionChange?.();
   };
 
   const addQuantity = async (userStickerId: string) => {
@@ -1636,15 +1708,17 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     try {
       const us = userStickers.find((u) => u.user_id === user?.id && u.id === userStickerId);
       if (us) {
+        const nextQuantity = us.quantity + 1;
+        updateLocalUserStickerQuantity(userStickerId, nextQuantity);
         const { error: updateError } = await supabase
           .from("user_stickers")
-          .update({ quantity: us.quantity + 1 })
+          .update({ quantity: nextQuantity })
           .eq("id", userStickerId);
         if (updateError) throw updateError;
-        await loadData();
         onCollectionChange?.();
       }
     } catch (err: any) {
+      await loadData();
       setError(err.message || "Erro ao atualizar quantidade.");
     }
   };
@@ -1657,16 +1731,18 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         if (us.quantity <= 1) {
           await removeSticker(userStickerId);
         } else {
+          const nextQuantity = us.quantity - 1;
+          updateLocalUserStickerQuantity(userStickerId, nextQuantity);
           const { error: updateError } = await supabase
             .from("user_stickers")
-            .update({ quantity: us.quantity - 1 })
+            .update({ quantity: nextQuantity })
             .eq("id", userStickerId);
           if (updateError) throw updateError;
-          await loadData();
           onCollectionChange?.();
         }
       }
     } catch (err: any) {
+      await loadData();
       setError(err.message || "Erro ao atualizar quantidade.");
     }
   };
@@ -2477,9 +2553,9 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
   const selectedStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
   const selectedStickerIds = new Set(selectedStickers.map((sticker) => sticker.id));
   const selectedUserStickers = userStickers.filter((us) => us.user_id === user?.id && selectedStickerIds.has(us.sticker_id));
-  const haveCount = selectedUserStickers.filter((us) => us.status === "have").length;
+  const haveCount = selectedUserStickers.filter((us) => us.status === "have" && (us.quantity || 0) > 0).length;
   const repeatedCount = selectedUserStickers
-    .filter((us) => us.status === "have")
+    .filter((us) => us.status === "have" && (us.quantity || 0) > 0)
     .reduce((total, us) => total + Math.max(0, (us.quantity || 0) - 1), 0);
   const totalCount = Math.max(selectedStickers.length, selectedCollection?.total_stickers || 0);
   const progress = totalCount > 0 ? Math.round((haveCount / totalCount) * 100) : 0;
@@ -2639,6 +2715,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         playerName={showWorldPlayerName ? getStickerPlayerName(sticker) : undefined}
         wikipediaUrl={getStickerWikipediaUrl(sticker)}
         infoAnimationKey={`${albumTeamInfoAnimationKey}-${sticker.id}`}
+        previewWatermark={isWorldAlbumSticker(sticker)}
         onWikipediaClick={() => openWikipediaModal(sticker)}
         onClick={() => {
           setSelectedStickerId(sticker.id);
@@ -2950,7 +3027,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
             </div>
             <CollectionHomeCarousel itemCount={ownedPreviewStickers.length} emptyText="Ainda nao marcaste cromos como teus.">
               {ownedPreviewStickers.map(({ userSticker, sticker }) => (
-                <button className="collection-home-mini-card" key={userSticker.id} type="button" onClick={() => openStickerCollection(sticker)}>
+                <button className={`collection-home-mini-card ${isWorldAlbumSticker(sticker) ? "preview-watermark" : ""}`} key={userSticker.id} type="button" onClick={() => openStickerCollection(sticker)}>
                   <img src={getStickerImageSource(sticker)} alt={getStickerDisplayName(sticker)} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
                   <strong>{getStickerDisplayName(sticker)}</strong>
                   {userSticker.quantity > 1 && <em>{userSticker.quantity}</em>}
@@ -2986,8 +3063,10 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
                       <strong>{holder.username}</strong>
                       <span>Tem {holder.count} {holder.count === 1 ? "cromo" : "cromos"} que precisas!</span>
                       {holder.sampleStickers.length > 0 && (
-                        <small>
-                          {holder.sampleStickers.map((sticker) => `#${String(sticker.number).padStart(3, "0")}`).join(", ")}
+                        <small className="needed-sticker-codes">
+                          {holder.sampleStickers.map((sticker) => (
+                            <span key={sticker.id}>{getStickerShortCode(sticker)}</span>
+                          ))}
                         </small>
                       )}
                     </div>
@@ -3086,7 +3165,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           </div>
           <CollectionHomeCarousel itemCount={missingPreviewStickers.length} emptyText="Sem cromos em falta nas colecoes ativas.">
             {missingPreviewStickers.map((sticker) => (
-              <button className="collection-home-mini-card" key={sticker.id} type="button" onClick={() => openMissingStickerCollection(sticker)}>
+              <button className={`collection-home-mini-card ${isWorldAlbumSticker(sticker) ? "preview-watermark" : ""}`} key={sticker.id} type="button" onClick={() => openMissingStickerCollection(sticker)}>
                 <img src={getStickerImageSource(sticker)} alt={getStickerDisplayName(sticker)} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
                 <strong>{getStickerDisplayName(sticker)}</strong>
               </button>
@@ -3101,7 +3180,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           </div>
           <CollectionHomeCarousel itemCount={repeatedPreviewStickers.length} emptyText="Ainda nao tens repetidos.">
             {repeatedPreviewStickers.map(({ userSticker, sticker }) => (
-              <button className="collection-home-mini-card repeated" key={userSticker.id} type="button" onClick={() => openRepeatedStickerCollection(sticker)}>
+              <button className={`collection-home-mini-card repeated ${isWorldAlbumSticker(sticker) ? "preview-watermark" : ""}`} key={userSticker.id} type="button" onClick={() => openRepeatedStickerCollection(sticker)}>
                 <img src={getStickerImageSource(sticker)} alt={getStickerDisplayName(sticker)} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
                 <strong>{getStickerDisplayName(sticker)}</strong>
                 <em>{Math.max(0, (userSticker.quantity || 0) - 1)}</em>
@@ -3251,7 +3330,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         <div className="code-scan-panel">
           <div className="voice-mark-header">
             <div>
-              <strong>Scanner OCR</strong>
+              <strong>Scanner</strong>
               <span>Aponta para os codigos das figurinhas. A app detecta varios de uma vez e adiciona-os em lote.</span>
             </div>
           </div>
@@ -3282,7 +3361,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
               onChange={(event) => setCodeText(event.target.value)}
             />
             <button className="btn btn-code-toggle btn-sm" type="button" onClick={startCodeScanner} disabled={codeScanning}>
-              <ScanLine size={14} /> {codeScanning ? "Scanner ativo" : "Scanner OCR"}
+              <ScanLine size={14} /> {codeScanning ? "Scanner ativo" : "Scanner"}
             </button>
             {codeScanning && (
               <button className="btn btn-ghost btn-sm" type="button" onClick={stopCodeScanner}>

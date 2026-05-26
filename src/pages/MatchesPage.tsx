@@ -48,6 +48,10 @@ interface MatchUserGroup {
 
 type MatchLocationFilter = "all" | "near";
 
+function isPreviewImage(imageUrl: string) {
+  return imageUrl.startsWith("/stickers/");
+}
+
 function normalizeLocation(value: string | null | undefined) {
   return (value || "")
     .normalize("NFKD")
@@ -690,7 +694,7 @@ function MatchStickerSelector({
   onPlus: () => void;
 }) {
   return (
-    <div className={`match-sticker-option ${quantity > 0 ? "selected" : ""}`}>
+    <div className={`match-sticker-option ${quantity > 0 ? "selected" : ""} ${isPreviewImage(sticker.image_url) ? "preview-watermark" : ""}`}>
       <img src={sticker.image_url || "/logo.png"} alt={sticker.name} loading="lazy" />
       <div>
         <strong>{sticker.name}</strong>

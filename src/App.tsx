@@ -12,12 +12,17 @@ import ScannerPage from "./pages/ScannerPage";
 import CookieConsent from "./components/CookieConsent";
 import InstallAppPrompt from "./components/InstallAppPrompt";
 import ProfileCompletionGate from "./components/ProfileCompletionGate";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type MouseEvent } from "react";
 import { countUniqueRequestedStickers, findUserMatches } from "./lib/matches";
 import { supabase } from "./lib/supabase";
 import { getPushPermissionState, setupPushNotifications } from "./lib/pushNotifications";
 
 type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+}
 
 function AppContent() {
   const { user, profile, loading } = useAuth();
@@ -263,6 +268,22 @@ function AppContent() {
     setNotificationPromptError(null);
   };
 
+  const blockProtectedContextMenu = (event: MouseEvent) => {
+    if (isEditableTarget(event.target)) return;
+    event.preventDefault();
+  };
+
+  const blockProtectedCopy = (event: ClipboardEvent) => {
+    if (isEditableTarget(event.target)) return;
+    event.preventDefault();
+  };
+
+  const blockProtectedDrag = (event: DragEvent) => {
+    if (event.target instanceof Node && event.currentTarget.contains(event.target)) {
+      event.preventDefault();
+    }
+  };
+
   if (loading) {
     return <div className="loading-screen">A carregar...</div>;
   }
@@ -291,7 +312,12 @@ function AppContent() {
   }
 
   return (
-    <>
+    <div
+      className="app-protection-shell"
+      onContextMenuCapture={blockProtectedContextMenu}
+      onCopyCapture={blockProtectedCopy}
+      onDragStartCapture={blockProtectedDrag}
+    >
       <Layout
         currentPage={page}
         onNavigate={navigate}
@@ -391,7 +417,7 @@ function AppContent() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 

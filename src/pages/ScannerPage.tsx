@@ -1304,9 +1304,9 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
     <div className={`scanner-page scanner-live-page ${scannedCodes.length > 0 ? "has-detections" : ""}`}>
       <header className="scanner-live-header">
         <div>
-          <strong>Scanner OCR</strong>
+          <strong>Scanner</strong>
         </div>
-        <button className="scanner-live-close" type="button" onClick={handleClose} aria-label="Fechar scanner">
+        <button className="scanner-live-close scanner-live-exit" type="button" onClick={handleClose} aria-label="Fechar scanner">
           <X size={28} />
         </button>
       </header>

@@ -151,6 +151,28 @@ canvas {
   max-width: 100%;
 }
 
+.app-protection-shell {
+  min-height: 100vh;
+}
+
+.app-protection-shell,
+.app-protection-shell img,
+.app-protection-shell canvas,
+.app-protection-shell svg {
+  -webkit-user-drag: none;
+}
+
+.app-protection-shell img,
+.app-protection-shell canvas,
+.app-protection-shell video,
+.sticker-card,
+.album-sticker-card,
+.match-sticker-option,
+.trade-sticker-item {
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 button,
 input,
 select,
@@ -2891,6 +2913,23 @@ textarea {
   white-space: nowrap;
 }
 
+.needed-sticker-codes {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.needed-sticker-codes span {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
 @keyframes needed-users-scroll {
   from {
     transform: translateX(0);
@@ -3219,6 +3258,23 @@ textarea {
   object-fit: contain;
   object-position: center;
   background: var(--bg-secondary);
+}
+
+.collection-home-mini-card.preview-watermark::after {
+  content: "PREVIEW";
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  top: clamp(44px, 34%, 92px);
+  z-index: 2;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: clamp(15px, 4vw, 24px);
+  font-weight: 900;
+  letter-spacing: 0;
+  text-align: center;
+  transform: rotate(-22deg);
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.34);
 }
 
 .collection-home-mini-card strong {
@@ -4344,6 +4400,18 @@ textarea {
   cursor: pointer;
 }
 
+.scanner-live-exit {
+  border-color: rgba(248, 113, 113, 0.6);
+  background: #fee2e2;
+  color: #b91c1c;
+  box-shadow: 0 12px 24px rgba(248, 113, 113, 0.22);
+}
+
+.scanner-live-exit:hover {
+  background: #fecaca;
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
 .scanner-live-camera {
   position: relative;
   min-height: 0;
@@ -4857,17 +4925,36 @@ textarea {
 }
 
 .sticker-card {
+  position: relative;
   background: var(--bg-elevated);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   overflow: visible;
-  transition: all var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition), transform 0.16s ease, background 0.16s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.sticker-card.interactive {
+  cursor: pointer;
+  user-select: none;
 }
 
 .sticker-card:hover {
   box-shadow: var(--shadow-md);
   border-color: var(--border-hover);
   transform: translateY(-2px);
+}
+
+.sticker-card.interactive.pressed {
+  border-color: rgba(13, 148, 136, 0.45);
+  box-shadow: 0 12px 28px rgba(13, 148, 136, 0.18), var(--shadow-sm);
+  transform: translateY(-1px) scale(0.985);
+}
+
+.sticker-card.interactive:focus-visible {
+  outline: 3px solid rgba(13, 148, 136, 0.28);
+  outline-offset: 3px;
 }
 
 .sticker-card.selected {
@@ -4923,11 +5010,44 @@ textarea {
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
+.sticker-card.interactive .sticker-image-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: radial-gradient(circle at center, rgba(20, 184, 166, 0.2), rgba(20, 184, 166, 0) 64%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.sticker-card.interactive.pressed .sticker-image-frame::before {
+  opacity: 1;
+}
+
 .sticker-card-image img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  transition: transform var(--transition-slow);
+  transition: transform 0.18s ease, opacity 0.18s ease, filter 0.18s ease;
+}
+
+.sticker-card.preview-watermark .sticker-image-frame::after {
+  content: "PREVIEW";
+  position: absolute;
+  left: 3%;
+  right: 3%;
+  top: 43%;
+  z-index: 3;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: clamp(20px, 5vw, 36px);
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
+  transform: rotate(-22deg);
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(15, 23, 42, 0.38);
 }
 
 .sticker-card.player-crop .sticker-card-image {
@@ -4973,6 +5093,10 @@ textarea {
 
 .sticker-card:hover .sticker-card-image img {
   transform: none;
+}
+
+.sticker-card.interactive.pressed .sticker-card-image img {
+  transform: scale(0.985);
 }
 
 .sticker-number {
@@ -6373,6 +6497,7 @@ button.sticker-wikipedia-link {
 }
 
 .match-sticker-option {
+  position: relative;
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr) auto;
   align-items: center;
@@ -6394,6 +6519,23 @@ button.sticker-wikipedia-link {
   object-fit: contain;
   border-radius: var(--radius-sm);
   background: var(--bg-secondary);
+}
+
+.match-sticker-option.preview-watermark::after {
+  content: "PREVIEW";
+  position: absolute;
+  left: 5px;
+  top: 31px;
+  z-index: 2;
+  width: 64px;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-align: center;
+  transform: rotate(-22deg);
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.34);
 }
 
 .match-sticker-option strong {
@@ -7284,6 +7426,23 @@ button.sticker-wikipedia-link {
   flex-shrink: 0;
 }
 
+.trade-sticker-image-wrap.preview-watermark::after {
+  content: "PREVIEW";
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  top: 19px;
+  z-index: 2;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-align: center;
+  transform: rotate(-22deg);
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.34);
+}
+
 .trade-sticker img {
   width: 100%;
   height: 100%;
@@ -7422,6 +7581,7 @@ button.sticker-wikipedia-link {
 }
 
 .trade-counter-mini {
+  position: relative;
   min-width: 0;
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
@@ -7430,6 +7590,23 @@ button.sticker-wikipedia-link {
     "image name";
   gap: 1px 8px;
   align-items: center;
+}
+
+.trade-counter-mini.preview-watermark::after {
+  content: "PREVIEW";
+  position: absolute;
+  left: -3px;
+  top: 14px;
+  z-index: 2;
+  width: 44px;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-align: center;
+  transform: rotate(-22deg);
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.34);
 }
 
 .trade-counter-mini em {
@@ -8960,6 +9137,7 @@ button.sticker-wikipedia-link {
 }
 
 .shared-mini-sticker {
+  position: relative;
   min-width: 0;
   display: grid;
   grid-template-columns: 52px minmax(0, 1fr);
@@ -9001,6 +9179,23 @@ button.sticker-wikipedia-link {
   object-fit: contain;
   border-radius: var(--radius-sm);
   background: var(--bg-secondary);
+}
+
+.shared-mini-sticker.preview-watermark::after {
+  content: "PREVIEW";
+  position: absolute;
+  left: 5px;
+  top: 36px;
+  z-index: 2;
+  width: 60px;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-align: center;
+  transform: rotate(-22deg);
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.34);
 }
 
 .shared-mini-sticker strong {

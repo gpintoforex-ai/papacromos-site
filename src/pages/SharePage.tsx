@@ -19,6 +19,10 @@ interface StickerInfo {
   collection_id?: string;
 }
 
+function isPreviewImage(imageUrl: string) {
+  return imageUrl.startsWith("/stickers/");
+}
+
 interface UserStickerRow {
   user_id: string;
   sticker_id: string;
@@ -1318,7 +1322,7 @@ function MiniSticker({
   const display = getSharedStickerDisplay(sticker);
 
   return (
-    <div className={`shared-mini-sticker ${cardStateClass}`}>
+    <div className={`shared-mini-sticker ${cardStateClass} ${isPreviewImage(sticker.image_url) ? "preview-watermark" : ""}`}>
       {label && <em>{label}</em>}
       <img
         src={sticker.image_url || "/logo.png"}
