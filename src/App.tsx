@@ -15,7 +15,7 @@ import ProfileCompletionGate from "./components/ProfileCompletionGate";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { countUniqueRequestedStickers, findUserMatches } from "./lib/matches";
 import { supabase } from "./lib/supabase";
-import { setupPushNotifications } from "./lib/pushNotifications";
+import { getPushPermissionState, setupPushNotifications } from "./lib/pushNotifications";
 
 type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
 
@@ -30,6 +30,9 @@ function AppContent() {
   const [sharedUserId, setSharedUserId] = useState<string | null>(null);
   const [pendingTradesAlertOpen, setPendingTradesAlertOpen] = useState(false);
   const [pendingTradesAlertCount, setPendingTradesAlertCount] = useState(0);
+  const [notificationPromptOpen, setNotificationPromptOpen] = useState(false);
+  const [notificationPromptBusy, setNotificationPromptBusy] = useState(false);
+  const [notificationPromptError, setNotificationPromptError] = useState<string | null>(null);
   const pendingTradesAlertShown = useRef(false);
   const previousUserId = useRef<string | null>(null);
 
@@ -171,6 +174,22 @@ function AppContent() {
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setNotificationPromptOpen(false);
+      return;
+    }
+
+    const dismissedKey = `papacromos:notification-prompt-dismissed:${user.id}`;
+    if (sessionStorage.getItem(dismissedKey) === "true") return;
+
+    getPushPermissionState()
+      .then((permissionState) => {
+        setNotificationPromptOpen(permissionState === "prompt");
+      })
+      .catch(() => setNotificationPromptOpen(false));
+  }, [user?.id]);
+
   const refreshMessageState = useCallback(async () => {
     await refreshUnreadMessageCount();
     setMessageRefreshKey((key) => key + 1);
@@ -210,6 +229,38 @@ function AppContent() {
       window.history.replaceState({}, "", url.toString());
     }
     setPage(nextPage);
+  };
+
+  const allowNotifications = async () => {
+    if (!user?.id) return;
+
+    setNotificationPromptBusy(true);
+    setNotificationPromptError(null);
+    try {
+      await setupPushNotifications(user.id, { requestPermission: true });
+      const permissionState = await getPushPermissionState();
+      if (permissionState === "granted") {
+        setNotificationPromptOpen(false);
+        return;
+      }
+      if (permissionState === "denied") {
+        setNotificationPromptError("As notificacoes foram bloqueadas no browser. Podes ativar nas definicoes do site.");
+        return;
+      }
+      setNotificationPromptError("Nao foi possivel ativar as notificacoes neste dispositivo.");
+    } catch (err: any) {
+      setNotificationPromptError(err.message || "Nao foi possivel ativar notificacoes.");
+    } finally {
+      setNotificationPromptBusy(false);
+    }
+  };
+
+  const dismissNotificationPrompt = () => {
+    if (user?.id) {
+      sessionStorage.setItem(`papacromos:notification-prompt-dismissed:${user.id}`, "true");
+    }
+    setNotificationPromptOpen(false);
+    setNotificationPromptError(null);
   };
 
   if (loading) {
@@ -287,6 +338,33 @@ function AppContent() {
       </Layout>
       <InstallAppPrompt />
       <CookieConsent />
+      {notificationPromptOpen && (
+        <div className="account-data-overlay" role="dialog" aria-modal="true" aria-labelledby="notification-permission-title">
+          <div className="account-data-modal notification-permission-modal">
+            <div className="account-data-header">
+              <div>
+                <h2 id="notification-permission-title">Ativar notificacoes</h2>
+                <p>Recebe alertas quando tiveres novas propostas, respostas e mensagens de outros utilizadores.</p>
+              </div>
+              <button className="header-icon-btn" type="button" onClick={dismissNotificationPrompt} title="Fechar" aria-label="Fechar pedido">
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
+            <div className="notification-permission-body">
+              <p>As notificacoes ajudam-te a responder mais depressa e a nao perder trocas importantes.</p>
+              {notificationPromptError && <p className="profile-error">{notificationPromptError}</p>}
+              <div className="notification-permission-actions">
+                <button className="btn btn-primary btn-sm" type="button" onClick={allowNotifications} disabled={notificationPromptBusy}>
+                  {notificationPromptBusy ? "A ativar..." : "Permitir notificacoes"}
+                </button>
+                <button className="btn btn-ghost btn-sm" type="button" onClick={dismissNotificationPrompt} disabled={notificationPromptBusy}>
+                  Agora nao
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {pendingTradesAlertOpen && (
         <div className="account-data-overlay" role="dialog" aria-modal="true" aria-labelledby="pending-trades-alert-title">
           <div className="account-data-modal pending-trades-alert-modal">

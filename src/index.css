@@ -825,6 +825,28 @@ textarea {
   color: var(--text-muted);
 }
 
+.notification-permission-modal {
+  border-color: rgba(13, 148, 136, 0.28);
+  background: linear-gradient(180deg, rgba(240, 253, 250, 0.96) 0%, var(--bg-elevated) 100%);
+}
+
+.notification-permission-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 16px;
+}
+
+.notification-permission-body p {
+  color: var(--text-muted);
+}
+
+.notification-permission-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .trade-message-item {
   cursor: pointer;
   padding: 10px 0;

@@ -4,6 +4,12 @@ import { supabase } from "./supabase";
 
 const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || "";
 
+type PushPermissionState = "granted" | "prompt" | "denied" | "unsupported";
+
+interface PushSetupOptions {
+  requestPermission?: boolean;
+}
+
 function isNativePushAvailable() {
   return Capacitor.getPlatform() !== "web";
 }
@@ -15,7 +21,31 @@ function urlBase64ToUint8Array(base64String: string) {
   return Uint8Array.from([...rawData].map((character) => character.charCodeAt(0)));
 }
 
-async function setupWebPushNotifications(userId: string) {
+export async function getPushPermissionState(): Promise<PushPermissionState> {
+  if (isNativePushAvailable()) {
+    const permission = await PushNotifications.checkPermissions();
+    if (permission.receive === "granted") return "granted";
+    if (permission.receive === "denied") return "denied";
+    return "prompt";
+  }
+
+  if (
+    !import.meta.env.PROD ||
+    !vapidPublicKey ||
+    !("serviceWorker" in navigator) ||
+    !("PushManager" in window) ||
+    !("Notification" in window) ||
+    !window.isSecureContext
+  ) {
+    return "unsupported";
+  }
+
+  if (Notification.permission === "granted") return "granted";
+  if (Notification.permission === "denied") return "denied";
+  return "prompt";
+}
+
+async function setupWebPushNotifications(userId: string, options: PushSetupOptions) {
   if (
     !import.meta.env.PROD ||
     !vapidPublicKey ||
@@ -27,7 +57,7 @@ async function setupWebPushNotifications(userId: string) {
     return () => Promise.resolve();
   }
 
-  const permission = Notification.permission === "default"
+  const permission = Notification.permission === "default" && options.requestPermission
     ? await Notification.requestPermission()
     : Notification.permission;
 
@@ -71,13 +101,13 @@ async function setupWebPushNotifications(userId: string) {
   return async () => undefined;
 }
 
-export async function setupPushNotifications(userId: string) {
+export async function setupPushNotifications(userId: string, options: PushSetupOptions = {}) {
   if (!userId) {
     return () => Promise.resolve();
   }
 
   if (!isNativePushAvailable()) {
-    return setupWebPushNotifications(userId);
+    return setupWebPushNotifications(userId, options);
   }
 
   const registrationListener = await PushNotifications.addListener("registration", async (token) => {
@@ -107,7 +137,7 @@ export async function setupPushNotifications(userId: string) {
   });
 
   const permission = await PushNotifications.checkPermissions();
-  const permissionStatus = permission.receive === "prompt"
+  const permissionStatus = permission.receive === "prompt" && options.requestPermission
     ? await PushNotifications.requestPermissions()
     : permission;
 
