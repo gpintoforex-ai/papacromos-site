@@ -126,3 +126,6 @@ port = 54327
 vector_port = 54328
 # Configure one of the supported backends: `postgres`, `clickhouse`.
 backend = "postgres"
+
+[functions.send-push-notifications]
+verify_jwt = false
