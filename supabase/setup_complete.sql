@@ -37,6 +37,8 @@ ALTER TABLE user_profiles
   ADD COLUMN IF NOT EXISTS phone text,
   ADD COLUMN IF NOT EXISTS region text,
   ADD COLUMN IF NOT EXISTS city text,
+  ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'member'
+    CHECK (status IN ('member', 'king_cromo')),
   ADD COLUMN IF NOT EXISTS is_admin boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS is_blocked boolean NOT NULL DEFAULT false;
 
@@ -107,6 +109,19 @@ ON CONFLICT (id) DO UPDATE SET
   file_size_limit = 5242880,
   allowed_mime_types = ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'app-media',
+  'app-media',
+  true,
+  52428800,
+  ARRAY['video/mp4', 'video/webm', 'video/quicktime']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = true,
+  file_size_limit = 52428800,
+  allowed_mime_types = ARRAY['video/mp4', 'video/webm', 'video/quicktime'];
+
 DROP POLICY IF EXISTS "Authenticated users can view collections" ON collections;
 DROP POLICY IF EXISTS "Admins can manage collections" ON collections;
 DROP POLICY IF EXISTS "Authenticated users can view stickers" ON stickers;
@@ -131,6 +146,10 @@ DROP POLICY IF EXISTS "Users can delete own sticker photos" ON storage.objects;
 DROP POLICY IF EXISTS "Anyone can view sticker images" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can upload sticker images" ON storage.objects;
 DROP POLICY IF EXISTS "Admins can delete sticker images" ON storage.objects;
+DROP POLICY IF EXISTS "Anyone can view app media" ON storage.objects;
+DROP POLICY IF EXISTS "Admins can upload app media" ON storage.objects;
+DROP POLICY IF EXISTS "Admins can update app media" ON storage.objects;
+DROP POLICY IF EXISTS "Admins can delete app media" ON storage.objects;
 
 CREATE POLICY "Authenticated users can view collections"
   ON collections FOR SELECT
@@ -236,6 +255,7 @@ CREATE POLICY "Users can update trades involving them"
   USING (auth.uid() = from_user_id OR auth.uid() = to_user_id)
   WITH CHECK (auth.uid() = from_user_id OR auth.uid() = to_user_id);
 
+DROP POLICY IF EXISTS "Users can view messages for their trades" ON trade_messages;
 CREATE POLICY "Users can view messages for their trades"
   ON trade_messages FOR SELECT
   TO authenticated
@@ -248,6 +268,7 @@ CREATE POLICY "Users can view messages for their trades"
     )
   );
 
+DROP POLICY IF EXISTS "Users can create messages for their trades" ON trade_messages;
 CREATE POLICY "Users can create messages for their trades"
   ON trade_messages FOR INSERT
   TO authenticated
@@ -285,6 +306,7 @@ CREATE POLICY "Users can update received trade messages"
     )
   );
 
+DROP POLICY IF EXISTS "Users can delete own trade messages" ON trade_messages;
 CREATE POLICY "Users can delete own trade messages"
   ON trade_messages FOR DELETE
   TO authenticated
@@ -335,6 +357,87 @@ AS $$
       AND is_blocked = false
   );
 $$;
+
+CREATE POLICY "Anyone can view app media"
+  ON storage.objects FOR SELECT
+  TO public
+  USING (bucket_id = 'app-media');
+
+CREATE POLICY "Admins can upload app media"
+  ON storage.objects FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'app-media' AND public.current_user_is_admin());
+
+CREATE POLICY "Admins can update app media"
+  ON storage.objects FOR UPDATE
+  TO authenticated
+  USING (bucket_id = 'app-media' AND public.current_user_is_admin())
+  WITH CHECK (bucket_id = 'app-media' AND public.current_user_is_admin());
+
+CREATE POLICY "Admins can delete app media"
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'app-media' AND public.current_user_is_admin());
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key text PRIMARY KEY,
+  value jsonb NOT NULL DEFAULT '{}'::jsonb,
+  updated_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can view app settings" ON app_settings;
+CREATE POLICY "Anyone can view app settings"
+  ON app_settings FOR SELECT
+  TO public
+  USING (true);
+
+DROP POLICY IF EXISTS "Admins can insert app settings" ON app_settings;
+CREATE POLICY "Admins can insert app settings"
+  ON app_settings FOR INSERT
+  TO authenticated
+  WITH CHECK (public.current_user_is_admin());
+
+DROP POLICY IF EXISTS "Admins can update app settings" ON app_settings;
+CREATE POLICY "Admins can update app settings"
+  ON app_settings FOR UPDATE
+  TO authenticated
+  USING (public.current_user_is_admin())
+  WITH CHECK (public.current_user_is_admin());
+
+CREATE TABLE IF NOT EXISTS admin_inbox_reads (
+  admin_user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  item_key text NOT NULL,
+  read_key text NOT NULL,
+  read_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (admin_user_id, item_key)
+);
+
+ALTER TABLE admin_inbox_reads ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Admins can view own inbox reads" ON admin_inbox_reads;
+CREATE POLICY "Admins can view own inbox reads"
+  ON admin_inbox_reads FOR SELECT
+  TO authenticated
+  USING (admin_user_id = auth.uid() AND public.current_user_is_admin());
+
+DROP POLICY IF EXISTS "Admins can upsert own inbox reads" ON admin_inbox_reads;
+CREATE POLICY "Admins can upsert own inbox reads"
+  ON admin_inbox_reads FOR INSERT
+  TO authenticated
+  WITH CHECK (admin_user_id = auth.uid() AND public.current_user_is_admin());
+
+DROP POLICY IF EXISTS "Admins can update own inbox reads" ON admin_inbox_reads;
+CREATE POLICY "Admins can update own inbox reads"
+  ON admin_inbox_reads FOR UPDATE
+  TO authenticated
+  USING (admin_user_id = auth.uid() AND public.current_user_is_admin())
+  WITH CHECK (admin_user_id = auth.uid() AND public.current_user_is_admin());
+
+CREATE INDEX IF NOT EXISTS idx_admin_inbox_reads_admin_user_id
+  ON admin_inbox_reads(admin_user_id);
 
 CREATE TABLE IF NOT EXISTS push_tokens (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -558,6 +661,60 @@ CREATE TRIGGER trade_offer_created_push
   AFTER INSERT ON trade_offers
   FOR EACH ROW
   EXECUTE FUNCTION public.notify_trade_offer_created();
+
+CREATE OR REPLACE FUNCTION public.notify_trade_status_changed()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  recipient_id uuid;
+  notification_title text;
+  notification_body text;
+BEGIN
+  IF OLD.status IS NOT DISTINCT FROM NEW.status THEN
+    RETURN NEW;
+  END IF;
+
+  recipient_id := CASE
+    WHEN auth.uid() IS NOT NULL AND auth.uid() = NEW.from_user_id THEN NEW.to_user_id
+    WHEN auth.uid() IS NOT NULL AND auth.uid() = NEW.to_user_id THEN NEW.from_user_id
+    ELSE NEW.from_user_id
+  END;
+
+  notification_title := CASE NEW.status
+    WHEN 'accepted' THEN 'Troca aceite'
+    WHEN 'rejected' THEN 'Troca recusada'
+    WHEN 'completed' THEN 'Troca concluida'
+    ELSE 'Estado da troca atualizado'
+  END;
+
+  notification_body := CASE NEW.status
+    WHEN 'accepted' THEN 'A tua proposta de troca foi aceite.'
+    WHEN 'rejected' THEN 'A tua proposta de troca foi recusada.'
+    WHEN 'completed' THEN 'Uma troca foi marcada como concluida.'
+    ELSE 'Uma troca foi atualizada.'
+  END;
+
+  IF recipient_id IS NOT NULL THEN
+    PERFORM public.queue_push_notification(
+      recipient_id,
+      notification_title,
+      notification_body,
+      jsonb_build_object('type', 'trade_status', 'trade_id', NEW.id, 'status', NEW.status)
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trade_status_changed_push ON trade_offers;
+CREATE TRIGGER trade_status_changed_push
+  AFTER UPDATE OF status ON trade_offers
+  FOR EACH ROW
+  EXECUTE FUNCTION public.notify_trade_status_changed();
 
 CREATE OR REPLACE FUNCTION public.notify_trade_message_created()
 RETURNS trigger
@@ -967,11 +1124,79 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.admin_swap_sticker_images(
+  p_source_sticker_id uuid,
+  p_target_sticker_id uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_source stickers%ROWTYPE;
+  v_target stickers%ROWTYPE;
+BEGIN
+  IF NOT public.current_user_is_admin() THEN
+    RAISE EXCEPTION 'Admin access required';
+  END IF;
+
+  IF p_source_sticker_id IS NULL OR p_target_sticker_id IS NULL THEN
+    RAISE EXCEPTION 'Sticker ids are required';
+  END IF;
+
+  IF p_source_sticker_id = p_target_sticker_id THEN
+    RETURN;
+  END IF;
+
+  SELECT * INTO v_source
+  FROM stickers
+  WHERE id = p_source_sticker_id
+  FOR UPDATE;
+
+  SELECT * INTO v_target
+  FROM stickers
+  WHERE id = p_target_sticker_id
+  FOR UPDATE;
+
+  IF v_source.id IS NULL OR v_target.id IS NULL THEN
+    RAISE EXCEPTION 'Sticker not found';
+  END IF;
+
+  IF v_source.collection_id <> v_target.collection_id THEN
+    RAISE EXCEPTION 'Stickers must belong to the same collection';
+  END IF;
+
+  UPDATE stickers
+  SET image_url = COALESCE(v_target.image_url, '')
+  WHERE id = v_source.id;
+
+  UPDATE stickers
+  SET image_url = COALESCE(v_source.image_url, '')
+  WHERE id = v_target.id;
+
+  PERFORM public.write_audit_log(
+    'admin_sticker_images_swapped',
+    'collection',
+    v_source.collection_id,
+    NULL,
+    jsonb_build_object(
+      'source_sticker_id', v_source.id,
+      'source_number', v_source.number,
+      'target_sticker_id', v_target.id,
+      'target_number', v_target.number
+    ),
+    NULL
+  );
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.admin_update_user_profile(
   p_user_id uuid,
   p_username text,
   p_phone text,
   p_city text,
+  p_status text,
   p_is_admin boolean,
   p_is_blocked boolean
 )
@@ -982,6 +1207,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_previous user_profiles%ROWTYPE;
+  v_next_status text;
 BEGIN
   IF NOT public.current_user_is_admin() THEN
     RAISE EXCEPTION 'Admin access required';
@@ -996,11 +1222,14 @@ BEGIN
     p_is_blocked := false;
   END IF;
 
+  v_next_status := COALESCE(NULLIF(trim(p_status), ''), 'member');
+
   UPDATE user_profiles
   SET
     username = NULLIF(trim(p_username), ''),
     phone = NULLIF(trim(COALESCE(p_phone, '')), ''),
     city = NULLIF(trim(COALESCE(p_city, '')), ''),
+    status = v_next_status,
     is_admin = COALESCE(p_is_admin, false),
     is_blocked = COALESCE(p_is_blocked, false)
   WHERE id = p_user_id;
@@ -1015,6 +1244,7 @@ BEGIN
         'username', v_previous.username,
         'phone', v_previous.phone,
         'city', v_previous.city,
+        'status', v_previous.status,
         'is_admin', v_previous.is_admin,
         'is_blocked', v_previous.is_blocked
       ),
@@ -1022,6 +1252,7 @@ BEGIN
         'username', NULLIF(trim(p_username), ''),
         'phone', NULLIF(trim(COALESCE(p_phone, '')), ''),
         'city', NULLIF(trim(COALESCE(p_city, '')), ''),
+        'status', v_next_status,
         'is_admin', COALESCE(p_is_admin, false),
         'is_blocked', COALESCE(p_is_blocked, false)
       )
@@ -1079,7 +1310,8 @@ REVOKE ALL ON FUNCTION public.admin_set_audit_log_retention_days(int) FROM publi
 REVOKE ALL ON FUNCTION public.admin_list_audit_logs(int) FROM public;
 REVOKE ALL ON FUNCTION public.admin_delete_audit_logs_before(timestamptz) FROM public;
 REVOKE ALL ON FUNCTION public.update_sticker_image(uuid, text) FROM public;
-REVOKE ALL ON FUNCTION public.admin_update_user_profile(uuid, text, text, text, boolean, boolean) FROM public;
+REVOKE ALL ON FUNCTION public.admin_swap_sticker_images(uuid, uuid) FROM public;
+REVOKE ALL ON FUNCTION public.admin_update_user_profile(uuid, text, text, text, text, boolean, boolean) FROM public;
 REVOKE ALL ON FUNCTION public.admin_delete_user(uuid) FROM public;
 
 GRANT EXECUTE ON FUNCTION public.current_user_is_admin() TO authenticated;
@@ -1089,7 +1321,8 @@ GRANT EXECUTE ON FUNCTION public.admin_set_audit_log_retention_days(int) TO auth
 GRANT EXECUTE ON FUNCTION public.admin_list_audit_logs(int) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_delete_audit_logs_before(timestamptz) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.update_sticker_image(uuid, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.admin_update_user_profile(uuid, text, text, text, boolean, boolean) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_swap_sticker_images(uuid, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_update_user_profile(uuid, text, text, text, text, boolean, boolean) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_delete_user(uuid) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.delete_own_account()
@@ -1806,7 +2039,7 @@ WITH player_names(team_order, local_number, player_name) AS (
     (18, 19, 'Gervane Kastaneer'),
     (18, 20, 'Sontje Hansen'),
 
-    -- Cote d'Ivoire
+    -- Cote dIvoire
     (19, 2, 'Yahia Fofana'),
     (19, 3, 'Ghislain Konan'),
     (19, 4, 'Wilfried Singo'),
@@ -1910,6 +2143,56 @@ SET name = split_part(stickers.name, ' - ', 1) || ' - ' || player_names.player_n
 FROM player_names
 WHERE stickers.collection_id = 'b2026000-0000-4000-8000-000000000001'
   AND stickers.number = ((player_names.team_order - 1) * 20 + player_names.local_number);
+
+-- Limit World 2026 album specials to FWC 1-19 and CC 1-12.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM stickers
+    WHERE collection_id = 'b2026000-0000-4000-8000-000000000001'
+      AND number = 961
+      AND name = 'FWC - WE ARE PANINI'
+  ) THEN
+    DELETE FROM stickers
+    WHERE collection_id = 'b2026000-0000-4000-8000-000000000001'
+      AND number = 961
+      AND name = 'FWC - WE ARE PANINI';
+
+    UPDATE stickers
+    SET number = number - 1
+    WHERE collection_id = 'b2026000-0000-4000-8000-000000000001'
+      AND number BETWEEN 962 AND 980
+      AND name LIKE 'FWC - %';
+  END IF;
+
+  DELETE FROM stickers
+  WHERE collection_id = 'b2026000-0000-4000-8000-000000000001'
+    AND name LIKE 'Extras - %';
+
+  DELETE FROM stickers
+  WHERE collection_id = 'b2026000-0000-4000-8000-000000000001'
+    AND number BETWEEN 1013 AND 1014
+    AND name LIKE 'CC - %';
+
+  IF EXISTS (
+    SELECT 1
+    FROM stickers
+    WHERE collection_id = 'b2026000-0000-4000-8000-000000000001'
+      AND number BETWEEN 1001 AND 1012
+      AND name LIKE 'CC - %'
+  ) THEN
+    UPDATE stickers
+    SET number = number - 21
+    WHERE collection_id = 'b2026000-0000-4000-8000-000000000001'
+      AND number BETWEEN 1001 AND 1012
+      AND name LIKE 'CC - %';
+  END IF;
+
+  UPDATE collections
+  SET total_stickers = 991
+  WHERE id = 'b2026000-0000-4000-8000-000000000001';
+END $$;
 
 -- Update remaining World 2026 album player names transcribed from photographed album pages.
 

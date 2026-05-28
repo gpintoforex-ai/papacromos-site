@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BookOpen, Repeat2, ShieldCheck, UserRound, Users } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import LegalFooter from "../components/LegalFooter";
@@ -36,6 +36,68 @@ const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/
 
 const isSecurePassword = (password: string) => passwordPattern.test(password);
 
+interface LoginSlide {
+  id: string;
+  mediaType: "image" | "video" | "instagram";
+  src: string;
+  title: string[];
+  highlight: string;
+  stats: Array<{ icon: ReactNode; label: string }>;
+}
+
+function getInstagramEmbedUrl(url: string) {
+  try {
+    const parsedUrl = new URL(url);
+    if (!parsedUrl.hostname.includes("instagram.com")) return url;
+
+    const cleanPath = parsedUrl.pathname.replace(/\/$/, "");
+    if (cleanPath.endsWith("/embed")) return parsedUrl.toString();
+
+    return `${parsedUrl.origin}${cleanPath}/embed`;
+  } catch {
+    return url;
+  }
+}
+
+const baseLoginSlides: LoginSlide[] = [
+  {
+    id: "colecionadores",
+    mediaType: "image",
+    src: "/login-hero-phone-screen.png",
+    title: ["O app para", "todos os", "colecionadores!"],
+    highlight: "colecionadores!",
+    stats: [
+      { icon: <BookOpen size={16} />, label: "Colecoes" },
+      { icon: <Repeat2 size={16} />, label: "Trocas" },
+      { icon: <Users size={16} />, label: "Amigos" },
+    ],
+  },
+  {
+    id: "trocas",
+    mediaType: "image",
+    src: "/login-hero-phone-screen.png",
+    title: ["Encontra", "matches para", "trocar cromos"],
+    highlight: "trocar cromos",
+    stats: [
+      { icon: <Repeat2 size={16} />, label: "Matches" },
+      { icon: <Users size={16} />, label: "Colecionadores" },
+      { icon: <BookOpen size={16} />, label: "Repetidos" },
+    ],
+  },
+  {
+    id: "cadernetas",
+    mediaType: "image",
+    src: "/login-hero-phone-screen.png",
+    title: ["Todas as", "cadernetas", "num so sitio"],
+    highlight: "num so sitio",
+    stats: [
+      { icon: <BookOpen size={16} />, label: "Cadernetas" },
+      { icon: <ShieldCheck size={16} />, label: "Seguro" },
+      { icon: <Repeat2 size={16} />, label: "Historico" },
+    ],
+  },
+];
+
 export default function LoginPage() {
   const { signIn, signInWithProvider, signUp } = useAuth();
   const [firstName, setFirstName] = useState("");
@@ -55,6 +117,53 @@ export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [loginHeroVideoUrl, setLoginHeroVideoUrl] = useState("");
+  const [activeLoginSlide, setActiveLoginSlide] = useState(0);
+  const loginVideoRef = useRef<HTMLVideoElement | null>(null);
+  const loginSlides = loginHeroVideoUrl
+    ? baseLoginSlides.map((slide, index) => (
+      index === 0 ? { ...slide, mediaType: "video" as const, src: loginHeroVideoUrl } : slide
+    ))
+    : baseLoginSlides;
+  const activeSlide = loginSlides[activeLoginSlide] || loginSlides[0];
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadLoginHeroVideo = async () => {
+      const { data, error: settingsError } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "login_hero_video")
+        .maybeSingle();
+
+      if (ignore || settingsError) return;
+
+      const value = data?.value as { url?: string } | null;
+      setLoginHeroVideoUrl(typeof value?.url === "string" ? value.url : "");
+    };
+
+    loadLoginHeroVideo();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const activeLoginVideo = loginVideoRef.current;
+    if (activeSlide.mediaType === "video" && activeLoginVideo) {
+      activeLoginVideo.currentTime = 0;
+      activeLoginVideo.play().catch(() => undefined);
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setActiveLoginSlide((index) => (index + 1) % loginSlides.length);
+    }, 6500);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeSlide.mediaType, loginSlides.length]);
 
   const handleAuth = async () => {
     try {
@@ -197,31 +306,80 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-shell">
-        <section className="login-visual" aria-label="Papa Cromos">
+        <section className="login-visual login-visual-slider" aria-label="Papa Cromos">
           <button className="login-scroll-hint" type="button" onClick={scrollToLoginForm} aria-label="Ir para entrar ou registar">
             <UserRound size={20} />
           </button>
-          <img className="login-visual-image" src="/login-hero-phone-screen.png" alt="" aria-hidden="true" />
-          <div className="login-visual-overlay">
-            <img className="login-logo" src="/logo-transparent.png" alt="Papa Cromos" />
-            <div className="login-visual-tagline">
-              <span>O app para</span>
-              <span>todos os</span>
-              <strong>colecionadores!</strong>
-            </div>
-            <div className="login-visual-stats">
-              <span><BookOpen size={16} /> Colecoes</span>
-              <span><Repeat2 size={16} /> Trocas</span>
-              <span><Users size={16} /> Amigos</span>
-            </div>
+          <div className="login-slide-media" aria-hidden="true">
+            {loginSlides.map((slide, index) => (
+              slide.mediaType === "instagram" ? (
+                <iframe
+                  className={`login-visual-image login-slide login-instagram-slide ${index === activeLoginSlide ? "active" : ""}`}
+                  key={slide.id}
+                  src={getInstagramEmbedUrl(slide.src)}
+                  title=""
+                  tabIndex={-1}
+                  loading={index === 0 ? "eager" : "lazy"}
+                  allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                />
+              ) : slide.mediaType === "video" ? (
+                <video
+                  className={`login-visual-image login-slide ${index === activeLoginSlide ? "active" : ""}`}
+                  key={slide.id}
+                  src={slide.src}
+                  ref={index === 0 ? loginVideoRef : undefined}
+                  autoPlay
+                  muted
+                  playsInline
+                  onEnded={() => setActiveLoginSlide((currentIndex) => (currentIndex + 1) % loginSlides.length)}
+                />
+              ) : (
+                <img
+                  className={`login-visual-image login-slide ${index === activeLoginSlide ? "active" : ""}`}
+                  key={slide.id}
+                  src={slide.src}
+                  alt=""
+                />
+              )
+            ))}
           </div>
+          {activeSlide.mediaType !== "video" && (
+            <div className="login-visual-overlay">
+              <img className="login-logo" src="/logo-transparent.png" alt="Papa Cromos" />
+              <div className="login-visual-tagline" key={activeSlide.id}>
+                {activeSlide.title.map((line) => (
+                  line === activeSlide.highlight ? <strong key={line}>{line}</strong> : <span key={line}>{line}</span>
+                ))}
+              </div>
+              <div className="login-visual-bottom">
+                <div className="login-visual-stats">
+                  {activeSlide.stats.map((stat) => (
+                    <span key={stat.label}>{stat.icon} {stat.label}</span>
+                  ))}
+                </div>
+                <div className="login-slide-dots" aria-label="Slides da pagina principal">
+                  {loginSlides.map((slide, index) => (
+                    <button
+                      className={index === activeLoginSlide ? "active" : ""}
+                      key={slide.id}
+                      type="button"
+                      onClick={() => setActiveLoginSlide(index)}
+                      aria-label={`Mostrar slide ${index + 1}`}
+                      aria-pressed={index === activeLoginSlide}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </section>
       <div className="login-card">
         <div className="login-hero">
           <div>
             <span className="login-kicker">{isSignUp ? "Nova conta" : "Acesso seguro"}</span>
             <h1>{isSignUp ? "Criar conta" : "Entrar"}</h1>
-            <p>{isSignUp ? "Preenche os dados para comecar a gerir a tua caderneta." : "Continua para a tua colecao e propostas de troca."}</p>
+            {isSignUp && <p>Preenche os dados para comecar a gerir a tua caderneta.</p>}
           </div>
           <ShieldCheck size={24} />
         </div>

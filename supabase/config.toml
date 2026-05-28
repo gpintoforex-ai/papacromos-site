@@ -1,6 +1,6 @@
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "uhiksjztvlqaxafsjiae"
+project_id = "hwqexlticbsokpqpqdvk"
 
 [api]
 enabled = true
@@ -94,11 +94,6 @@ enable_signup = true
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
 enable_confirmations = false
-# Controls the minimum password length to be considered valid.
-min_password_length = 6
-# Controls the maximum password length to be considered valid.
-max_password_length = 72
-
 # Use pre-defined map of phone number to OTP for testing.
 [auth.sms.test_otp]
 # 4152127777 = "123456"
@@ -124,23 +119,6 @@ redirect_uri = ""
 # Overrides the default auth provider URL. Used to support self-hosted gitlab, single-tenant Azure,
 # or any other third-party Oauth providers that are not natively supported.
 url = ""
-
-[edge_functions]
-enabled = true
-# Configure one of the supported Vercel-compatible runtimes: "nodejs", "python", "bun".
-runtime = "nodejs"
-# Configure one of the supported Vercel-compatible architectures: "x86_64", "aarch64".
-arch = "x86_64"
-# Configure one of the supported Vercel-compatible operating systems: "linux".
-os = "linux"
-# Configure one of the supported Vercel-compatible Node.js versions: "18", "20".
-node_version = "18"
-# Configure one of the supported Vercel-compatible Python versions: "3.11".
-python_version = "3.11"
-# Configure one of the supported Vercel-compatible Bun versions: "1".
-bun_version = "1"
-# Configure one of the supported import map versions.
-import_map_version = "3"
 
 [analytics]
 enabled = false

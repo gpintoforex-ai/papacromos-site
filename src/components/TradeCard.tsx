@@ -21,6 +21,7 @@ interface TradeCardProps {
   fromUser: string;
   fromUsername?: string;
   fromAvatarSeed?: string;
+  fromStatus?: string;
   status: string;
   isIncoming: boolean;
   currentUserId?: string;
@@ -71,6 +72,7 @@ export default function TradeCard({
   fromUser,
   fromUsername,
   fromAvatarSeed,
+  fromStatus,
   status,
   isIncoming,
   currentUserId,
@@ -156,6 +158,7 @@ export default function TradeCard({
   const displayName = fromUsername || fromUser.slice(0, 8) + "...";
   const avatarSeed = fromAvatarSeed || fromUser;
   const methodLabel = deliveryMethodLabels[deliveryMethod] || deliveryMethodLabels.presencial;
+  const userStatusLabel = fromStatus === "king_cromo" ? "King Cromo" : undefined;
   const tradeIds = ids?.length ? ids : [id];
   const tradeItems = proposalItems?.length
     ? proposalItems
@@ -293,9 +296,12 @@ export default function TradeCard({
           <div className="trade-avatar" style={{ background: getAvatarColor(avatarSeed) }}>
             {getAvatarInitial(displayName)}
           </div>
-          <span className="trade-from">
-            {isIncoming ? `De: ${displayName}` : `Para: ${displayName}`}
-          </span>
+          <div>
+            <span className="trade-from">
+              {isIncoming ? `De: ${displayName}` : `Para: ${displayName}`}
+            </span>
+            {userStatusLabel && <span className="trade-user-status">{userStatusLabel}</span>}
+          </div>
         </div>
         {hasOtherUserMessages && onToggleReadStatus && (
           <button

@@ -49,6 +49,7 @@ interface SharedProfile {
   avatar_seed?: string;
   city?: string | null;
   phone?: string | null;
+  status?: string;
 }
 
 interface FriendRow {
@@ -95,6 +96,9 @@ function getSharedStickerDetailName(stickerName: string) {
 
 function getSharedStickerLocalNumber(sticker: StickerInfo) {
   if (sticker.collection_id !== WORLD_ALBUM_COLLECTION_ID) return sticker.number;
+  const teamName = getSharedStickerTeamName(sticker.name);
+  if (teamName === "FWC") return sticker.number - 960;
+  if (teamName === "CC") return sticker.number - 979;
   if (sticker.name.includes("Escudo")) return 1;
   if (sticker.name.includes("Foto de equipa")) return 13;
   return ((sticker.number - 1) % 20) + 1;
@@ -539,7 +543,7 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
     try {
       const { data: profileData, error: profileError } = await supabase
         .from("user_profiles")
-        .select("id, username, avatar_seed, city")
+        .select("id, username, avatar_seed, city, status")
         .eq("id", sharedUserId)
         .maybeSingle();
       if (profileError) throw profileError;
@@ -582,7 +586,7 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
       if (friendIds.length > 0) {
         const { data: profiles, error: profilesError } = await supabase
           .from("user_profiles")
-          .select("id, username, avatar_seed, city, phone")
+          .select("id, username, avatar_seed, city, phone, status")
           .in("id", friendIds);
         if (profilesError) throw profilesError;
         profilesById = new Map(((profiles || []) as SharedProfile[]).map((row) => [row.id, row]));
@@ -616,7 +620,7 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
     try {
       const { data: profiles, error: profilesError } = await supabase
         .from("user_profiles")
-        .select("id, username, avatar_seed, city, phone")
+        .select("id, username, avatar_seed, city, phone, status")
         .not("phone", "is", null);
       if (profilesError) throw profilesError;
 
@@ -954,6 +958,9 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
                 <div className="share-friend-card" key={friend.friend_id}>
                   <div className="share-friend-info">
                     <strong>{friend.profile?.username || "Utilizador"}</strong>
+                    {friend.profile?.status === "king_cromo" && (
+                      <span className="share-friend-status">King Cromo</span>
+                    )}
                     <span>{friend.profile?.city || "Cidade por definir"}</span>
                     <em>{friend.profile?.phone || "Sem telefone"}</em>
                   </div>
@@ -1129,7 +1136,12 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
               <RefreshCw size={14} /> Atualizar
             </button>
           </div>
-          <p>{friendProfile?.username ? `Caderneta do ${friendProfile.username}` : "Caderneta de outro colecionador"}</p>
+          <p>
+            {friendProfile?.username ? `Caderneta do ${friendProfile.username}` : "Caderneta de outro colecionador"}
+            {friendProfile?.status === "king_cromo" && (
+              <span className="share-friend-status">King Cromo</span>
+            )}
+          </p>
         </div>
         <div className="share-header-actions share-shared-header-actions">
           <button className="btn btn-secondary btn-sm share-export-stickers-btn" type="button" onClick={exportFriendStickers}>

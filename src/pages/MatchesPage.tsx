@@ -5,6 +5,7 @@ import { getAvatarColor, getAvatarInitial } from "../lib/avatar";
 import { ArrowRightLeft, ChevronDown, MapPin, MessageCircle, Minus, Plus, RefreshCw } from "lucide-react";
 import { countUniqueRequestedStickers, findUserMatches, type Match } from "../lib/matches";
 import type { DeliveryMethod } from "../lib/trades";
+import { flushPushNotificationsInBackground } from "../lib/pushDelivery";
 
 interface MatchesPageProps {
   onMatchesChange?: (count: number) => void;
@@ -326,6 +327,7 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
         throw new Error(error.message || "Erro ao criar proposta de troca.");
       }
 
+      flushPushNotificationsInBackground();
       setSentTradeKeys((prev) => new Set(prev).add(tradeKey));
       const successMessage = `${payloads.length} proposta${payloads.length === 1 ? "" : "s"} enviada${payloads.length === 1 ? "" : "s"} para ${group.otherUsername}.`;
       setSuccess(successMessage);

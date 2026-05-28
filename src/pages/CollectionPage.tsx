@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { getAvatarColor, getAvatarInitial } from "../lib/avatar";
 import StickerCard from "../components/StickerCard";
-import { Search, Camera, ArrowLeft, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, ChevronDown, CircleCheck, CircleHelp, CopyPlus, Album, Images, Trophy, Trash2, X, ExternalLink, Newspaper, CalendarDays, Star, CupSoda } from "lucide-react";
+import { Search, Camera, ArrowLeft, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, ChevronDown, CircleCheck, CircleHelp, CopyPlus, Album, Images, Trophy, Trash2, X, ExternalLink, Newspaper, CalendarDays, CupSoda } from "lucide-react";
 
 interface Collection {
   id: string;
@@ -42,6 +42,11 @@ interface NeededStickerHolder {
   avatarSeed: string;
   count: number;
   sampleStickers: Sticker[];
+}
+
+interface StickerDisplayItem {
+  sticker: Sticker;
+  key: string;
 }
 
 type FilterMode = "all" | "have" | "repeated" | "want" | "missing";
@@ -148,16 +153,12 @@ function isWorldAlbumFwcSticker(sticker: Sticker) {
   return sticker.collection_id === WORLD_ALBUM_COLLECTION_ID && getStickerTeamName(sticker.name) === "FWC";
 }
 
-function isWorldAlbumExtraSticker(sticker: Sticker) {
-  return sticker.collection_id === WORLD_ALBUM_COLLECTION_ID && getStickerTeamName(sticker.name) === "Extras";
-}
-
 function isWorldAlbumCcSticker(sticker: Sticker) {
   return sticker.collection_id === WORLD_ALBUM_COLLECTION_ID && getStickerTeamName(sticker.name) === "CC";
 }
 
 function isWorldAlbumSpecialSticker(sticker: Sticker) {
-  return isWorldAlbumFwcSticker(sticker) || isWorldAlbumExtraSticker(sticker) || isWorldAlbumCcSticker(sticker);
+  return isWorldAlbumFwcSticker(sticker) || isWorldAlbumCcSticker(sticker);
 }
 
 function getAlbumSpecialPageIcon(teamName: string) {
@@ -165,13 +166,6 @@ function getAlbumSpecialPageIcon(teamName: string) {
     return {
       className: "fwc",
       icon: <Trophy size={19} aria-hidden="true" />,
-    };
-  }
-
-  if (teamName === "Extras") {
-    return {
-      className: "extras",
-      icon: <Star size={20} aria-hidden="true" />,
     };
   }
 
@@ -544,10 +538,6 @@ function getStickerDisplayName(sticker: Sticker) {
     const detail = sticker.name.includes(" - ") ? sticker.name.split(" - ").slice(1).join(" - ").trim() : sticker.name;
     return `FWC ${String(localNumber).padStart(2, "0")} - ${detail}`;
   }
-  if (isWorldAlbumExtraSticker(sticker)) {
-    const detail = sticker.name.includes(" - ") ? sticker.name.split(" - ").slice(1).join(" - ").trim() : sticker.name;
-    return `Extras ${String(localNumber).padStart(2, "0")} - ${detail}`;
-  }
   if (isWorldAlbumCcSticker(sticker)) {
     const detail = sticker.name.includes(" - ") ? sticker.name.split(" - ").slice(1).join(" - ").trim() : sticker.name;
     return `CC ${String(localNumber).padStart(2, "0")} - ${detail}`;
@@ -659,7 +649,7 @@ function getStickerFallbackImage(sticker: Sticker) {
   const teamNorm = normalizeAbbrev(teamName);
   const teamCode = stickerCodeByTeamNorm[teamNorm];
   const codeLabel = isWorldAlbumSpecialSticker(sticker)
-    ? `${teamName === "FWC" ? "FWC" : teamName === "CC" ? "CC" : "EXT"} ${String(localNumber).padStart(2, "0")}`
+    ? `${teamName === "FWC" ? "FWC" : "CC"} ${String(localNumber).padStart(2, "0")}`
     : teamCode ? `${teamCode} ${localNumber}` : `#${String(sticker.number).padStart(3, "0")}`;
   const knownName = getKnownWorldPlayerName(sticker);
   const detail = knownName || (sticker.name.includes(" - ") ? sticker.name.split(" - ").slice(1).join(" - ").trim() : sticker.name);
@@ -934,7 +924,6 @@ function getStickerTeamName(stickerName: string) {
 
 function getAlbumTeamOrder(sticker: Sticker) {
   if (isWorldAlbumFwcSticker(sticker)) return 0;
-  if (isWorldAlbumExtraSticker(sticker)) return 0;
   if (isWorldAlbumCcSticker(sticker)) return 0;
   return Math.floor((sticker.number - 1) / 20) + 1;
 }
@@ -948,9 +937,8 @@ function getStickerEffectiveTeamName(sticker: Sticker) {
 }
 
 function getAlbumLocalNumber(sticker: Sticker) {
-  if (isWorldAlbumFwcSticker(sticker)) return sticker.number - 961;
-  if (isWorldAlbumExtraSticker(sticker)) return sticker.number - 980;
-  if (isWorldAlbumCcSticker(sticker)) return sticker.number - 1000;
+  if (isWorldAlbumFwcSticker(sticker)) return sticker.number - 960;
+  if (isWorldAlbumCcSticker(sticker)) return sticker.number - 979;
   const slot = ((sticker.number - 1) % 20) + 1;
   if (sticker.name.includes("Escudo")) return 1;
   if (sticker.name.includes("Foto de equipa")) return 13;
@@ -1044,7 +1032,6 @@ function getStickerShortCode(sticker: Sticker) {
   const localNumber = String(getAlbumLocalNumber(sticker)).padStart(2, "0");
 
   if (teamName === "FWC") return `FWC ${localNumber}`;
-  if (teamName === "Extras") return `EXT ${localNumber}`;
   if (teamName === "CC") return `CC ${localNumber}`;
 
   return `${getTeamAbbrev(teamName)} ${localNumber}`;
@@ -1080,8 +1067,7 @@ function isSimilarAbbrev(abbrev: string, teamNameNorm: string) {
 function getAlbumTeamDisplayOrder(teamName: string, teamStickers: Sticker[]) {
   const normalizedTeamName = normalizeAbbrev(teamName);
   if (normalizedTeamName === "FWC") return 0;
-  if (normalizedTeamName === "EXTRAS") return 1;
-  if (normalizedTeamName === "CC") return 2;
+  if (normalizedTeamName === "CC") return 1;
   if (normalizedTeamName === "PARAGUAI") return 14;
   if (normalizedTeamName === "AUSTRALIA") return 15;
 
@@ -1100,8 +1086,8 @@ function buildAlbumTeamPages(stickers: Sticker[]): AlbumTeamPage[] {
       getAlbumTeamDisplayOrder(teamNameA, teamStickersA) - getAlbumTeamDisplayOrder(teamNameB, teamStickersB)
   ).map(([teamName, teamStickers], index) => ({
     teamName,
-    groupName: groupByTeam[teamName] || (teamName === "FWC" || teamName === "Extras" || teamName === "CC" ? "Especiais" : `Grupo ${String.fromCharCode(65 + Math.floor(index / 4))}`),
-    flag: teamFlags[teamName] || (teamName === "FWC" ? "FWC" : teamName === "Extras" ? "★" : teamName === "CC" ? "CC" : "🏳️"),
+    groupName: groupByTeam[teamName] || (teamName === "FWC" || teamName === "CC" ? "Especiais" : `Grupo ${String.fromCharCode(65 + Math.floor(index / 4))}`),
+    flag: teamFlags[teamName] || (teamName === "FWC" ? "FWC" : teamName === "CC" ? "CC" : "🏳️"),
     flagCode: flagCodeByTeam[teamName] || "",
     flagUrl: flagCodeByTeam[teamName] ? `https://flagcdn.com/w160/${flagCodeByTeam[teamName]}.png` : "",
     stickers: teamStickers.sort((a, b) => getAlbumLocalNumber(a) - getAlbumLocalNumber(b)),
@@ -1756,21 +1742,14 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
 
   const getStickerBySpokenNumber = (number: number) => {
     const collectionStickers = stickers.filter((sticker) => sticker.collection_id === selectedCollectionId);
-    if (isWorldAlbum && selectedAlbumTeamName === "FWC" && number >= 0 && number <= 19) {
+    if (isWorldAlbum && selectedAlbumTeamName === "FWC" && number >= 1 && number <= 19) {
       const fwcSticker = collectionStickers.find(
         (sticker) => getStickerEffectiveTeamName(sticker) === "FWC" && getAlbumLocalNumber(sticker) === number
       );
       if (fwcSticker) return fwcSticker;
     }
 
-    if (isWorldAlbum && selectedAlbumTeamName === "Extras" && number >= 1 && number <= 20) {
-      const extraSticker = collectionStickers.find(
-        (sticker) => getStickerEffectiveTeamName(sticker) === "Extras" && getAlbumLocalNumber(sticker) === number
-      );
-      if (extraSticker) return extraSticker;
-    }
-
-    if (isWorldAlbum && selectedAlbumTeamName === "CC" && number >= 1 && number <= 14) {
+    if (isWorldAlbum && selectedAlbumTeamName === "CC" && number >= 1 && number <= 12) {
       const ccSticker = collectionStickers.find(
         (sticker) => getStickerEffectiveTeamName(sticker) === "CC" && getAlbumLocalNumber(sticker) === number
       );
@@ -2508,6 +2487,24 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     if (filter === "missing") return !getUserSticker(s.id);
     return true;
   });
+  const getStickerDisplayItems = (stickerList: Sticker[]): StickerDisplayItem[] => {
+    if (filter !== "repeated") {
+      return stickerList.map((sticker) => ({ sticker, key: sticker.id }));
+    }
+
+    return stickerList.flatMap((sticker) => {
+      const ownHave = userStickers.find(
+        (us) => us.user_id === user?.id && us.sticker_id === sticker.id && us.status === "have"
+      );
+      const repeatedQuantity = Math.max(0, (ownHave?.quantity || 0) - 1);
+
+      return Array.from({ length: repeatedQuantity }, (_, index) => ({
+        sticker,
+        key: `${sticker.id}-repeated-${index}`,
+      }));
+    });
+  };
+  const filteredStickerItems = getStickerDisplayItems(filteredStickers);
 
   const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId);
   const selectedCollectionActive = selectedCollectionId ? isCollectionActive(selectedCollectionId) : true;
@@ -2693,14 +2690,14 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
     }
   };
 
-  const renderSticker = (sticker: Sticker, compact = false) => {
+  const renderSticker = (sticker: Sticker, compact = false, renderKey = sticker.id) => {
     const us = getUserSticker(sticker.id);
     const photoInputId = `photo-${sticker.id}`;
     const showWorldPlayerName = isWorldAlbum && isWorldAlbumPlayerSticker(sticker);
 
     return (
       <StickerCard
-        key={sticker.id}
+        key={renderKey}
         number={isWorldAlbum ? getAlbumLocalNumber(sticker) : sticker.number}
         name={getStickerDisplayName(sticker)}
         imageUrl={getStickerImageSource(sticker)}
@@ -3245,7 +3242,14 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
             <span>Faltam</span>
             <strong>{Math.max(totalCount - haveCount, 0)}</strong>
           </button>
-          <button className={`collection-quick-stat ${filter === "repeated" ? "active" : ""}`} type="button" onClick={() => setFilter("repeated")}>
+          <button
+            className={`collection-quick-stat ${filter === "repeated" ? "active" : ""}`}
+            type="button"
+            onClick={() => {
+              setSelectedAlbumTeamName(null);
+              setFilter("repeated");
+            }}
+          >
             <span className="collection-quick-stat-icon repeated"><CopyPlus size={18} /></span>
             <span>Repetidos</span>
             <strong>{repeatedCount}</strong>
@@ -3387,7 +3391,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
 
       {error && <p className="error-text">{error}</p>}
 
-      {isWorldAlbum && !selectedAlbumTeamName ? (
+      {isWorldAlbum && !selectedAlbumTeamName && filter !== "repeated" ? (
         <div className="album-team-selector">
           {visibleAlbumTeamButtons.map((teamPage) => {
             const pageIndex = Math.max(0, albumTeamButtons.findIndex((albumTeam) => albumTeam.teamName === teamPage.teamName));
@@ -3423,7 +3427,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
             );
           })}
         </div>
-      ) : isWorldAlbum ? (
+      ) : isWorldAlbum && filter !== "repeated" ? (
         <div className="album-page-list">
           <div className="album-page-nav">
             <button
@@ -3459,13 +3463,14 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           </div>
           {albumTeamPages.map((teamPage) => {
             const pageIndex = Math.max(0, albumTeamButtons.findIndex((albumTeam) => albumTeam.teamName === teamPage.teamName));
-            const isSpecialPage = teamPage.teamName === "FWC" || teamPage.teamName === "Extras" || teamPage.teamName === "CC";
+            const isSpecialPage = teamPage.teamName === "FWC" || teamPage.teamName === "CC";
             const teamHaveCount = teamPage.stickers.filter((sticker) => getUserSticker(sticker.id)).length;
             const teamProgress = Math.round((teamHaveCount / Math.max(1, teamPage.stickers.length)) * 100);
             const teamPhoto = isSpecialPage ? null : teamPage.stickers.find((sticker) => getAlbumLocalNumber(sticker) === 13);
             const playerStickers = isSpecialPage
               ? teamPage.stickers
               : teamPage.stickers.filter((sticker) => !sticker.name.includes("Foto de equipa"));
+            const playerStickerItems = getStickerDisplayItems(playerStickers);
 
             return (
               <section
@@ -3505,7 +3510,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
                     </div>
                   </aside>
                   <div className="album-sticker-grid">
-                    {playerStickers.map((sticker) => renderSticker(sticker, true))}
+                    {playerStickerItems.map(({ sticker, key }) => renderSticker(sticker, true, key))}
                   </div>
                 </div>
               </section>
@@ -3514,11 +3519,11 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
         </div>
       ) : (
         <div className="sticker-grid">
-          {filteredStickers.map((sticker) => renderSticker(sticker))}
+          {filteredStickerItems.map(({ sticker, key }) => renderSticker(sticker, false, key))}
         </div>
       )}
 
-      {filteredStickers.length === 0 && (
+      {filteredStickerItems.length === 0 && (
         <div className="empty-state">
           <p>Nenhum cromo encontrado</p>
         </div>

@@ -16,12 +16,18 @@ import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type Dra
 import { countUniqueRequestedStickers, findUserMatches } from "./lib/matches";
 import { supabase } from "./lib/supabase";
 import { getPushPermissionState, setupPushNotifications } from "./lib/pushNotifications";
+import { flushPushNotificationsInBackground } from "./lib/pushDelivery";
 
 type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
 
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
   return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+}
+
+function isAllowedProtectedDragTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest("[data-allow-protected-drag='true']"));
 }
 
 function AppContent() {
@@ -38,6 +44,12 @@ function AppContent() {
   const [notificationPromptOpen, setNotificationPromptOpen] = useState(false);
   const [notificationPromptBusy, setNotificationPromptBusy] = useState(false);
   const [notificationPromptError, setNotificationPromptError] = useState<string | null>(null);
+  const [reviewPromptOpen, setReviewPromptOpen] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewSuggestion, setReviewSuggestion] = useState("");
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewSuccess, setReviewSuccess] = useState<string | null>(null);
   const pendingTradesAlertShown = useRef(false);
   const previousUserId = useRef<string | null>(null);
 
@@ -158,6 +170,39 @@ function AppContent() {
   useEffect(() => {
     if (!user?.id) return;
 
+    let reviewPromptTimeout: number | undefined;
+    const sessionKey = `papacromos:review-session-counted:${user.id}`;
+    if (sessionStorage.getItem(sessionKey) === "true") return;
+
+    sessionStorage.setItem(sessionKey, "true");
+
+    const entryCountKey = `papacromos:review-entry-count:${user.id}`;
+    const lastShownKey = `papacromos:review-last-shown-count:${user.id}`;
+    const nextEntryCount = Number(localStorage.getItem(entryCountKey) || "0") + 1;
+    localStorage.setItem(entryCountKey, String(nextEntryCount));
+
+    const lastShownCount = Number(localStorage.getItem(lastShownKey) || "0");
+    if (nextEntryCount > 0 && nextEntryCount % 3 === 0 && lastShownCount !== nextEntryCount) {
+      localStorage.setItem(lastShownKey, String(nextEntryCount));
+      reviewPromptTimeout = window.setTimeout(() => {
+        setReviewRating(0);
+        setReviewSuggestion("");
+        setReviewError(null);
+        setReviewSuccess(null);
+        setReviewPromptOpen(true);
+      }, 0);
+    }
+
+    return () => {
+      if (reviewPromptTimeout) window.clearTimeout(reviewPromptTimeout);
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    flushPushNotificationsInBackground();
+
     let cleanup: (() => Promise<void>) | undefined;
     let cancelled = false;
 
@@ -268,6 +313,65 @@ function AppContent() {
     setNotificationPromptError(null);
   };
 
+  const dismissReviewPrompt = () => {
+    if (reviewSaving) return;
+    setReviewPromptOpen(false);
+    setReviewError(null);
+    setReviewSuccess(null);
+  };
+
+  const submitReviewPrompt = async () => {
+    if (!user?.id) return;
+
+    const cleanSuggestion = reviewSuggestion.trim();
+    setReviewError(null);
+    setReviewSuccess(null);
+
+    if (reviewRating < 1 || reviewRating > 5) {
+      setReviewError("Escolhe uma avaliacao de 1 a 5.");
+      return;
+    }
+    if (!cleanSuggestion) {
+      setReviewError("Escreve uma sugestao para melhorar a app.");
+      return;
+    }
+    if (cleanSuggestion.length > 4000) {
+      setReviewError("A sugestao deve ter no maximo 4000 caracteres.");
+      return;
+    }
+
+    setReviewSaving(true);
+    try {
+      const { data: ticket, error: ticketError } = await supabase
+        .from("support_tickets")
+        .insert({
+          user_id: user.id,
+          subject: `Avaliacao da app - ${reviewRating}/5`,
+          status: "open",
+        })
+        .select("id")
+        .single();
+      if (ticketError) throw ticketError;
+
+      const { error: messageError } = await supabase.from("support_ticket_messages").insert({
+        ticket_id: ticket.id,
+        user_id: user.id,
+        message: `Avaliacao: ${reviewRating}/5\n\nSugestao:\n${cleanSuggestion}`,
+      });
+      if (messageError) throw messageError;
+
+      setReviewSuccess("Obrigado. A tua avaliacao foi enviada.");
+      window.setTimeout(() => {
+        setReviewPromptOpen(false);
+        setReviewSuccess(null);
+      }, 1200);
+    } catch (err: unknown) {
+      setReviewError(err instanceof Error ? err.message : "Nao foi possivel enviar a avaliacao.");
+    } finally {
+      setReviewSaving(false);
+    }
+  };
+
   const blockProtectedContextMenu = (event: MouseEvent) => {
     if (isEditableTarget(event.target)) return;
     event.preventDefault();
@@ -279,6 +383,7 @@ function AppContent() {
   };
 
   const blockProtectedDrag = (event: DragEvent) => {
+    if (isAllowedProtectedDragTarget(event.target)) return;
     if (event.target instanceof Node && event.currentTarget.contains(event.target)) {
       event.preventDefault();
     }
@@ -364,7 +469,56 @@ function AppContent() {
       </Layout>
       <InstallAppPrompt />
       <CookieConsent />
-      {notificationPromptOpen && (
+      {reviewPromptOpen && (
+        <div className="account-data-overlay" role="dialog" aria-modal="true" aria-labelledby="app-review-title">
+          <div className="account-data-modal app-review-modal">
+            <div className="account-data-header">
+              <div>
+                <h2 id="app-review-title">Avalia a app</h2>
+                <p>A tua opiniao ajuda-nos a melhorar a caderneta, os repetidos e as trocas.</p>
+              </div>
+              <button className="header-icon-btn" type="button" onClick={dismissReviewPrompt} title="Fechar" aria-label="Fechar avaliacao" disabled={reviewSaving}>
+                <span aria-hidden="true">Ã—</span>
+              </button>
+            </div>
+            <div className="app-review-body">
+              <div className="app-review-rating" role="radiogroup" aria-label="Avaliacao da app">
+                {[1, 2, 3, 4, 5].map((rating) => (
+                  <button
+                    key={rating}
+                    className={reviewRating >= rating ? "active" : ""}
+                    type="button"
+                    role="radio"
+                    aria-checked={reviewRating === rating}
+                    onClick={() => setReviewRating(rating)}
+                    disabled={reviewSaving}
+                  >
+                    {rating}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={reviewSuggestion}
+                placeholder="Que melhoria gostavas de ver na app?"
+                maxLength={4000}
+                onChange={(event) => setReviewSuggestion(event.target.value)}
+                disabled={reviewSaving}
+              />
+              {reviewError && <p className="profile-error">{reviewError}</p>}
+              {reviewSuccess && <p className="profile-success">{reviewSuccess}</p>}
+              <div className="app-review-actions">
+                <button className="btn btn-primary btn-sm" type="button" onClick={submitReviewPrompt} disabled={reviewSaving}>
+                  {reviewSaving ? "A enviar..." : "Enviar avaliacao"}
+                </button>
+                <button className="btn btn-ghost btn-sm" type="button" onClick={dismissReviewPrompt} disabled={reviewSaving}>
+                  Mais tarde
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {notificationPromptOpen && !reviewPromptOpen && (
         <div className="account-data-overlay" role="dialog" aria-modal="true" aria-labelledby="notification-permission-title">
           <div className="account-data-modal notification-permission-modal">
             <div className="account-data-header">
@@ -391,7 +545,7 @@ function AppContent() {
           </div>
         </div>
       )}
-      {pendingTradesAlertOpen && (
+      {pendingTradesAlertOpen && !reviewPromptOpen && (
         <div className="account-data-overlay" role="dialog" aria-modal="true" aria-labelledby="pending-trades-alert-title">
           <div className="account-data-modal pending-trades-alert-modal">
             <div className="account-data-header">

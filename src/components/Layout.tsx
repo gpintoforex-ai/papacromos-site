@@ -43,6 +43,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const displayName = profile?.username || user?.email?.split("@")[0] || "Utilizador";
   const displayEmail = profile?.email || user?.email || "-";
+  const displayStatus = profile?.status === "king_cromo" ? "King Cromo" : profile?.is_admin ? "Administrador" : "Utilizador";
   const accountCreatedAt = profile?.created_at || user?.created_at;
   const createdLabel = accountCreatedAt
     ? new Date(accountCreatedAt).toLocaleDateString("pt-PT")
@@ -198,7 +199,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                   <div className="profile-popover-header">
                     <div>
                       <strong>{displayName}</strong>
-                      <span>{profile?.is_admin ? "Administrador" : "Utilizador"}</span>
+                      <span>{displayStatus}</span>
                     </div>
                     <button
                       className="header-icon-btn profile-popover-close"
@@ -240,6 +241,10 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                     <div>
                       <dt>Perfil</dt>
                       <dd>{profile?.is_admin ? "Admin" : "Colecionador"}</dd>
+                    </div>
+                    <div>
+                      <dt>Estatuto</dt>
+                      <dd>{profile?.status === "king_cromo" ? "King Cromo" : "Membro"}</dd>
                     </div>
                     <div>
                       <dt>Registo</dt>

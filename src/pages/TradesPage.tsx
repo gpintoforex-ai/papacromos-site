@@ -4,6 +4,7 @@ import { useAuth } from "../lib/auth";
 import TradeCard from "../components/TradeCard";
 import { RefreshCw } from "lucide-react";
 import type { DeliveryMethod } from "../lib/trades";
+import { flushPushNotificationsInBackground } from "../lib/pushDelivery";
 
 interface TradesPageProps {
   onPendingTradeCountChange?: (count: number) => void;
@@ -25,8 +26,10 @@ interface TradeWithDetails {
   created_at: string;
   from_username?: string;
   from_avatar_seed?: string;
+  from_status?: string;
   to_username?: string;
   to_avatar_seed?: string;
+  to_status?: string;
   offered_sticker: { name: string; number: number; image_url: string; rarity: string };
   requested_sticker: { name: string; number: number; image_url: string; rarity: string };
   messages: TradeMessage[];
@@ -180,11 +183,11 @@ export default function TradesPage({ onPendingTradeCountChange, onMessagesChange
         ...messages.map((message) => message.user_id),
       ]));
 
-      const profilesById = new Map<string, { username?: string; avatar_seed?: string }>();
+      const profilesById = new Map<string, { username?: string; avatar_seed?: string; status?: string; city?: string }>();
       if (userIds.length) {
         const { data: profiles, error: profilesError } = await supabase
           .from("user_profiles")
-          .select("id, username, avatar_seed")
+          .select("id, username, avatar_seed, status, city")
           .in("id", userIds);
         if (profilesError) throw profilesError;
 
@@ -192,22 +195,38 @@ export default function TradesPage({ onPendingTradeCountChange, onMessagesChange
       }
 
       messages.forEach((message) => {
+        const profile = profilesById.get(message.user_id);
         const enrichedMessage = {
           ...message,
-          username: profilesById.get(message.user_id)?.username,
+          username: profile
+            ? (profile.username ? (profile.city ? `${profile.username} — ${profile.city}` : profile.username) : (profile.city || undefined))
+            : undefined,
         };
         const existing = messagesByTradeId.get(message.trade_id) || [];
         messagesByTradeId.set(message.trade_id, [...existing, enrichedMessage]);
       });
 
-      const enriched = trades.map(t => ({
-        ...t,
-        from_username: profilesById.get(t.from_user_id)?.username,
-        from_avatar_seed: profilesById.get(t.from_user_id)?.avatar_seed,
-        to_username: profilesById.get(t.to_user_id)?.username,
-        to_avatar_seed: profilesById.get(t.to_user_id)?.avatar_seed,
-        messages: messagesByTradeId.get(t.id) || [],
-      }));
+      const enriched = trades.map(t => {
+        const fromProfile = profilesById.get(t.from_user_id);
+        const toProfile = profilesById.get(t.to_user_id);
+        const fromUsername = fromProfile
+          ? (fromProfile.username ? (fromProfile.city ? `${fromProfile.username} — ${fromProfile.city}` : fromProfile.username) : (fromProfile.city || undefined))
+          : undefined;
+        const toUsername = toProfile
+          ? (toProfile.username ? (toProfile.city ? `${toProfile.username} — ${toProfile.city}` : toProfile.username) : (toProfile.city || undefined))
+          : undefined;
+
+        return {
+          ...t,
+          from_username: fromUsername,
+          from_avatar_seed: fromProfile?.avatar_seed,
+          from_status: fromProfile?.status,
+          to_username: toUsername,
+          to_avatar_seed: toProfile?.avatar_seed,
+          to_status: toProfile?.status,
+          messages: messagesByTradeId.get(t.id) || [],
+        } as TradeWithDetails;
+      });
       setTrades(enriched as TradeWithDetails[]);
       // check URL params for openTradeId/openMessageId
       try {
@@ -282,6 +301,7 @@ export default function TradesPage({ onPendingTradeCountChange, onMessagesChange
       });
     }
 
+    flushPushNotificationsInBackground();
     await loadTrades();
   };
 
@@ -300,6 +320,7 @@ export default function TradesPage({ onPendingTradeCountChange, onMessagesChange
       setError(error.message || "Erro ao enviar mensagem.");
       return;
     }
+    flushPushNotificationsInBackground();
     await loadTrades();
     onMessagesChange?.();
   };
@@ -382,6 +403,7 @@ export default function TradesPage({ onPendingTradeCountChange, onMessagesChange
                 fromUser={trade.from_user_id === user?.id ? trade.to_user_id : trade.from_user_id}
                 fromUsername={trade.from_user_id === user?.id ? trade.to_username : trade.from_username}
                 fromAvatarSeed={trade.from_user_id === user?.id ? trade.to_avatar_seed : trade.from_avatar_seed}
+                fromStatus={trade.from_user_id === user?.id ? trade.to_status : trade.from_status}
                 status={trade.status}
                 isIncoming={trade.to_user_id === user?.id}
                 currentUserId={user?.id}

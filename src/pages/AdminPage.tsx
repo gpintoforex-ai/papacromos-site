@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Activity, ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, KeyRound, Mail, PackagePlus, Pencil, RefreshCw, RotateCcw, Send, Settings, Trash2, UserCheck, UserPlus, Users, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Activity, ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, Inbox, KeyRound, Mail, MessageSquare, PackagePlus, Pencil, RefreshCw, RotateCcw, Send, Settings, Star, Trash2, UserCheck, UserPlus, Users, Video, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { logAuditEvent } from "../lib/audit";
@@ -19,6 +19,7 @@ interface RegisteredUser {
   email: string | null;
   phone: string | null;
   city: string | null;
+  status: "member" | "king_cromo";
   is_admin: boolean;
   is_blocked: boolean;
   created_at: string;
@@ -28,6 +29,7 @@ interface UserDraft {
   username: string;
   phone: string;
   city: string;
+  status: "member" | "king_cromo";
   is_admin: boolean;
   is_blocked: boolean;
 }
@@ -62,7 +64,50 @@ interface AuditLog {
   created_at: string;
 }
 
+interface SupportTicket {
+  id: string;
+  user_id: string;
+  subject: string;
+  status: "open" | "answered" | "closed";
+  created_at: string;
+  updated_at: string;
+}
+
+interface SupportMessage {
+  id: string;
+  ticket_id: string;
+  user_id: string;
+  message: string;
+  created_at: string;
+}
+
+interface AdminTradeOffer {
+  id: string;
+  from_user_id: string;
+  to_user_id: string;
+  status: string;
+  note: string;
+  created_at: string;
+  offered_sticker?: { name: string; number: number } | null;
+  requested_sticker?: { name: string; number: number } | null;
+}
+
+interface AdminTradeMessage {
+  id: string;
+  trade_id: string;
+  user_id: string;
+  message: string;
+  created_at: string;
+  is_read?: boolean;
+}
+
+interface AdminInboxRead {
+  item_key: string;
+  read_key: string;
+}
+
 type AdminStatsPanel = "users" | "new-users" | "activity" | "logins";
+type AdminInboxFilter = "all" | "inbox" | "archived" | "reviews" | "reports" | "trades";
 
 const emptyCollection = {
   name: "",
@@ -161,6 +206,18 @@ export default function AdminPage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [users, setUsers] = useState<RegisteredUser[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
+  const [selectedSupportTicketId, setSelectedSupportTicketId] = useState<string | null>(null);
+  const [tradeOffers, setTradeOffers] = useState<AdminTradeOffer[]>([]);
+  const [tradeMessages, setTradeMessages] = useState<AdminTradeMessage[]>([]);
+  const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
+  const [supportReply, setSupportReply] = useState("");
+  const [adminInboxReadKeys, setAdminInboxReadKeys] = useState<string[]>([]);
+  const [adminInboxArchivedKeys, setAdminInboxArchivedKeys] = useState<string[]>([]);
+  const [adminInboxModalOpen, setAdminInboxModalOpen] = useState(false);
+  const [adminInboxFilter, setAdminInboxFilter] = useState<AdminInboxFilter>("inbox");
+  const [adminMessageNotice, setAdminMessageNotice] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
   const [openAuditActorIds, setOpenAuditActorIds] = useState<string[]>([]);
   const [auditRetentionDays, setAuditRetentionDays] = useState(180);
   const [activeStatsPanel, setActiveStatsPanel] = useState<AdminStatsPanel | null>(null);
@@ -181,24 +238,45 @@ export default function AdminPage() {
   const [imageSwapTeamFilter, setImageSwapTeamFilter] = useState("");
   const [loadingImageSwap, setLoadingImageSwap] = useState(false);
   const [draggedStickerId, setDraggedStickerId] = useState<string | null>(null);
+  const draggedStickerIdRef = useRef<string | null>(null);
   const [selectedSwapStickerId, setSelectedSwapStickerId] = useState<string | null>(null);
   const [loadingUserCollection, setLoadingUserCollection] = useState(false);
   const [userDraft, setUserDraft] = useState<UserDraft>({
     username: "",
     phone: "",
     city: "",
+    status: "member",
     is_admin: false,
     is_blocked: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingLoginHeroVideo, setUploadingLoginHeroVideo] = useState(false);
+  const [loginHeroVideoUrl, setLoginHeroVideoUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     loadAdminData();
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setAdminInboxReadKeys([]);
+      return;
+    }
+
+    try {
+      const stored = localStorage.getItem(`papacromos:admin-inbox-read:${user.id}`);
+      setAdminInboxReadKeys(stored ? JSON.parse(stored) : []);
+      const archivedStored = localStorage.getItem(`papacromos:admin-inbox-archived:${user.id}`);
+      setAdminInboxArchivedKeys(archivedStored ? JSON.parse(archivedStored) : []);
+    } catch {
+      setAdminInboxReadKeys([]);
+      setAdminInboxArchivedKeys([]);
+    }
+  }, [user?.id]);
 
   const loadAdminData = async () => {
     setLoading(true);
@@ -209,7 +287,7 @@ export default function AdminPage() {
         supabase.from("collections").select("*").order("name", { ascending: true }),
         supabase
           .from("user_profiles")
-          .select("id, username, email, phone, city, is_admin, is_blocked, created_at")
+          .select("id, username, email, phone, city, status, is_admin, is_blocked, created_at")
           .order("created_at", { ascending: false }),
       ]);
 
@@ -219,16 +297,105 @@ export default function AdminPage() {
       setCollections((collectionsRes.data || []) as Collection[]);
       setUsers((usersRes.data || []) as RegisteredUser[]);
       if (profile?.is_admin) {
-        const [auditLogsRes, retentionRes] = await Promise.all([
+        const [auditLogsRes, retentionRes, supportTicketsRes, tradeOffersRes, appSettingsRes] = await Promise.all([
           supabase.rpc("admin_list_audit_logs", { p_limit: 300 }),
           supabase.rpc("admin_get_audit_log_retention_days"),
+          supabase
+            .from("support_tickets")
+            .select("id, user_id, subject, status, created_at, updated_at")
+            .order("updated_at", { ascending: false }),
+          supabase
+            .from("trade_offers")
+            .select("id, from_user_id, to_user_id, status, note, created_at, offered_sticker:stickers!trade_offers_offered_sticker_id_fkey(name, number), requested_sticker:stickers!trade_offers_requested_sticker_id_fkey(name, number)")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("app_settings")
+            .select("key, value")
+            .eq("key", "login_hero_video")
+            .maybeSingle(),
         ]);
 
         if (auditLogsRes.error) throw auditLogsRes.error;
         if (retentionRes.error) throw retentionRes.error;
+        if (supportTicketsRes.error) throw supportTicketsRes.error;
+        if (tradeOffersRes.error) throw tradeOffersRes.error;
+        if (appSettingsRes.error && !String(appSettingsRes.error.message || "").toLowerCase().includes("app_settings")) throw appSettingsRes.error;
 
         setAuditLogs((auditLogsRes.data || []) as AuditLog[]);
         setAuditRetentionDays(Number(retentionRes.data) || 180);
+        const loginHeroVideoSetting = appSettingsRes.data?.value as { url?: string } | null | undefined;
+        setLoginHeroVideoUrl(typeof loginHeroVideoSetting?.url === "string" ? loginHeroVideoSetting.url : "");
+
+        const loadedSupportTickets = (supportTicketsRes.data || []) as SupportTicket[];
+        const loadedTradeOffers = ((tradeOffersRes.data || []) as Array<Omit<AdminTradeOffer, "offered_sticker" | "requested_sticker"> & {
+          offered_sticker?: AdminTradeOffer["offered_sticker"] | AdminTradeOffer["offered_sticker"][];
+          requested_sticker?: AdminTradeOffer["requested_sticker"] | AdminTradeOffer["requested_sticker"][];
+        }>).map((trade) => ({
+          ...trade,
+          offered_sticker: Array.isArray(trade.offered_sticker) ? trade.offered_sticker[0] || null : trade.offered_sticker || null,
+          requested_sticker: Array.isArray(trade.requested_sticker) ? trade.requested_sticker[0] || null : trade.requested_sticker || null,
+        }));
+        setSupportTickets(loadedSupportTickets);
+        setTradeOffers(loadedTradeOffers);
+        if (!selectedSupportTicketId && loadedSupportTickets.length > 0) {
+          setSelectedSupportTicketId(loadedSupportTickets[0].id);
+        }
+
+        const supportTicketIds = loadedSupportTickets.map((ticket) => ticket.id);
+        if (supportTicketIds.length > 0) {
+          const { data: supportMessageRows, error: supportMessagesError } = await supabase
+            .from("support_ticket_messages")
+            .select("id, ticket_id, user_id, message, created_at")
+            .in("ticket_id", supportTicketIds)
+            .order("created_at", { ascending: true });
+          if (supportMessagesError) throw supportMessagesError;
+          setSupportMessages((supportMessageRows || []) as SupportMessage[]);
+        } else {
+          setSupportMessages([]);
+        }
+
+        const tradeOfferIds = loadedTradeOffers.map((trade) => trade.id);
+        if (tradeOfferIds.length > 0) {
+          const { data: tradeMessageRows, error: tradeMessagesError } = await supabase
+            .from("trade_messages")
+            .select("id, trade_id, user_id, message, created_at, is_read")
+            .in("trade_id", tradeOfferIds)
+            .order("created_at", { ascending: true });
+          if (tradeMessagesError) throw tradeMessagesError;
+          const loadedTradeMessages = (tradeMessageRows || []) as AdminTradeMessage[];
+          setTradeMessages(loadedTradeMessages);
+          if (!selectedSupportTicketId && !selectedTradeId && loadedSupportTickets.length === 0) {
+            const firstTradeMessage = loadedTradeMessages[0];
+            const firstTradeWithNote = loadedTradeOffers.find((trade) => trade.note.trim());
+            setSelectedTradeId(firstTradeMessage?.trade_id || firstTradeWithNote?.id || null);
+          }
+        } else {
+          setTradeMessages([]);
+          if (!selectedSupportTicketId && !selectedTradeId && loadedSupportTickets.length === 0) {
+            const firstTradeWithNote = loadedTradeOffers.find((trade) => trade.note.trim());
+            setSelectedTradeId(firstTradeWithNote?.id || null);
+          }
+        }
+
+        if (loadedSupportTickets.length === 0 && loadedTradeOffers.length === 0) {
+          setSelectedSupportTicketId(null);
+          setSelectedTradeId(null);
+        }
+
+        if (user?.id) {
+          const { data: inboxReadRows, error: inboxReadsError } = await supabase
+            .from("admin_inbox_reads")
+            .select("item_key, read_key")
+            .eq("admin_user_id", user.id);
+
+          if (!inboxReadsError) {
+            const persistedReadKeys = ((inboxReadRows || []) as AdminInboxRead[]).map((row) => row.read_key);
+            setAdminInboxReadKeys((currentKeys) => Array.from(new Set([...currentKeys, ...persistedReadKeys])));
+            localStorage.setItem(`papacromos:admin-inbox-read:${user.id}`, JSON.stringify(persistedReadKeys));
+          } else if (!String(inboxReadsError.message || "").toLowerCase().includes("admin_inbox_reads")) {
+            throw inboxReadsError;
+          }
+        }
       }
     } catch (err: any) {
       setError(err.message || "Erro ao carregar area de admin.");
@@ -403,6 +570,7 @@ export default function AdminPage() {
     setImageSwapCollection(collection);
     setLoadingImageSwap(true);
     setDraggedStickerId(null);
+    draggedStickerIdRef.current = null;
     setSelectedSwapStickerId(null);
     setImageSwapTeamFilter("");
     setError(null);
@@ -461,28 +629,44 @@ export default function AdminPage() {
     setError(null);
     setSuccess(null);
     try {
-      const { error: sourceError } = await supabase
-        .from("stickers")
-        .update({ image_url: targetSticker.image_url || "" })
-        .eq("id", sourceSticker.id);
-      if (sourceError) throw sourceError;
-
-      const { error: targetError } = await supabase
-        .from("stickers")
-        .update({ image_url: sourceSticker.image_url || "" })
-        .eq("id", targetSticker.id);
-      if (targetError) throw targetError;
-      await logAuditEvent({
-        action: "admin_sticker_images_swapped",
-        entityType: "collection",
-        entityId: sourceSticker.collection_id,
-        metadata: {
-          source_sticker_id: sourceSticker.id,
-          source_number: sourceSticker.number,
-          target_sticker_id: targetSticker.id,
-          target_number: targetSticker.number,
-        },
+      const { error: swapRpcError } = await supabase.rpc("admin_swap_sticker_images", {
+        p_source_sticker_id: sourceSticker.id,
+        p_target_sticker_id: targetSticker.id,
       });
+      if (swapRpcError) {
+        const message = String(swapRpcError.message || "").toLowerCase();
+        const canFallbackToDirectUpdate =
+          message.includes("admin_swap_sticker_images") ||
+          message.includes("function") ||
+          message.includes("schema cache");
+
+        if (!canFallbackToDirectUpdate) throw swapRpcError;
+
+        const { error: sourceUpdateError } = await supabase
+          .from("stickers")
+          .update({ image_url: targetSticker.image_url || "" })
+          .eq("id", sourceSticker.id);
+        if (sourceUpdateError) throw sourceUpdateError;
+
+        const { error: targetUpdateError } = await supabase
+          .from("stickers")
+          .update({ image_url: sourceSticker.image_url || "" })
+          .eq("id", targetSticker.id);
+        if (targetUpdateError) throw targetUpdateError;
+
+        await logAuditEvent({
+          action: "admin_sticker_images_swapped",
+          entityType: "collection",
+          entityId: sourceSticker.collection_id,
+          metadata: {
+            source_sticker_id: sourceSticker.id,
+            source_number: sourceSticker.number,
+            target_sticker_id: targetSticker.id,
+            target_number: targetSticker.number,
+            fallback: "direct_update",
+          },
+        });
+      }
 
       await reloadImageSwapStickers(sourceSticker.collection_id);
       setSuccess(`Imagens trocadas entre #${sourceSticker.number} e #${targetSticker.number}.`);
@@ -608,12 +792,93 @@ export default function AdminPage() {
     setSuccess("Foto da capa removida. Guarda a colecao para aplicar.");
   };
 
+  const saveLoginHeroVideoSetting = async (url: string) => {
+    if (!user?.id) throw new Error("Sessao de admin invalida.");
+
+    const cleanUrl = url.trim();
+    const { error: settingsError } = await supabase
+      .from("app_settings")
+      .upsert({
+        key: "login_hero_video",
+        value: { url: cleanUrl },
+        updated_by: user.id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "key" });
+
+    if (settingsError) throw settingsError;
+    setLoginHeroVideoUrl(cleanUrl);
+  };
+
+  const uploadLoginHeroVideo = async (file: File | null) => {
+    if (!file || !user?.id) return;
+
+    if (!file.type.startsWith("video/")) {
+      setError("Escolhe um ficheiro de video.");
+      setSuccess(null);
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      setError("O video deve ter no maximo 50 MB.");
+      setSuccess(null);
+      return;
+    }
+
+    setUploadingLoginHeroVideo(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase() || "mp4";
+      const filePath = `login/hero-${Date.now()}-${user.id}.${extension}`;
+      const { error: uploadError } = await supabase.storage
+        .from("app-media")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage.from("app-media").getPublicUrl(filePath);
+      await saveLoginHeroVideoSetting(publicUrlData.publicUrl);
+      await logAuditEvent({
+        action: "admin_login_hero_video_updated",
+        entityType: "app_settings",
+        metadata: { key: "login_hero_video", url: publicUrlData.publicUrl },
+      });
+      setSuccess("Video da pagina principal atualizado.");
+    } catch (err: any) {
+      setError(err.message || "Erro ao carregar video da pagina principal.");
+    } finally {
+      setUploadingLoginHeroVideo(false);
+    }
+  };
+
+  const clearLoginHeroVideo = async () => {
+    setUploadingLoginHeroVideo(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await saveLoginHeroVideoSetting("");
+      await logAuditEvent({
+        action: "admin_login_hero_video_removed",
+        entityType: "app_settings",
+        metadata: { key: "login_hero_video" },
+      });
+      setSuccess("Video da pagina principal removido. O slider volta a usar a imagem.");
+    } catch (err: any) {
+      setError(err.message || "Erro ao remover video da pagina principal.");
+    } finally {
+      setUploadingLoginHeroVideo(false);
+    }
+  };
+
   const startEditingUser = (registeredUser: RegisteredUser) => {
     setEditingUserId(registeredUser.id);
     setUserDraft({
       username: registeredUser.username || "",
       phone: registeredUser.phone || "",
       city: registeredUser.city || "",
+      status: registeredUser.status || "member",
       is_admin: Boolean(registeredUser.is_admin),
       is_blocked: Boolean(registeredUser.is_blocked),
     });
@@ -637,6 +902,7 @@ export default function AdminPage() {
         p_username: userDraft.username.trim(),
         p_phone: userDraft.phone.trim(),
         p_city: userDraft.city.trim(),
+        p_status: userDraft.status,
         p_is_admin: userId === user?.id ? true : userDraft.is_admin,
         p_is_blocked: userId === user?.id ? false : userDraft.is_blocked,
       });
@@ -1004,8 +1270,310 @@ export default function AdminPage() {
     }
   };
 
+  const updateSupportTicketStatus = async (ticket: SupportTicket, status: SupportTicket["status"]) => {
+    setError(null);
+    setSuccess(null);
+    setSaving(true);
+    try {
+      const { error: updateError } = await supabase
+        .from("support_tickets")
+        .update({ status })
+        .eq("id", ticket.id);
+      if (updateError) throw updateError;
+
+      await logAuditEvent({
+        action: `admin_support_ticket_${status}`,
+        entityType: "support_ticket",
+        entityId: ticket.id,
+        targetUserId: ticket.user_id,
+        metadata: { subject: ticket.subject },
+      });
+
+      setSuccess(status === "closed" ? "Mensagem arquivada." : "Mensagem reaberta.");
+      await loadAdminData();
+    } catch (err: any) {
+      setError(err.message || "Erro ao atualizar mensagem.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendSupportReply = async () => {
+    const selectedTicket = supportTickets.find((ticket) => ticket.id === selectedSupportTicketId);
+    const cleanReply = supportReply.trim();
+    if (!selectedTicket || !user?.id) return;
+
+    setError(null);
+    setSuccess(null);
+    if (!cleanReply) {
+      setError("Escreve uma resposta.");
+      return;
+    }
+    if (cleanReply.length > 4000) {
+      setError("A resposta deve ter no maximo 4000 caracteres.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { error: messageError } = await supabase.from("support_ticket_messages").insert({
+        ticket_id: selectedTicket.id,
+        user_id: user.id,
+        message: cleanReply,
+      });
+      if (messageError) throw messageError;
+
+      const { error: ticketError } = await supabase
+        .from("support_tickets")
+        .update({ status: "answered" })
+        .eq("id", selectedTicket.id);
+      if (ticketError) throw ticketError;
+
+      await logAuditEvent({
+        action: "admin_support_reply_sent",
+        entityType: "support_ticket",
+        entityId: selectedTicket.id,
+        targetUserId: selectedTicket.user_id,
+        metadata: { subject: selectedTicket.subject, message_length: cleanReply.length },
+      });
+
+      setSupportReply("");
+      setSuccess("Resposta enviada.");
+      await loadAdminData();
+    } catch (err: any) {
+      setError(err.message || "Erro ao responder a mensagem.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const markAdminInboxItemRead = (readKey: string, itemKey?: string) => {
+    if (!user?.id) return;
+
+    setAdminInboxReadKeys((currentKeys) => {
+      if (currentKeys.includes(readKey)) return currentKeys;
+      const nextKeys = [...currentKeys, readKey];
+      localStorage.setItem(`papacromos:admin-inbox-read:${user.id}`, JSON.stringify(nextKeys));
+      return nextKeys;
+    });
+
+    if (itemKey) {
+      void supabase
+        .from("admin_inbox_reads")
+        .upsert({
+          admin_user_id: user.id,
+          item_key: itemKey,
+          read_key: readKey,
+          read_at: new Date().toISOString(),
+        }, { onConflict: "admin_user_id,item_key" })
+        .then(({ error: readError }) => {
+          if (readError && !String(readError.message || "").toLowerCase().includes("admin_inbox_reads")) {
+            console.error("Failed to persist admin inbox read state", readError);
+          }
+        });
+    }
+  };
+
+  const archiveAdminInboxItem = (readKey: string) => {
+    if (!user?.id) return;
+
+    markAdminInboxItemRead(readKey);
+    setAdminInboxArchivedKeys((currentKeys) => {
+      if (currentKeys.includes(readKey)) return currentKeys;
+      const nextKeys = [...currentKeys, readKey];
+      localStorage.setItem(`papacromos:admin-inbox-archived:${user.id}`, JSON.stringify(nextKeys));
+      return nextKeys;
+    });
+    setAdminInboxModalOpen(false);
+  };
+
+  const restoreAdminInboxItem = (readKey: string) => {
+    if (!user?.id) return;
+
+    setAdminInboxArchivedKeys((currentKeys) => {
+      const nextKeys = currentKeys.filter((key) => key !== readKey);
+      localStorage.setItem(`papacromos:admin-inbox-archived:${user.id}`, JSON.stringify(nextKeys));
+      return nextKeys;
+    });
+  };
+
+  const openPreparedEmail = async (email: string | null | undefined, subject: string, body: string) => {
+    if (!email) {
+      setAdminMessageNotice({ type: "error", text: "Este utilizador nao tem email associado." });
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    setAdminMessageNotice({ type: "info", text: "A enviar email..." });
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("send-admin-message-email", {
+        body: {
+          to: email,
+          subject,
+          message: body,
+        },
+      });
+      if (invokeError) throw invokeError;
+      if (data?.error) throw new Error(data.error);
+      setSuccess(`Email enviado para ${email}.`);
+      setAdminMessageNotice({ type: "success", text: `Email enviado para ${email}.` });
+    } catch (err: any) {
+      let message = err?.context?.error || err?.message || "Erro ao enviar email.";
+      if (err?.context instanceof Response) {
+        try {
+          const payload = await err.context.clone().json();
+          message = payload?.error || message;
+        } catch {
+          message = err.context.statusText || message;
+        }
+      }
+      const finalMessage = String(message).includes("SMTP")
+        ? "Falta configurar a conta SMTP nas secrets do Supabase."
+        : String(message);
+      setError(finalMessage);
+      setAdminMessageNotice({ type: "error", text: finalMessage });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openPreparedWhatsApp = (phone: string | null | undefined, message: string) => {
+    const digits = (phone || "").replace(/\D/g, "");
+    if (!digits) {
+      setAdminMessageNotice({ type: "error", text: "Este utilizador nao tem telefone associado." });
+      return;
+    }
+
+    const normalizedPhone = digits.startsWith("351") || digits.length > 9 ? digits : `351${digits}`;
+    window.open(`https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+    setAdminMessageNotice({ type: "success", text: "WhatsApp aberto numa nova aba." });
+  };
+
   const selectedCollectionUser = users.find((registeredUser) => registeredUser.id === selectedCollectionUserId);
   const usersById = new Map(users.map((registeredUser) => [registeredUser.id, registeredUser]));
+  const selectedSupportTicket = selectedSupportTicketId
+    ? supportTickets.find((ticket) => ticket.id === selectedSupportTicketId) || null
+    : selectedTradeId
+      ? null
+      : supportTickets[0] || null;
+  const selectedSupportMessages = selectedSupportTicket
+    ? supportMessages.filter((message) => message.ticket_id === selectedSupportTicket.id)
+    : [];
+  const tradeConversations = tradeOffers
+    .map((trade) => {
+      const initialMessages: AdminTradeMessage[] = trade.note.trim()
+        ? [{
+            id: `trade-note-${trade.id}`,
+            trade_id: trade.id,
+            user_id: trade.from_user_id,
+            message: trade.note.trim(),
+            created_at: trade.created_at,
+            is_read: true,
+          }]
+        : [];
+
+      return {
+        trade,
+        messages: [
+          ...initialMessages,
+          ...tradeMessages.filter((message) => message.trade_id === trade.id),
+        ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+      };
+    })
+    .filter((conversation) => conversation.messages.length > 0)
+    .sort((a, b) => {
+      const latestA = a.messages[a.messages.length - 1]?.created_at || a.trade.created_at;
+      const latestB = b.messages[b.messages.length - 1]?.created_at || b.trade.created_at;
+      return new Date(latestB).getTime() - new Date(latestA).getTime();
+    });
+  const selectedTradeConversation = selectedTradeId
+    ? tradeConversations.find((conversation) => conversation.trade.id === selectedTradeId) || null
+    : null;
+  const supportReviewCount = supportTickets.filter((ticket) => ticket.subject.toLowerCase().includes("avaliacao")).length;
+  const supportReportCount = supportTickets.filter((ticket) => ticket.subject.toLowerCase().includes("report")).length;
+  const tradeMessageCount = tradeMessages.length;
+  const adminInboxItems = [
+    ...supportTickets.map((ticket) => {
+      const ticketMessages = supportMessages.filter((message) => message.ticket_id === ticket.id);
+      const latestMessage = ticketMessages[ticketMessages.length - 1];
+      const ticketUser = usersById.get(ticket.user_id);
+      const isReview = ticket.subject.toLowerCase().includes("avaliacao");
+      const isReport = ticket.subject.toLowerCase().includes("report");
+      const readKey = `support:${ticket.id}:${latestMessage?.id || ticket.updated_at}`;
+
+      return {
+        key: `support-${ticket.id}`,
+        readKey,
+        type: "support" as const,
+        title: ticket.subject,
+        sender: ticketUser?.username || ticketUser?.email || "Utilizador",
+        preview: latestMessage?.message || "Sem mensagem.",
+        updatedAt: latestMessage?.created_at || ticket.updated_at,
+        badge: isReview ? "Avaliacao" : isReport ? "Revisao" : "Mensagem",
+        unread: !adminInboxReadKeys.includes(readKey),
+        archived: adminInboxArchivedKeys.includes(readKey),
+        supportTicket: ticket,
+        tradeConversation: null,
+      };
+    }),
+    ...tradeConversations.map((conversation) => {
+      const latestMessage = conversation.messages[conversation.messages.length - 1];
+      const sender = usersById.get(latestMessage.user_id);
+      const fromUser = usersById.get(conversation.trade.from_user_id);
+      const toUser = usersById.get(conversation.trade.to_user_id);
+      const readKey = `trade:${conversation.trade.id}:${latestMessage.id}`;
+
+      return {
+        key: `trade-${conversation.trade.id}`,
+        readKey,
+        type: "trade" as const,
+        title: `Troca: ${fromUser?.username || fromUser?.email || "Utilizador"} -> ${toUser?.username || toUser?.email || "Utilizador"}`,
+        sender: sender?.username || sender?.email || "Utilizador",
+        preview: latestMessage.message,
+        updatedAt: latestMessage.created_at,
+        badge: "Troca",
+        unread: !adminInboxReadKeys.includes(readKey),
+        archived: adminInboxArchivedKeys.includes(readKey),
+        supportTicket: null,
+        tradeConversation: conversation,
+      };
+    }),
+  ].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  const adminVisibleInboxItems = adminInboxItems.filter((item) => !item.archived);
+  const adminArchivedInboxItems = adminInboxItems.filter((item) => item.archived);
+  const adminUnreadInboxItems = adminVisibleInboxItems.filter((item) => item.unread);
+  const filteredAdminInboxItems = adminInboxItems.filter((item) => {
+    if (adminInboxFilter === "all") return !item.archived;
+    if (adminInboxFilter === "inbox") return item.unread && !item.archived;
+    if (adminInboxFilter === "archived") return item.archived;
+    if (adminInboxFilter === "reviews") return item.badge === "Avaliacao" && !item.archived;
+    if (adminInboxFilter === "reports") return item.badge === "Revisao" && !item.archived;
+    if (adminInboxFilter === "trades") return item.type === "trade" && !item.archived;
+    return true;
+  });
+  const adminInboxFilterLabels: Record<AdminInboxFilter, string> = {
+    all: "Total",
+    inbox: "Inbox",
+    archived: "Arquivadas",
+    reviews: "Avaliacoes",
+    reports: "Revisoes",
+    trades: "Msgs trocas",
+  };
+  const openAdminInboxItem = (item: (typeof adminInboxItems)[number]) => {
+    markAdminInboxItemRead(item.readKey, item.key);
+    setAdminMessageNotice(null);
+    if (item.type === "support" && item.supportTicket) {
+      setSelectedSupportTicketId(item.supportTicket.id);
+      setSelectedTradeId(null);
+    } else if (item.type === "trade" && item.tradeConversation) {
+      setSelectedTradeId(item.tradeConversation.trade.id);
+      setSelectedSupportTicketId(null);
+    }
+    setSupportReply("");
+    setAdminInboxModalOpen(true);
+  };
   const auditGroups = Array.from(
     auditLogs.reduce((groups, log) => {
       const key = log.actor_user_id || "system";
@@ -1110,6 +1678,15 @@ export default function AdminPage() {
     imageSwapIsWorldAlbum && imageSwapTeamFilter
       ? imageSwapStickers.filter((sticker) => sticker.name.startsWith(`${imageSwapTeamFilter} - `))
       : imageSwapStickers;
+  const selectedSupportUser = selectedSupportTicket ? usersById.get(selectedSupportTicket.user_id) : null;
+  const selectedTradeLatestMessage = selectedTradeConversation?.messages[selectedTradeConversation.messages.length - 1] || null;
+  const selectedTradeEmailRecipient = selectedTradeConversation && selectedTradeLatestMessage
+    ? usersById.get(
+        selectedTradeLatestMessage.user_id === selectedTradeConversation.trade.from_user_id
+          ? selectedTradeConversation.trade.to_user_id
+          : selectedTradeConversation.trade.from_user_id
+      )
+    : null;
 
   if (!profile?.is_admin) {
     return (
@@ -1228,6 +1805,298 @@ export default function AdminPage() {
             </div>
           )}
         </section>
+      )}
+
+      <section className="admin-panel admin-login-media-panel">
+        <div className="admin-panel-title">
+          <Video size={18} />
+          <h3>Video da pagina principal</h3>
+        </div>
+        <p className="muted-text">
+          Este video aparece no primeiro slide do ecra de entrada. Usa MP4 ou WebM ate 50 MB.
+        </p>
+        <div className="admin-login-media-actions">
+          <label className="btn btn-ghost admin-upload-btn" htmlFor="login-hero-video-input">
+            <Video size={16} /> {uploadingLoginHeroVideo ? "A carregar video..." : "Carregar video"}
+          </label>
+          <input
+            id="login-hero-video-input"
+            className="sticker-photo-input"
+            type="file"
+            accept="video/mp4,video/webm,video/quicktime"
+            disabled={uploadingLoginHeroVideo}
+            onChange={(event) => {
+              uploadLoginHeroVideo(event.target.files?.[0] || null);
+              event.target.value = "";
+            }}
+          />
+          {loginHeroVideoUrl && (
+            <button className="btn btn-ghost" type="button" onClick={clearLoginHeroVideo} disabled={uploadingLoginHeroVideo}>
+              <X size={16} /> Remover video
+            </button>
+          )}
+        </div>
+        {loginHeroVideoUrl ? (
+          <div className="admin-login-video-preview">
+            <video src={loginHeroVideoUrl} controls muted playsInline />
+          </div>
+        ) : (
+          <p className="muted-text">Sem video carregado. O slider usa a imagem atual.</p>
+        )}
+      </section>
+
+      <section className="admin-panel admin-inbox-panel">
+        <div className="admin-panel-title admin-inbox-title">
+          <span>
+            <Inbox size={18} />
+            <h3>Caixa de mensagens</h3>
+          </span>
+          <div className="admin-inbox-counters" aria-label="Filtros das mensagens">
+            {([
+              ["all", adminVisibleInboxItems.length],
+              ["inbox", adminUnreadInboxItems.length],
+              ["archived", adminArchivedInboxItems.length],
+              ["reviews", supportReviewCount],
+              ["reports", supportReportCount],
+              ["trades", tradeMessageCount],
+            ] as Array<[AdminInboxFilter, number]>).map(([filterId, count]) => (
+              <button
+                className={adminInboxFilter === filterId ? "active" : ""}
+                key={filterId}
+                type="button"
+                onClick={() => setAdminInboxFilter(filterId)}
+                aria-pressed={adminInboxFilter === filterId}
+              >
+                {count} {adminInboxFilterLabels[filterId]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="muted-text">
+          Entram aqui as mensagens dos utilizadores, pedidos para rever, avaliacoes da app e conversas das trocas.
+        </p>
+
+        <div className="admin-mailbox">
+          <section>
+            <div className="admin-mailbox-section-title">
+              <strong>{adminInboxFilterLabels[adminInboxFilter]}</strong>
+              <span>{filteredAdminInboxItems.length}</span>
+            </div>
+            <div className={`admin-mailbox-list ${adminInboxFilter === "archived" ? "archived" : ""}`} role="list" aria-label={`Mensagens - ${adminInboxFilterLabels[adminInboxFilter]}`}>
+              {filteredAdminInboxItems.map((item) => (
+                <button className={`admin-mailbox-row ${item.archived ? "archived" : item.unread ? "unread" : "read"}`} key={item.key} type="button" role="listitem" onClick={() => openAdminInboxItem(item)}>
+                  <span className={`admin-mailbox-type ${item.type}`}>{item.type === "trade" ? <ArrowRightLeft size={14} /> : item.badge === "Avaliacao" ? <Star size={14} /> : <MessageSquare size={14} />}</span>
+                  <strong>{item.sender}</strong>
+                  <span>{item.title}</span>
+                  <p>{item.preview}</p>
+                  <em>{item.badge}</em>
+                  <time>{formatAdminDateTime(item.updatedAt)}</time>
+                </button>
+              ))}
+              {filteredAdminInboxItems.length === 0 && <p className="admin-mailbox-empty">Sem mensagens neste filtro.</p>}
+            </div>
+          </section>
+        </div>
+      </section>
+
+      {adminInboxModalOpen && (selectedTradeConversation || selectedSupportTicket) && (
+        <div className="account-data-overlay" role="dialog" aria-modal="true" aria-labelledby="admin-message-modal-title">
+          <div className="account-data-modal admin-message-modal">
+            {selectedTradeConversation ? (
+              <>
+                <div className="admin-inbox-reader-header">
+                  <div>
+                    <span className="support-status support-status-answered">Troca monitorizada</span>
+                    <h3 id="admin-message-modal-title">
+                      {usersById.get(selectedTradeConversation.trade.from_user_id)?.username || usersById.get(selectedTradeConversation.trade.from_user_id)?.email || "Utilizador"}
+                      {" -> "}
+                      {usersById.get(selectedTradeConversation.trade.to_user_id)?.username || usersById.get(selectedTradeConversation.trade.to_user_id)?.email || "Utilizador"}
+                    </h3>
+                    <p>
+                      Estado: {selectedTradeConversation.trade.status}
+                      {selectedTradeConversation.trade.offered_sticker ? ` - Oferece ${selectedTradeConversation.trade.offered_sticker.number} ${selectedTradeConversation.trade.offered_sticker.name}` : ""}
+                      {selectedTradeConversation.trade.requested_sticker ? ` - Pede ${selectedTradeConversation.trade.requested_sticker.number} ${selectedTradeConversation.trade.requested_sticker.name}` : ""}
+                    </p>
+                  </div>
+                  <div className="admin-inbox-reader-actions">
+                    <button
+                      className="btn btn-ghost btn-xs"
+                      type="button"
+                      disabled={saving}
+                      onClick={() => openPreparedEmail(
+                        selectedTradeEmailRecipient?.email,
+                        "Tens uma mensagem sobre uma troca no Papa Cromos",
+                        [
+                          `Ola ${selectedTradeEmailRecipient?.username || ""}`.trim(),
+                          "",
+                          "Tens uma mensagem numa troca no Papa Cromos:",
+                          "",
+                          selectedTradeLatestMessage?.message || "",
+                          "",
+                          "Entra na app para veres a conversa e responderes.",
+                        ].join("\n")
+                      )}
+                    >
+                      <Mail size={12} /> {saving ? "A enviar..." : "Enviar email"}
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-xs"
+                      type="button"
+                      onClick={() => openPreparedWhatsApp(
+                        selectedTradeEmailRecipient?.phone,
+                        [
+                          `Ola ${selectedTradeEmailRecipient?.username || ""}`.trim(),
+                          "",
+                          "Tens uma mensagem numa troca no Papa Cromos:",
+                          "",
+                          selectedTradeLatestMessage?.message || "",
+                          "",
+                          "Entra na app para veres a conversa e responderes.",
+                        ].join("\n")
+                      )}
+                    >
+                      WhatsApp
+                    </button>
+                    <button className="btn btn-ghost btn-xs" type="button" onClick={() => archiveAdminInboxItem(`trade:${selectedTradeConversation.trade.id}:${selectedTradeConversation.messages[selectedTradeConversation.messages.length - 1].id}`)}>
+                      Arquivar
+                    </button>
+                    <button className="btn btn-ghost btn-xs" type="button" onClick={() => restoreAdminInboxItem(`trade:${selectedTradeConversation.trade.id}:${selectedTradeConversation.messages[selectedTradeConversation.messages.length - 1].id}`)}>
+                      Repor
+                    </button>
+                    <button className="header-icon-btn" type="button" onClick={() => setAdminInboxModalOpen(false)} title="Fechar" aria-label="Fechar mensagem">
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+                <div className="admin-inbox-thread">
+                  {selectedTradeConversation.messages.map((message) => {
+                    const messageUser = usersById.get(message.user_id);
+                    return (
+                      <article className="admin-inbox-message" key={message.id}>
+                        <div>
+                          <strong>{messageUser?.username || messageUser?.email || "Utilizador"}</strong>
+                          <span>{formatAdminDateTime(message.created_at)}</span>
+                        </div>
+                        <p>{message.message}</p>
+                      </article>
+                    );
+                  })}
+                </div>
+                {adminMessageNotice && (
+                  <p className={`admin-message-notice ${adminMessageNotice.type}`}>{adminMessageNotice.text}</p>
+                )}
+                <div className="admin-inbox-monitor-note">
+                  <MessageSquare size={14} />
+                  <span>Vista apenas para monitorizacao. As respostas devem ser dadas pelos participantes da troca.</span>
+                </div>
+              </>
+            ) : selectedSupportTicket ? (
+              <>
+                <div className="admin-inbox-reader-header">
+                  <div>
+                    <span className={`support-status support-status-${selectedSupportTicket.status}`}>
+                      {selectedSupportTicket.status === "open" ? "Para rever" : selectedSupportTicket.status === "answered" ? "Respondida" : "Arquivada"}
+                    </span>
+                    <h3 id="admin-message-modal-title">{selectedSupportTicket.subject}</h3>
+                    <p>
+                      {usersById.get(selectedSupportTicket.user_id)?.username || usersById.get(selectedSupportTicket.user_id)?.email || "Utilizador"}
+                      {" - "}
+                      {formatAdminDateTime(selectedSupportTicket.updated_at)}
+                    </p>
+                  </div>
+                  <div className="admin-inbox-reader-actions">
+                    <button
+                      className="btn btn-ghost btn-xs"
+                      type="button"
+                      disabled={saving}
+                      onClick={() => openPreparedEmail(
+                        selectedSupportUser?.email,
+                        selectedSupportTicket.subject,
+                        [
+                          `Ola ${selectedSupportUser?.username || ""}`.trim(),
+                          "",
+                          "Tens uma mensagem do Papa Cromos:",
+                          "",
+                          selectedSupportMessages[selectedSupportMessages.length - 1]?.message || selectedSupportTicket.subject,
+                          "",
+                          "Entra na app para veres a conversa completa.",
+                        ].join("\n")
+                      )}
+                    >
+                      <Mail size={12} /> {saving ? "A enviar..." : "Enviar email"}
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-xs"
+                      type="button"
+                      onClick={() => openPreparedWhatsApp(
+                        selectedSupportUser?.phone,
+                        [
+                          `Ola ${selectedSupportUser?.username || ""}`.trim(),
+                          "",
+                          "Tens uma mensagem do Papa Cromos:",
+                          "",
+                          selectedSupportMessages[selectedSupportMessages.length - 1]?.message || selectedSupportTicket.subject,
+                          "",
+                          "Entra na app para veres a conversa completa.",
+                        ].join("\n")
+                      )}
+                    >
+                      WhatsApp
+                    </button>
+                    <button className="btn btn-ghost btn-xs" type="button" onClick={() => archiveAdminInboxItem(`support:${selectedSupportTicket.id}:${selectedSupportMessages[selectedSupportMessages.length - 1]?.id || selectedSupportTicket.updated_at}`)}>
+                      Arquivar
+                    </button>
+                    <button className="btn btn-ghost btn-xs" type="button" onClick={() => restoreAdminInboxItem(`support:${selectedSupportTicket.id}:${selectedSupportMessages[selectedSupportMessages.length - 1]?.id || selectedSupportTicket.updated_at}`)}>
+                      Repor
+                    </button>
+                    {selectedSupportTicket.status === "closed" ? (
+                      <button className="btn btn-ghost btn-xs" type="button" onClick={() => updateSupportTicketStatus(selectedSupportTicket, "open")} disabled={saving}>
+                        Reabrir ticket
+                      </button>
+                    ) : (
+                      <button className="btn btn-ghost btn-xs" type="button" onClick={() => updateSupportTicketStatus(selectedSupportTicket, "closed")} disabled={saving}>
+                        Fechar ticket
+                      </button>
+                    )}
+                    <button className="header-icon-btn" type="button" onClick={() => setAdminInboxModalOpen(false)} title="Fechar" aria-label="Fechar mensagem">
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+                <div className="admin-inbox-thread">
+                  {selectedSupportMessages.map((message) => {
+                    const messageUser = usersById.get(message.user_id);
+                    const isAdminMessage = Boolean(messageUser?.is_admin);
+                    return (
+                      <article className={`admin-inbox-message ${isAdminMessage ? "admin" : ""}`} key={message.id}>
+                        <div>
+                          <strong>{isAdminMessage ? "Admin" : messageUser?.username || messageUser?.email || "Utilizador"}</strong>
+                          <span>{formatAdminDateTime(message.created_at)}</span>
+                        </div>
+                        <p>{message.message}</p>
+                      </article>
+                    );
+                  })}
+                </div>
+                {adminMessageNotice && (
+                  <p className={`admin-message-notice ${adminMessageNotice.type}`}>{adminMessageNotice.text}</p>
+                )}
+                <div className="admin-inbox-reply">
+                  <textarea
+                    className="admin-table-input"
+                    value={supportReply}
+                    onChange={(event) => setSupportReply(event.target.value)}
+                    placeholder="Responder ao utilizador..."
+                    disabled={saving || selectedSupportTicket.status === "closed"}
+                  />
+                  <button className="btn btn-primary btn-sm" type="button" onClick={sendSupportReply} disabled={saving || selectedSupportTicket.status === "closed"}>
+                    <Send size={14} /> {saving ? "A enviar..." : "Responder"}
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
       )}
 
       <div className="admin-grid">
@@ -1412,10 +2281,15 @@ export default function AdminPage() {
               <X size={12} /> Fechar
             </button>
           </div>
-          <p className="muted-text">
-            Arrasta um cromo para cima de outro para trocar apenas as imagens. Os numeros, nomes e cromos dos utilizadores nao mudam.
+        <p className="muted-text">
+            Arrasta um cromo para cima de outro ou toca em dois cromos seguidos para trocar apenas as imagens. Os numeros, nomes e cromos dos utilizadores nao mudam.
             {imageSwapIsWorldAlbum ? " No album Mundial, o numero grande corresponde a selecao e o numero global aparece abaixo." : ""}
           </p>
+          {selectedSwapStickerId && (
+            <p className="success-text admin-image-swap-selection-hint">
+              Cromo selecionado. Toca no cromo de destino para trocar as imagens.
+            </p>
+          )}
           {imageSwapIsWorldAlbum && (
             <div className="admin-image-swap-filter">
               <label>
@@ -1450,11 +2324,18 @@ export default function AdminPage() {
                   key={sticker.id}
                   className={`admin-image-swap-card ${draggedStickerId === sticker.id ? "dragging" : ""} ${selectedSwapStickerId === sticker.id ? "selected" : ""}`}
                   type="button"
+                  data-allow-protected-drag="true"
                   draggable
                   onClick={() => selectStickerForImageSwap(sticker.id)}
                   onDragStart={(event) => {
                     setDraggedStickerId(sticker.id);
-                    event.dataTransfer.effectAllowed = "move";
+                    draggedStickerIdRef.current = sticker.id;
+                    try {
+                      event.dataTransfer.setData("text/plain", sticker.id);
+                      event.dataTransfer.effectAllowed = "move";
+                    } catch (e) {
+                      // ignore if dataTransfer is not writable in this environment
+                    }
                   }}
                   onDragOver={(event) => {
                     event.preventDefault();
@@ -1462,9 +2343,15 @@ export default function AdminPage() {
                   }}
                   onDrop={(event) => {
                     event.preventDefault();
-                    swapStickerImages(draggedStickerId, sticker.id);
+                    const sourceId = draggedStickerIdRef.current || (() => {
+                      try { return event.dataTransfer.getData("text/plain"); } catch (e) { return null; }
+                    })();
+                    swapStickerImages(sourceId, sticker.id);
                   }}
-                  onDragEnd={() => setDraggedStickerId(null)}
+                  onDragEnd={() => {
+                    setDraggedStickerId(null);
+                    draggedStickerIdRef.current = null;
+                  }}
                   disabled={saving}
                   title={sticker.name}
                 >
@@ -1667,6 +2554,10 @@ export default function AdminPage() {
                       {registeredUser.is_blocked ? "Bloqueado" : "Ativo"}
                     </strong>
                   </div>
+                  <div className="admin-user-field compact">
+                    <span>Estatuto</span>
+                    <strong>{registeredUser.status === "king_cromo" ? "King Cromo" : "Membro"}</strong>
+                  </div>
                 </div>
                 <ChevronDown size={16} />
               </button>
@@ -1728,6 +2619,21 @@ export default function AdminPage() {
                           </label>
                         ) : (
                           <strong>{registeredUser.is_admin ? "Admin" : "Utilizador"}</strong>
+                        )}
+                      </div>
+                      <div className="admin-user-field compact">
+                        <span>Estatuto</span>
+                        {editingUserId === registeredUser.id ? (
+                          <select
+                            className="admin-table-input"
+                            value={userDraft.status}
+                            onChange={(e) => setUserDraft((prev) => ({ ...prev, status: e.target.value as "member" | "king_cromo" }))}
+                          >
+                            <option value="member">Membro</option>
+                            <option value="king_cromo">King Cromo</option>
+                          </select>
+                        ) : (
+                          <strong>{registeredUser.status === "king_cromo" ? "King Cromo" : "Membro"}</strong>
                         )}
                       </div>
                       {editingUserId === registeredUser.id && (

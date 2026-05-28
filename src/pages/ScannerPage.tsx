@@ -250,7 +250,13 @@ function getStickerTeamName(stickerName: string) {
   return stickerName.includes(" - ") ? stickerName.split(" - ")[0].trim() : "Cromos";
 }
 
+function isWorldAlbumSpecialSticker(sticker: Sticker) {
+  const teamName = getStickerTeamName(sticker.name);
+  return sticker.collection_id === WORLD_ALBUM_COLLECTION_ID && (teamName === "FWC" || teamName === "CC");
+}
+
 function getAlbumTeamOrder(sticker: Sticker) {
+  if (isWorldAlbumSpecialSticker(sticker)) return 0;
   return Math.floor((sticker.number - 1) / 20) + 1;
 }
 
@@ -280,6 +286,9 @@ function getFlagUrl(flagCode: string) {
 }
 
 function getAlbumLocalNumber(sticker: Sticker) {
+  const teamName = getStickerTeamName(sticker.name);
+  if (sticker.collection_id === WORLD_ALBUM_COLLECTION_ID && teamName === "FWC") return sticker.number - 960;
+  if (sticker.collection_id === WORLD_ALBUM_COLLECTION_ID && teamName === "CC") return sticker.number - 979;
   const slot = ((sticker.number - 1) % 20) + 1;
   if (sticker.name.includes("Escudo")) return 1;
   if (sticker.name.includes("Foto de equipa")) return 13;

@@ -85,7 +85,6 @@ export default function StickerCard({
     }
 
     setPressed(true);
-    vibrateOnStickerAction();
     pressTimeoutRef.current = window.setTimeout(() => {
       setPressed(false);
       pressTimeoutRef.current = null;

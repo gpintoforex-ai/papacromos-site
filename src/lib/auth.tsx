@@ -23,9 +23,14 @@ interface UserProfile {
   region: string | null;
   city: string | null;
   avatar_seed: string;
+  status: "member" | "king_cromo";
   is_admin: boolean;
   is_blocked: boolean;
   created_at: string | null;
+}
+
+function normalizeProfileStatus(status: unknown): UserProfile["status"] {
+  return status === "king_cromo" ? "king_cromo" : "member";
 }
 
 interface SignUpProfile {
@@ -230,17 +235,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile({ ...profile, phone: cleanPhone, region: cleanRegion, city: cleanCity });
   };
 
-  const createOrUpdateProfile = async (currentUser: User) => {
+  const createOrUpdateProfile = async (currentUser: User): Promise<UserProfile> => {
     const userId = currentUser.id;
     const metadata = currentUser.user_metadata || {};
     const email = currentUser.email || "";
 
     let supportsNameFields = true;
     let supportsRegionField = true;
+    let supportsStatusField = true;
     let existing: any = null;
     const { data: selectedProfile, error: profileSelectError } = await supabase
       .from("user_profiles")
-      .select("id, first_name, last_name, username, email, phone, region, city, avatar_seed, is_admin, is_blocked, created_at")
+      .select("id, first_name, last_name, username, email, phone, region, city, avatar_seed, status, is_admin, is_blocked, created_at")
       .eq("id", userId)
       .maybeSingle();
     existing = selectedProfile;
@@ -248,11 +254,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (profileSelectError) {
       const message = String(profileSelectError.message || "").toLowerCase();
       const unknownColumnMissing = profileSelectError.code === "42703" || profileSelectError.code === "PGRST204";
-      const optionalFieldMissing = unknownColumnMissing || message.includes("first_name") || message.includes("last_name") || message.includes("region");
+      const optionalFieldMissing = unknownColumnMissing || message.includes("first_name") || message.includes("last_name") || message.includes("region") || message.includes("status");
       if (!optionalFieldMissing) throw profileSelectError;
 
       supportsNameFields = !unknownColumnMissing && !message.includes("first_name") && !message.includes("last_name");
       supportsRegionField = !unknownColumnMissing && !message.includes("region");
+      supportsStatusField = !unknownColumnMissing && !message.includes("status");
       const fallbackFields = [
         "id",
         ...(supportsNameFields ? ["first_name", "last_name"] : []),
@@ -262,6 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...(supportsRegionField ? ["region"] : []),
         "city",
         "avatar_seed",
+        ...(supportsStatusField ? ["status"] : []),
         "is_admin",
         "is_blocked",
         "created_at",
@@ -284,6 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const region = String(metadata.region || (supportsRegionField ? existing?.region : "") || "").trim();
     const city = String(metadata.city || existing?.city || "").trim();
     const avatarSeed = username;
+    const status = normalizeProfileStatus(supportsStatusField ? existing?.status : "member");
     const isAdmin = Boolean(existing?.is_admin) || isBootstrapAdmin(email);
     const isBlocked = Boolean(existing?.is_blocked);
 
@@ -330,6 +339,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         region,
         city,
         avatar_seed: avatarSeed,
+        status: "member",
         is_admin: isAdmin,
         is_blocked: false,
         created_at: insertedProfile?.created_at || null,
@@ -368,6 +378,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       region,
       city,
       avatar_seed: existing.avatar_seed || avatarSeed,
+      status,
       is_admin: isAdmin,
       is_blocked: isBlocked,
       created_at: existing.created_at || null,
