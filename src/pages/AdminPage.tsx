@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, Inbox, KeyRound, Mail, MessageSquare, PackagePlus, Pencil, RefreshCw, RotateCcw, Send, Settings, Star, Trash2, UserCheck, UserPlus, Users, Video, X } from "lucide-react";
+import { Activity, ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, Inbox, KeyRound, Mail, MessageSquare, PackagePlus, Pencil, RefreshCw, RotateCcw, Send, Settings, Star, Trash2, UserCheck, UserPlus, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { logAuditEvent } from "../lib/audit";
@@ -99,11 +99,6 @@ interface AdminTradeMessage {
   message: string;
   created_at: string;
   is_read?: boolean;
-}
-
-interface AdminInboxRead {
-  item_key: string;
-  read_key: string;
 }
 
 type AdminStatsPanel = "users" | "new-users" | "activity" | "logins";
@@ -214,6 +209,7 @@ export default function AdminPage() {
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
   const [supportReply, setSupportReply] = useState("");
   const [adminInboxReadKeys, setAdminInboxReadKeys] = useState<string[]>([]);
+  const [adminInboxReadItemKeys, setAdminInboxReadItemKeys] = useState<string[]>([]);
   const [adminInboxArchivedKeys, setAdminInboxArchivedKeys] = useState<string[]>([]);
   const [adminInboxModalOpen, setAdminInboxModalOpen] = useState(false);
   const [adminInboxFilter, setAdminInboxFilter] = useState<AdminInboxFilter>("inbox");
@@ -252,8 +248,6 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
-  const [uploadingLoginHeroVideo, setUploadingLoginHeroVideo] = useState(false);
-  const [loginHeroVideoUrl, setLoginHeroVideoUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -270,10 +264,13 @@ export default function AdminPage() {
     try {
       const stored = localStorage.getItem(`papacromos:admin-inbox-read:${user.id}`);
       setAdminInboxReadKeys(stored ? JSON.parse(stored) : []);
+      const itemStored = localStorage.getItem(`papacromos:admin-inbox-read-items:${user.id}`);
+      setAdminInboxReadItemKeys(itemStored ? JSON.parse(itemStored) : []);
       const archivedStored = localStorage.getItem(`papacromos:admin-inbox-archived:${user.id}`);
       setAdminInboxArchivedKeys(archivedStored ? JSON.parse(archivedStored) : []);
     } catch {
       setAdminInboxReadKeys([]);
+      setAdminInboxReadItemKeys([]);
       setAdminInboxArchivedKeys([]);
     }
   }, [user?.id]);
@@ -297,7 +294,7 @@ export default function AdminPage() {
       setCollections((collectionsRes.data || []) as Collection[]);
       setUsers((usersRes.data || []) as RegisteredUser[]);
       if (profile?.is_admin) {
-        const [auditLogsRes, retentionRes, supportTicketsRes, tradeOffersRes, appSettingsRes] = await Promise.all([
+        const [auditLogsRes, retentionRes, supportTicketsRes, tradeOffersRes] = await Promise.all([
           supabase.rpc("admin_list_audit_logs", { p_limit: 300 }),
           supabase.rpc("admin_get_audit_log_retention_days"),
           supabase
@@ -308,23 +305,15 @@ export default function AdminPage() {
             .from("trade_offers")
             .select("id, from_user_id, to_user_id, status, note, created_at, offered_sticker:stickers!trade_offers_offered_sticker_id_fkey(name, number), requested_sticker:stickers!trade_offers_requested_sticker_id_fkey(name, number)")
             .order("created_at", { ascending: false }),
-          supabase
-            .from("app_settings")
-            .select("key, value")
-            .eq("key", "login_hero_video")
-            .maybeSingle(),
         ]);
 
         if (auditLogsRes.error) throw auditLogsRes.error;
         if (retentionRes.error) throw retentionRes.error;
         if (supportTicketsRes.error) throw supportTicketsRes.error;
         if (tradeOffersRes.error) throw tradeOffersRes.error;
-        if (appSettingsRes.error && !String(appSettingsRes.error.message || "").toLowerCase().includes("app_settings")) throw appSettingsRes.error;
 
         setAuditLogs((auditLogsRes.data || []) as AuditLog[]);
         setAuditRetentionDays(Number(retentionRes.data) || 180);
-        const loginHeroVideoSetting = appSettingsRes.data?.value as { url?: string } | null | undefined;
-        setLoginHeroVideoUrl(typeof loginHeroVideoSetting?.url === "string" ? loginHeroVideoSetting.url : "");
 
         const loadedSupportTickets = (supportTicketsRes.data || []) as SupportTicket[];
         const loadedTradeOffers = ((tradeOffersRes.data || []) as Array<Omit<AdminTradeOffer, "offered_sticker" | "requested_sticker"> & {
@@ -380,21 +369,6 @@ export default function AdminPage() {
         if (loadedSupportTickets.length === 0 && loadedTradeOffers.length === 0) {
           setSelectedSupportTicketId(null);
           setSelectedTradeId(null);
-        }
-
-        if (user?.id) {
-          const { data: inboxReadRows, error: inboxReadsError } = await supabase
-            .from("admin_inbox_reads")
-            .select("item_key, read_key")
-            .eq("admin_user_id", user.id);
-
-          if (!inboxReadsError) {
-            const persistedReadKeys = ((inboxReadRows || []) as AdminInboxRead[]).map((row) => row.read_key);
-            setAdminInboxReadKeys((currentKeys) => Array.from(new Set([...currentKeys, ...persistedReadKeys])));
-            localStorage.setItem(`papacromos:admin-inbox-read:${user.id}`, JSON.stringify(persistedReadKeys));
-          } else if (!String(inboxReadsError.message || "").toLowerCase().includes("admin_inbox_reads")) {
-            throw inboxReadsError;
-          }
         }
       }
     } catch (err: any) {
@@ -629,44 +603,28 @@ export default function AdminPage() {
     setError(null);
     setSuccess(null);
     try {
-      const { error: swapRpcError } = await supabase.rpc("admin_swap_sticker_images", {
-        p_source_sticker_id: sourceSticker.id,
-        p_target_sticker_id: targetSticker.id,
+      const { error: sourceRpcError } = await supabase.rpc("update_sticker_image", {
+        p_sticker_id: sourceSticker.id,
+        p_image_url: targetSticker.image_url || "",
       });
-      if (swapRpcError) {
-        const message = String(swapRpcError.message || "").toLowerCase();
-        const canFallbackToDirectUpdate =
-          message.includes("admin_swap_sticker_images") ||
-          message.includes("function") ||
-          message.includes("schema cache");
+      if (sourceRpcError) throw sourceRpcError;
 
-        if (!canFallbackToDirectUpdate) throw swapRpcError;
-
-        const { error: sourceUpdateError } = await supabase
-          .from("stickers")
-          .update({ image_url: targetSticker.image_url || "" })
-          .eq("id", sourceSticker.id);
-        if (sourceUpdateError) throw sourceUpdateError;
-
-        const { error: targetUpdateError } = await supabase
-          .from("stickers")
-          .update({ image_url: sourceSticker.image_url || "" })
-          .eq("id", targetSticker.id);
-        if (targetUpdateError) throw targetUpdateError;
-
-        await logAuditEvent({
-          action: "admin_sticker_images_swapped",
-          entityType: "collection",
-          entityId: sourceSticker.collection_id,
-          metadata: {
-            source_sticker_id: sourceSticker.id,
-            source_number: sourceSticker.number,
-            target_sticker_id: targetSticker.id,
-            target_number: targetSticker.number,
-            fallback: "direct_update",
-          },
-        });
-      }
+      const { error: targetRpcError } = await supabase.rpc("update_sticker_image", {
+        p_sticker_id: targetSticker.id,
+        p_image_url: sourceSticker.image_url || "",
+      });
+      if (targetRpcError) throw targetRpcError;
+      await logAuditEvent({
+        action: "admin_sticker_images_swapped",
+        entityType: "collection",
+        entityId: sourceSticker.collection_id,
+        metadata: {
+          source_sticker_id: sourceSticker.id,
+          source_number: sourceSticker.number,
+          target_sticker_id: targetSticker.id,
+          target_number: targetSticker.number,
+        },
+      });
 
       await reloadImageSwapStickers(sourceSticker.collection_id);
       setSuccess(`Imagens trocadas entre #${sourceSticker.number} e #${targetSticker.number}.`);
@@ -790,86 +748,6 @@ export default function AdminPage() {
   const clearCollectionCover = () => {
     setDraft((prev) => ({ ...prev, image_url: "" }));
     setSuccess("Foto da capa removida. Guarda a colecao para aplicar.");
-  };
-
-  const saveLoginHeroVideoSetting = async (url: string) => {
-    if (!user?.id) throw new Error("Sessao de admin invalida.");
-
-    const cleanUrl = url.trim();
-    const { error: settingsError } = await supabase
-      .from("app_settings")
-      .upsert({
-        key: "login_hero_video",
-        value: { url: cleanUrl },
-        updated_by: user.id,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "key" });
-
-    if (settingsError) throw settingsError;
-    setLoginHeroVideoUrl(cleanUrl);
-  };
-
-  const uploadLoginHeroVideo = async (file: File | null) => {
-    if (!file || !user?.id) return;
-
-    if (!file.type.startsWith("video/")) {
-      setError("Escolhe um ficheiro de video.");
-      setSuccess(null);
-      return;
-    }
-
-    if (file.size > 50 * 1024 * 1024) {
-      setError("O video deve ter no maximo 50 MB.");
-      setSuccess(null);
-      return;
-    }
-
-    setUploadingLoginHeroVideo(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const extension = file.name.split(".").pop()?.toLowerCase() || "mp4";
-      const filePath = `login/hero-${Date.now()}-${user.id}.${extension}`;
-      const { error: uploadError } = await supabase.storage
-        .from("app-media")
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: true,
-        });
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage.from("app-media").getPublicUrl(filePath);
-      await saveLoginHeroVideoSetting(publicUrlData.publicUrl);
-      await logAuditEvent({
-        action: "admin_login_hero_video_updated",
-        entityType: "app_settings",
-        metadata: { key: "login_hero_video", url: publicUrlData.publicUrl },
-      });
-      setSuccess("Video da pagina principal atualizado.");
-    } catch (err: any) {
-      setError(err.message || "Erro ao carregar video da pagina principal.");
-    } finally {
-      setUploadingLoginHeroVideo(false);
-    }
-  };
-
-  const clearLoginHeroVideo = async () => {
-    setUploadingLoginHeroVideo(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      await saveLoginHeroVideoSetting("");
-      await logAuditEvent({
-        action: "admin_login_hero_video_removed",
-        entityType: "app_settings",
-        metadata: { key: "login_hero_video" },
-      });
-      setSuccess("Video da pagina principal removido. O slider volta a usar a imagem.");
-    } catch (err: any) {
-      setError(err.message || "Erro ao remover video da pagina principal.");
-    } finally {
-      setUploadingLoginHeroVideo(false);
-    }
   };
 
   const startEditingUser = (registeredUser: RegisteredUser) => {
@@ -1358,19 +1236,12 @@ export default function AdminPage() {
     });
 
     if (itemKey) {
-      void supabase
-        .from("admin_inbox_reads")
-        .upsert({
-          admin_user_id: user.id,
-          item_key: itemKey,
-          read_key: readKey,
-          read_at: new Date().toISOString(),
-        }, { onConflict: "admin_user_id,item_key" })
-        .then(({ error: readError }) => {
-          if (readError && !String(readError.message || "").toLowerCase().includes("admin_inbox_reads")) {
-            console.error("Failed to persist admin inbox read state", readError);
-          }
-        });
+      setAdminInboxReadItemKeys((currentKeys) => {
+        if (currentKeys.includes(itemKey)) return currentKeys;
+        const nextKeys = [...currentKeys, itemKey];
+        localStorage.setItem(`papacromos:admin-inbox-read-items:${user.id}`, JSON.stringify(nextKeys));
+        return nextKeys;
+      });
     }
   };
 
@@ -1512,7 +1383,7 @@ export default function AdminPage() {
         preview: latestMessage?.message || "Sem mensagem.",
         updatedAt: latestMessage?.created_at || ticket.updated_at,
         badge: isReview ? "Avaliacao" : isReport ? "Revisao" : "Mensagem",
-        unread: !adminInboxReadKeys.includes(readKey),
+        unread: !adminInboxReadKeys.includes(readKey) && !adminInboxReadItemKeys.includes(`support-${ticket.id}`),
         archived: adminInboxArchivedKeys.includes(readKey),
         supportTicket: ticket,
         tradeConversation: null,
@@ -1534,7 +1405,7 @@ export default function AdminPage() {
         preview: latestMessage.message,
         updatedAt: latestMessage.created_at,
         badge: "Troca",
-        unread: !adminInboxReadKeys.includes(readKey),
+        unread: !adminInboxReadKeys.includes(readKey) && !adminInboxReadItemKeys.includes(`trade-${conversation.trade.id}`),
         archived: adminInboxArchivedKeys.includes(readKey),
         supportTicket: null,
         tradeConversation: conversation,
@@ -1806,44 +1677,6 @@ export default function AdminPage() {
           )}
         </section>
       )}
-
-      <section className="admin-panel admin-login-media-panel">
-        <div className="admin-panel-title">
-          <Video size={18} />
-          <h3>Video da pagina principal</h3>
-        </div>
-        <p className="muted-text">
-          Este video aparece no primeiro slide do ecra de entrada. Usa MP4 ou WebM ate 50 MB.
-        </p>
-        <div className="admin-login-media-actions">
-          <label className="btn btn-ghost admin-upload-btn" htmlFor="login-hero-video-input">
-            <Video size={16} /> {uploadingLoginHeroVideo ? "A carregar video..." : "Carregar video"}
-          </label>
-          <input
-            id="login-hero-video-input"
-            className="sticker-photo-input"
-            type="file"
-            accept="video/mp4,video/webm,video/quicktime"
-            disabled={uploadingLoginHeroVideo}
-            onChange={(event) => {
-              uploadLoginHeroVideo(event.target.files?.[0] || null);
-              event.target.value = "";
-            }}
-          />
-          {loginHeroVideoUrl && (
-            <button className="btn btn-ghost" type="button" onClick={clearLoginHeroVideo} disabled={uploadingLoginHeroVideo}>
-              <X size={16} /> Remover video
-            </button>
-          )}
-        </div>
-        {loginHeroVideoUrl ? (
-          <div className="admin-login-video-preview">
-            <video src={loginHeroVideoUrl} controls muted playsInline />
-          </div>
-        ) : (
-          <p className="muted-text">Sem video carregado. O slider usa a imagem atual.</p>
-        )}
-      </section>
 
       <section className="admin-panel admin-inbox-panel">
         <div className="admin-panel-title admin-inbox-title">
@@ -2281,15 +2114,10 @@ export default function AdminPage() {
               <X size={12} /> Fechar
             </button>
           </div>
-        <p className="muted-text">
-            Arrasta um cromo para cima de outro ou toca em dois cromos seguidos para trocar apenas as imagens. Os numeros, nomes e cromos dos utilizadores nao mudam.
+          <p className="muted-text">
+            Arrasta um cromo para cima de outro para trocar apenas as imagens. Os numeros, nomes e cromos dos utilizadores nao mudam.
             {imageSwapIsWorldAlbum ? " No album Mundial, o numero grande corresponde a selecao e o numero global aparece abaixo." : ""}
           </p>
-          {selectedSwapStickerId && (
-            <p className="success-text admin-image-swap-selection-hint">
-              Cromo selecionado. Toca no cromo de destino para trocar as imagens.
-            </p>
-          )}
           {imageSwapIsWorldAlbum && (
             <div className="admin-image-swap-filter">
               <label>
@@ -2324,7 +2152,6 @@ export default function AdminPage() {
                   key={sticker.id}
                   className={`admin-image-swap-card ${draggedStickerId === sticker.id ? "dragging" : ""} ${selectedSwapStickerId === sticker.id ? "selected" : ""}`}
                   type="button"
-                  data-allow-protected-drag="true"
                   draggable
                   onClick={() => selectStickerForImageSwap(sticker.id)}
                   onDragStart={(event) => {
