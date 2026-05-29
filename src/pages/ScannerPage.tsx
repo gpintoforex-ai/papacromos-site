@@ -54,6 +54,7 @@ interface CodeOcrCanvasInput {
 interface OcrSpaceResponse {
   IsErroredOnProcessing?: boolean;
   ErrorMessage?: string | string[];
+  ErrorDetails?: string | string[];
   ParsedResults?: Array<{ ParsedText?: string }>;
 }
 
@@ -61,6 +62,40 @@ const DATA_PAGE_SIZE = 1000;
 const WORLD_ALBUM_COLLECTION_ID = "b2026000-0000-4000-8000-000000000001";
 const OCR_SPACE_ENDPOINT = "https://api.ocr.space/parse/image";
 const OCR_SPACE_API_KEY = (import.meta.env.VITE_OCR_SPACE_API_KEY || "helloworld").trim();
+
+const normalizeOcrSpaceMessage = (message?: string | string[]) => {
+  if (!message) return "";
+  return Array.isArray(message) ? message.filter(Boolean).join(" ") : message;
+};
+
+const getOcrSpaceErrorMessage = (payload?: OcrSpaceResponse | null, status?: number) => {
+  const rawMessage = [
+    normalizeOcrSpaceMessage(payload?.ErrorMessage),
+    normalizeOcrSpaceMessage(payload?.ErrorDetails),
+  ].filter(Boolean).join(" ");
+  const lowerMessage = rawMessage.toLowerCase();
+
+  if (
+    status === 429 ||
+    /\b(quota|rate|limit|limited|exceeded|maximum|daily|monthly)\b/.test(lowerMessage)
+  ) {
+    return "A cota/limite do OCR avancado foi atingido. Tenta mais tarde ou usa a opcao Manual.";
+  }
+
+  if (
+    status === 401 ||
+    status === 403 ||
+    /\b(api\s*key|apikey|unauthorized|forbidden|permission|invalid key)\b/.test(lowerMessage)
+  ) {
+    return "OCR avancado sem permissao. Confirma a API key do OCR.space e volta a publicar a app.";
+  }
+
+  if (status && status >= 500) {
+    return "OCR avancado temporariamente indisponivel. Tenta novamente mais tarde.";
+  }
+
+  return rawMessage || "OCR avancado nao conseguiu processar a imagem.";
+};
 
 const abbrevToTeam: Record<string, string> = {
   AFS: "Africa do Sul",
@@ -1016,12 +1051,18 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       method: "POST",
       body: formData,
     });
-    if (!response.ok) throw new Error("OCR avancado indisponivel neste momento.");
+    let payload: OcrSpaceResponse | null = null;
+    try {
+      payload = await response.json() as OcrSpaceResponse;
+    } catch {
+      payload = null;
+    }
 
-    const payload = await response.json() as OcrSpaceResponse;
+    if (!response.ok) throw new Error(getOcrSpaceErrorMessage(payload, response.status));
+    if (!payload) throw new Error("OCR avancado devolveu uma resposta invalida.");
+
     if (payload.IsErroredOnProcessing) {
-      const message = Array.isArray(payload.ErrorMessage) ? payload.ErrorMessage.join(" ") : payload.ErrorMessage;
-      throw new Error(message || "OCR avancado nao conseguiu processar a imagem.");
+      throw new Error(getOcrSpaceErrorMessage(payload, response.status));
     }
 
     const text = (payload.ParsedResults || [])
