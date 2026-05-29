@@ -62,6 +62,7 @@ const DATA_PAGE_SIZE = 1000;
 const WORLD_ALBUM_COLLECTION_ID = "b2026000-0000-4000-8000-000000000001";
 const OCR_SPACE_ENDPOINT = "https://api.ocr.space/parse/image";
 const OCR_SPACE_API_KEY = (import.meta.env.VITE_OCR_SPACE_API_KEY || "helloworld").trim();
+const hasConfiguredOcrSpaceApiKey = Boolean(import.meta.env.VITE_OCR_SPACE_API_KEY?.trim());
 
 const normalizeOcrSpaceMessage = (message?: string | string[]) => {
   if (!message) return "";
@@ -1039,6 +1040,10 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
   };
 
   const recognizeWithExternalOcr = async (source: HTMLCanvasElement) => {
+    if (!hasConfiguredOcrSpaceApiKey) {
+      throw new Error("OCR avancado sem API key. Configura VITE_OCR_SPACE_API_KEY no .env e volta a fazer build.");
+    }
+
     const formData = new FormData();
     formData.append("apikey", OCR_SPACE_API_KEY);
     formData.append("base64Image", createExternalOcrImage(source));
