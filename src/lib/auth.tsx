@@ -157,8 +157,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error) throw error;
+    if (!data.user) {
+      throw new Error("Nao foi possivel iniciar sessao. Tenta novamente.");
+    }
+
+    const nextProfile = await createOrUpdateProfile(data.user);
+    setUser(data.user);
+    setProfile(nextProfile);
   };
 
   const signInWithProvider = async (provider: Provider) => {
