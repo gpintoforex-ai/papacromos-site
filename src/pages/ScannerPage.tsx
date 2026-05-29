@@ -1056,6 +1056,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
       method: "POST",
       body: formData,
     });
+
     let payload: OcrSpaceResponse | null = null;
     try {
       payload = await response.json() as OcrSpaceResponse;
@@ -1424,7 +1425,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
         </div>
 
         <div className="scanner-live-actions">
-          <button className="scanner-live-capture scanner-live-disabled-option" type="button" onClick={captureCodeFrame} disabled>
+          <button className="scanner-live-capture" type="button" onClick={captureCodeFrame} disabled={!codeScanning || codeReading || advancedReading}>
             <Camera size={24} /> {codeReading ? "A ler..." : "Capturar e Ler"}
           </button>
           <div className="scanner-live-action-row">
