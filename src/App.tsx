@@ -45,6 +45,9 @@ function AppContent() {
   const [notificationPromptOpen, setNotificationPromptOpen] = useState(false);
   const [notificationPromptBusy, setNotificationPromptBusy] = useState(false);
   const [notificationPromptError, setNotificationPromptError] = useState<string | null>(null);
+  const [locationPromptOpen, setLocationPromptOpen] = useState(false);
+  const [locationPromptBusy, setLocationPromptBusy] = useState(false);
+  const [locationPromptError, setLocationPromptError] = useState<string | null>(null);
   const [reviewPromptOpen, setReviewPromptOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewSuggestion, setReviewSuggestion] = useState("");
@@ -245,6 +248,28 @@ function AppContent() {
   }, [user?.id]);
 
   useEffect(() => {
+    if (!user?.id) {
+      setLocationPromptOpen(false);
+      return;
+    }
+    if (!navigator.geolocation) return;
+
+    const dismissedKey = `papacromos:location-prompt-dismissed:${user.id}`;
+    if (sessionStorage.getItem(dismissedKey) === "true") return;
+
+    if (!("permissions" in navigator) || typeof navigator.permissions.query !== "function") {
+      setLocationPromptOpen(true);
+      return;
+    }
+
+    navigator.permissions.query({ name: "geolocation" as PermissionName })
+      .then((permissionState) => {
+        setLocationPromptOpen(permissionState.state === "prompt");
+      })
+      .catch(() => setLocationPromptOpen(true));
+  }, [user?.id]);
+
+  useEffect(() => {
     if (!user?.id) return;
 
     const openNotificationPermissionPrompt = () => {
@@ -357,6 +382,44 @@ function AppContent() {
     }
     setNotificationPromptOpen(false);
     setNotificationPromptError(null);
+  };
+
+  const allowLocation = async () => {
+    if (!user?.id) return;
+    if (!navigator.geolocation) {
+      setLocationPromptError("Este dispositivo nao permite usar localizacao.");
+      return;
+    }
+
+    setLocationPromptBusy(true);
+    setLocationPromptError(null);
+    try {
+      await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: false,
+          timeout: 7000,
+          maximumAge: 10 * 60 * 1000,
+        });
+      });
+      setLocationPromptOpen(false);
+      await checkNearbyTradeMatchAlert(user.id);
+    } catch (err: any) {
+      if (err?.code === 1) {
+        setLocationPromptError("A localizacao foi bloqueada. Podes ativar nas definicoes do site.");
+      } else {
+        setLocationPromptError("Nao foi possivel obter a tua localizacao agora.");
+      }
+    } finally {
+      setLocationPromptBusy(false);
+    }
+  };
+
+  const dismissLocationPrompt = () => {
+    if (user?.id) {
+      sessionStorage.setItem(`papacromos:location-prompt-dismissed:${user.id}`, "true");
+    }
+    setLocationPromptOpen(false);
+    setLocationPromptError(null);
   };
 
   const dismissReviewPrompt = () => {
@@ -584,6 +647,33 @@ function AppContent() {
                   {notificationPromptBusy ? "A ativar..." : "Permitir notificacoes"}
                 </button>
                 <button className="btn btn-ghost btn-sm" type="button" onClick={dismissNotificationPrompt} disabled={notificationPromptBusy}>
+                  Agora nao
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {locationPromptOpen && !notificationPromptOpen && !reviewPromptOpen && (
+        <div className="account-data-overlay" role="dialog" aria-modal="true" aria-labelledby="location-permission-title">
+          <div className="account-data-modal location-permission-modal">
+            <div className="account-data-header">
+              <div>
+                <h2 id="location-permission-title">Ativar localizacao</h2>
+                <p>Recebe alertas quando estiveres numa cidade com trocas possiveis perto de ti.</p>
+              </div>
+              <button className="header-icon-btn" type="button" onClick={dismissLocationPrompt} title="Fechar" aria-label="Fechar pedido">
+                <span aria-hidden="true">Ã—</span>
+              </button>
+            </div>
+            <div className="location-permission-body">
+              <p>A localizacao e usada apenas para comparar a tua cidade aproximada com matches e parceiros disponiveis.</p>
+              {locationPromptError && <p className="profile-error">{locationPromptError}</p>}
+              <div className="location-permission-actions">
+                <button className="btn btn-primary btn-sm" type="button" onClick={allowLocation} disabled={locationPromptBusy}>
+                  {locationPromptBusy ? "A ativar..." : "Permitir localizacao"}
+                </button>
+                <button className="btn btn-ghost btn-sm" type="button" onClick={dismissLocationPrompt} disabled={locationPromptBusy}>
                   Agora nao
                 </button>
               </div>

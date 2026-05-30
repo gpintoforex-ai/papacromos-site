@@ -91,11 +91,12 @@ async function showLocationMatchNotification(city: string, matchCount: number, u
 
 export async function checkNearbyTradeMatchAlert(userId: string) {
   if (!userId || sessionStorage.getItem(sessionCheckKey) === "true") return;
-  sessionStorage.setItem(sessionCheckKey, "true");
 
   if (!await canCheckLocation()) return;
 
   const location = await getCurrentPosition();
+  sessionStorage.setItem(sessionCheckKey, "true");
+
   const city = await getApproximateCity(location);
   const normalizedCity = normalizeLocation(city);
   if (!normalizedCity) return;

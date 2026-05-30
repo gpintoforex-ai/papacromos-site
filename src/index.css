@@ -874,6 +874,33 @@ textarea {
   gap: 10px;
 }
 
+.location-permission-modal {
+  border-color: rgba(234, 88, 12, 0.24);
+  background: linear-gradient(180deg, rgba(255, 247, 237, 0.98) 0%, var(--bg-elevated) 100%);
+  box-shadow: 0 24px 60px rgba(194, 65, 12, 0.14);
+}
+
+.location-permission-modal h2 {
+  color: #c2410c;
+}
+
+.location-permission-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 16px;
+}
+
+.location-permission-body p {
+  color: #7c2d12;
+}
+
+.location-permission-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .app-review-modal {
   border-color: rgba(20, 184, 166, 0.34);
   background: linear-gradient(180deg, rgba(240, 253, 250, 0.96) 0%, var(--bg-elevated) 100%);
