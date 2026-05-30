@@ -3,6 +3,7 @@ import { Activity, ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, Inbox, Ke
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { logAuditEvent } from "../lib/audit";
+import { flushPushNotificationsInBackground } from "../lib/pushDelivery";
 
 interface Collection {
   id: string;
@@ -1200,6 +1201,7 @@ export default function AdminPage() {
         message: cleanReply,
       });
       if (messageError) throw messageError;
+      flushPushNotificationsInBackground();
 
       const { error: ticketError } = await supabase
         .from("support_tickets")

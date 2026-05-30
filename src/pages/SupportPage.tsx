@@ -3,6 +3,7 @@ import { Flag, LifeBuoy, MessageSquare, RefreshCw, Send } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { logAuditEvent } from "../lib/audit";
+import { flushPushNotificationsInBackground } from "../lib/pushDelivery";
 
 interface SupportTicket {
   id: string;
@@ -201,6 +202,7 @@ export default function SupportPage() {
         message: cleanMessage,
       });
       if (messageError) throw messageError;
+      flushPushNotificationsInBackground();
       await logAuditEvent({
         action: cleanSubject.toLowerCase().includes("reportar") ? "support_user_report_created" : "support_ticket_created",
         entityType: "support_ticket",
@@ -240,6 +242,7 @@ export default function SupportPage() {
         message: cleanReply,
       });
       if (messageError) throw messageError;
+      flushPushNotificationsInBackground();
 
       const nextStatus: SupportTicket["status"] = isAdmin ? "answered" : "open";
       const { error: ticketError } = await supabase
