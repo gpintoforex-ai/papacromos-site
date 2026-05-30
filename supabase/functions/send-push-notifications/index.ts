@@ -39,8 +39,21 @@ const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") || "";
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-if (vapidPublicKey && vapidPrivateKey) {
-  webPush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+function configureWebPush() {
+  if (!vapidPublicKey && !vapidPrivateKey) return { enabled: false, error: "" };
+  if (!vapidPublicKey || !vapidPrivateKey) {
+    return { enabled: false, error: "Missing VAPID_PUBLIC_KEY or VAPID_PRIVATE_KEY" };
+  }
+
+  try {
+    webPush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+    return { enabled: true, error: "" };
+  } catch (error) {
+    return {
+      enabled: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function base64Url(input: string | ArrayBuffer) {
@@ -169,18 +182,29 @@ async function sendToWebSubscription(subscription: WebPushSubscriptionRow, notif
 }
 
 Deno.serve(async () => {
-  if (!supabaseUrl || !serviceRoleKey) {
-    return new Response("Missing push notification environment variables", { status: 500 });
-  }
+  try {
+    if (!supabaseUrl || !serviceRoleKey) {
+      return new Response("Missing push notification environment variables", { status: 500 });
+    }
 
-  const serviceAccount = serviceAccountJson ? JSON.parse(serviceAccountJson) as ServiceAccount : null;
-  const projectId = serviceAccount ? fcmProjectId || serviceAccount.project_id : "";
-  const canSendNativePush = Boolean(serviceAccount && projectId);
-  const canSendWebPush = Boolean(vapidPublicKey && vapidPrivateKey);
+    let serviceAccount: ServiceAccount | null = null;
+    if (serviceAccountJson) {
+      try {
+        serviceAccount = JSON.parse(serviceAccountJson) as ServiceAccount;
+      } catch {
+        return new Response("Invalid FCM_SERVICE_ACCOUNT_JSON", { status: 500 });
+      }
+    }
 
-  if (!canSendNativePush && !canSendWebPush) {
-    return new Response("Missing FCM or Web Push credentials", { status: 500 });
-  }
+    const projectId = serviceAccount ? fcmProjectId || serviceAccount.project_id : "";
+    const canSendNativePush = Boolean(serviceAccount && projectId);
+    const webPushConfig = configureWebPush();
+    const canSendWebPush = webPushConfig.enabled;
+
+    if (!canSendNativePush && !canSendWebPush) {
+      const detail = webPushConfig.error ? `: ${webPushConfig.error}` : "";
+      return new Response(`Missing FCM or Web Push credentials${detail}`, { status: 500 });
+    }
 
   const { data: notifications, error: notificationError } = await supabase
     .from("app_notifications")
@@ -271,5 +295,8 @@ Deno.serve(async () => {
     }
   }
 
-  return Response.json({ processed: notifications?.length || 0, sent, failed });
+    return Response.json({ processed: notifications?.length || 0, sent, failed });
+  } catch (error) {
+    return new Response(error instanceof Error ? error.message : String(error), { status: 500 });
+  }
 });
