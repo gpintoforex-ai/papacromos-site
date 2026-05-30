@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
-import { ChevronDown, Handshake, KeyRound, LifeBuoy, LogOut, Mail, MessageCircle, Moon, QrCode, RefreshCw, ScanLine, Shield, Sun, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
+import { Bell, ChevronDown, Handshake, KeyRound, LifeBuoy, LogOut, Mail, MessageCircle, Moon, QrCode, RefreshCw, ScanLine, Shield, Sun, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
 type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
@@ -113,6 +113,11 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
     setConfirmPassword("");
     setPasswordError(null);
     setPasswordSuccess(null);
+  };
+
+  const requestNotificationPermission = () => {
+    window.dispatchEvent(new CustomEvent("papa-cromos:request-notification-permission"));
+    setProfileOpen(false);
   };
 
   const changePassword = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -286,6 +291,13 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                         }}
                       >
                         <KeyRound size={14} /> Alterar senha
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        type="button"
+                        onClick={requestNotificationPermission}
+                      >
+                        <Bell size={14} /> Ativar notificacoes
                       </button>
                       <button
                         className="btn btn-ghost btn-sm"

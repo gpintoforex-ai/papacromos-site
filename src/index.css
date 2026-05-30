@@ -759,7 +759,7 @@ textarea {
 }
 
 .profile-actions.open .profile-actions-panel {
-  max-height: 180px;
+  max-height: 230px;
   opacity: 1;
   transform: translateY(0);
 }

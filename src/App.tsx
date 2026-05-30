@@ -240,6 +240,41 @@ function AppContent() {
       .catch(() => setNotificationPromptOpen(false));
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const openNotificationPermissionPrompt = () => {
+      const dismissedKey = `papacromos:notification-prompt-dismissed:${user.id}`;
+      sessionStorage.removeItem(dismissedKey);
+      setNotificationPromptError(null);
+
+      getPushPermissionState()
+        .then((permissionState) => {
+          if (permissionState === "granted") {
+            setNotificationPromptOpen(false);
+            return;
+          }
+
+          setNotificationPromptOpen(true);
+          if (permissionState === "denied") {
+            setNotificationPromptError("As notificacoes foram bloqueadas no browser. Ativa nas definicoes do site e tenta novamente.");
+          }
+          if (permissionState === "unsupported") {
+            setNotificationPromptError("As notificacoes nao estao disponiveis neste browser ou falta configurar a chave VAPID no site publicado.");
+          }
+        })
+        .catch(() => {
+          setNotificationPromptOpen(true);
+          setNotificationPromptError("Nao foi possivel verificar as notificacoes neste dispositivo.");
+        });
+    };
+
+    window.addEventListener("papa-cromos:request-notification-permission", openNotificationPermissionPrompt);
+    return () => {
+      window.removeEventListener("papa-cromos:request-notification-permission", openNotificationPermissionPrompt);
+    };
+  }, [user?.id]);
+
   const refreshMessageState = useCallback(async () => {
     await refreshUnreadMessageCount();
     setMessageRefreshKey((key) => key + 1);
