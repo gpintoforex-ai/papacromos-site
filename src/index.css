@@ -848,8 +848,13 @@ textarea {
 }
 
 .notification-permission-modal {
-  border-color: rgba(13, 148, 136, 0.28);
-  background: linear-gradient(180deg, rgba(240, 253, 250, 0.96) 0%, var(--bg-elevated) 100%);
+  border-color: rgba(220, 38, 38, 0.24);
+  background: linear-gradient(180deg, rgba(254, 242, 242, 0.98) 0%, var(--bg-elevated) 100%);
+  box-shadow: 0 24px 60px rgba(185, 28, 28, 0.16);
+}
+
+.notification-permission-modal h2 {
+  color: var(--error);
 }
 
 .notification-permission-body {
@@ -860,7 +865,7 @@ textarea {
 }
 
 .notification-permission-body p {
-  color: var(--text-muted);
+  color: #7f1d1d;
 }
 
 .notification-permission-actions {
