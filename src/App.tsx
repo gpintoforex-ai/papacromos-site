@@ -17,6 +17,7 @@ import { countUniqueRequestedStickers, findUserMatches } from "./lib/matches";
 import { supabase } from "./lib/supabase";
 import { getPushPermissionState, setupPushNotifications } from "./lib/pushNotifications";
 import { flushPushNotificationsInBackground } from "./lib/pushDelivery";
+import { checkNearbyTradeMatchAlert } from "./lib/locationMatchAlerts";
 
 type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
 
@@ -202,6 +203,9 @@ function AppContent() {
     if (!user?.id) return;
 
     flushPushNotificationsInBackground();
+    checkNearbyTradeMatchAlert(user.id).catch((error) => {
+      console.error("Failed to check nearby trade matches", error);
+    });
 
     let cleanup: (() => Promise<void>) | undefined;
     let cancelled = false;
@@ -283,22 +287,29 @@ function AppContent() {
   useEffect(() => {
     if (!user?.id) return;
 
-    const openNotificationTarget = () => {
-      setPage("trades");
+    const openNotificationTarget = (data?: { type?: string }) => {
+      if (data?.type === "location_match") {
+        setPage("matches");
+      } else if (data?.type === "support_message") {
+        setPage("support");
+      } else {
+        setPage("trades");
+      }
       refreshMessageState();
       refreshPendingTradeCount();
     };
     const handleWorkerMessage = (event: MessageEvent) => {
       if (event.data?.type === "push-notification-click") {
-        openNotificationTarget();
+        openNotificationTarget(event.data.data || {});
       }
     };
+    const handleNativeNotificationAction = () => openNotificationTarget();
 
-    window.addEventListener("papa-cromos:open-notifications", openNotificationTarget);
+    window.addEventListener("papa-cromos:open-notifications", handleNativeNotificationAction);
     navigator.serviceWorker?.addEventListener("message", handleWorkerMessage);
 
     return () => {
-      window.removeEventListener("papa-cromos:open-notifications", openNotificationTarget);
+      window.removeEventListener("papa-cromos:open-notifications", handleNativeNotificationAction);
       navigator.serviceWorker?.removeEventListener("message", handleWorkerMessage);
     };
   }, [refreshMessageState, user?.id]);
