@@ -230,6 +230,10 @@ export default function AdminPage() {
   const [pushMessage, setPushMessage] = useState("");
   const [pushScheduledAt, setPushScheduledAt] = useState("");
   const [broadcastPushOpen, setBroadcastPushOpen] = useState(false);
+  const [matchAlertOpen, setMatchAlertOpen] = useState(false);
+  const [matchAlertTitle, setMatchAlertTitle] = useState("Trocas possiveis perto de ti");
+  const [matchAlertMessage, setMatchAlertMessage] = useState("Tens matches disponiveis. Abre a app e combina uma troca.");
+  const [matchAlertScheduledAt, setMatchAlertScheduledAt] = useState("");
   const [imageSwapCollection, setImageSwapCollection] = useState<Collection | null>(null);
   const [imageSwapStickers, setImageSwapStickers] = useState<Sticker[]>([]);
   const [imageSwapTeamFilter, setImageSwapTeamFilter] = useState("");
@@ -903,11 +907,38 @@ export default function AdminPage() {
     setPushScheduledAt("");
   };
 
+  const openMatchAlertComposer = () => {
+    setMatchAlertOpen(true);
+    setMatchAlertTitle("Trocas possiveis perto de ti");
+    setMatchAlertMessage("Tens matches disponiveis. Abre a app e combina uma troca.");
+    setMatchAlertScheduledAt("");
+    setError(null);
+    setSuccess(null);
+  };
+
+  const closeMatchAlertComposer = () => {
+    setMatchAlertOpen(false);
+    setMatchAlertTitle("Trocas possiveis perto de ti");
+    setMatchAlertMessage("Tens matches disponiveis. Abre a app e combina uma troca.");
+    setMatchAlertScheduledAt("");
+  };
+
   const getPushScheduledAtIso = () => {
     if (!pushScheduledAt) return null;
     const date = new Date(pushScheduledAt);
     if (Number.isNaN(date.getTime())) {
       throw new Error("Data/hora de envio invalida.");
+    }
+    return date.toISOString();
+  };
+
+  const getMatchAlertScheduledAtIso = () => {
+    if (!matchAlertScheduledAt) {
+      throw new Error("Define o dia e a hora do alerta de matches.");
+    }
+    const date = new Date(matchAlertScheduledAt);
+    if (Number.isNaN(date.getTime())) {
+      throw new Error("Data/hora do alerta invalida.");
     }
     return date.toISOString();
   };
@@ -1021,6 +1052,53 @@ export default function AdminPage() {
       closeBroadcastPushComposer();
     } catch (err: any) {
       setError(err.message || "Erro ao enviar push.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const scheduleMatchAlerts = async () => {
+    const title = matchAlertTitle.trim();
+    const body = matchAlertMessage.trim();
+
+    if (!title) {
+      setError("Indica o titulo do alerta de matches.");
+      return;
+    }
+
+    if (!body) {
+      setError("Escreve a mensagem do alerta de matches.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const scheduledAt = getMatchAlertScheduledAtIso();
+      if (!window.confirm("Agendar alerta apenas para utilizadores com matches disponiveis?")) {
+        setSaving(false);
+        return;
+      }
+
+      const { data: queued, error: queueError } = await supabase.rpc("admin_queue_match_alert_notifications", {
+        p_title: title,
+        p_body: body,
+        p_scheduled_at: scheduledAt,
+      });
+      if (queueError) throw queueError;
+
+      const queuedCount = Number(queued || 0);
+      await logAuditEvent({
+        action: "admin_match_alert_scheduled",
+        entityType: "push_notification",
+        metadata: { title, body_length: body.length, queued_count: queuedCount, scheduled_at: scheduledAt },
+      });
+
+      setSuccess(`Alerta de matches agendado para ${queuedCount} utilizador(es).`);
+      closeMatchAlertComposer();
+    } catch (err: any) {
+      setError(err.message || "Erro ao agendar alertas de matches.");
     } finally {
       setSaving(false);
     }
@@ -2301,6 +2379,61 @@ export default function AdminPage() {
         <button className="btn btn-primary admin-email-btn" type="button" onClick={sendRepeatedStickersEmail} disabled={saving}>
           <Mail size={16} /> {saving ? "A enviar..." : "Enviar lista de repetidos"}
         </button>
+      </section>
+
+      <section className="admin-panel admin-email-panel">
+        <div className="admin-panel-title">
+          <span>
+            <RefreshCw size={18} />
+            <h3>Alertas de matches</h3>
+          </span>
+          <button className="btn btn-ghost btn-xs" type="button" onClick={openMatchAlertComposer} disabled={saving}>
+            <Send size={12} /> Agendar
+          </button>
+        </div>
+        <p className="muted-text">
+          Agenda um aviso apenas para utilizadores que tenham trocas possiveis. Define o dia e a hora para evitar incomodar fora do momento certo.
+        </p>
+
+        {matchAlertOpen && (
+          <div className="admin-push-composer admin-push-broadcast">
+            <div className="admin-push-composer-title">
+              <strong>Agendar alerta de matches</strong>
+              <button className="btn btn-ghost btn-xs" type="button" onClick={closeMatchAlertComposer} disabled={saving}>
+                <X size={12} /> Fechar
+              </button>
+            </div>
+            <input
+              className="admin-table-input"
+              type="text"
+              value={matchAlertTitle}
+              onChange={(event) => setMatchAlertTitle(event.target.value)}
+              placeholder="Titulo"
+              disabled={saving}
+            />
+            <textarea
+              className="admin-table-input"
+              value={matchAlertMessage}
+              onChange={(event) => setMatchAlertMessage(event.target.value)}
+              placeholder="Mensagem para utilizadores com matches"
+              disabled={saving}
+            />
+            <label className="admin-push-schedule">
+              <span>Dia e hora do aviso</span>
+              <input
+                className="admin-table-input"
+                type="datetime-local"
+                value={matchAlertScheduledAt}
+                onChange={(event) => setMatchAlertScheduledAt(event.target.value)}
+                disabled={saving}
+              />
+              <em>Obrigatorio para nao enviar imediatamente.</em>
+            </label>
+            <button className="btn btn-primary btn-xs" type="button" onClick={scheduleMatchAlerts} disabled={saving}>
+              <Send size={12} /> {saving ? "A guardar..." : "Agendar alerta"}
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="admin-panel admin-users-panel">

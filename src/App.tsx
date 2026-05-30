@@ -313,7 +313,7 @@ function AppContent() {
     if (!user?.id) return;
 
     const openNotificationTarget = (data?: { type?: string }) => {
-      if (data?.type === "location_match") {
+      if (data?.type === "location_match" || data?.type === "match_alert") {
         setPage("matches");
       } else if (data?.type === "support_message") {
         setPage("support");
