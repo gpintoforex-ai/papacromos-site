@@ -8999,7 +8999,7 @@ button.sticker-wikipedia-link {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
@@ -9030,11 +9030,23 @@ button.sticker-wikipedia-link {
 
 .admin-collection-actions em {
   align-self: flex-start;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .admin-collection-settings-toggle {
   width: 100%;
   justify-content: space-between;
+}
+
+.admin-collection-settings-toggle.open {
+  border-color: var(--primary-500);
+  background: rgba(13, 148, 136, 0.08);
+  color: var(--primary-700);
 }
 
 .admin-collection-settings-toggle svg:last-child {
@@ -9056,6 +9068,7 @@ button.sticker-wikipedia-link {
 
 .admin-collection-settings-panel.open {
   max-height: 260px;
+  margin-top: 2px;
   opacity: 1;
   transform: translateY(0);
 }
@@ -9065,6 +9078,10 @@ button.sticker-wikipedia-link {
   width: 100%;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
 }
 
 .admin-collection-action-grid .btn {
@@ -9076,7 +9093,8 @@ button.sticker-wikipedia-link {
 
 .admin-list-row strong {
   color: var(--text-heading);
-  font-size: 14px;
+  font-size: 15px;
+  letter-spacing: 0;
 }
 
 .admin-list-row span,
@@ -9433,6 +9451,7 @@ button.sticker-wikipedia-link {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.86), var(--bg-elevated));
 }
 
 .admin-image-swap-title {
@@ -9456,6 +9475,10 @@ button.sticker-wikipedia-link {
   align-items: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
 }
 
 .admin-image-swap-filter label {
@@ -9477,6 +9500,13 @@ button.sticker-wikipedia-link {
   color: var(--text);
   font-family: var(--sans);
   font-size: 14px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.admin-image-swap-filter select:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
 }
 
 .admin-image-swap-filter span {
@@ -9487,34 +9517,35 @@ button.sticker-wikipedia-link {
 
 .admin-image-swap-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 12px;
 }
 
 .admin-image-swap-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
-  padding: 8px;
+  padding: 9px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--bg-elevated);
   color: var(--text);
   text-align: left;
   cursor: grab;
-  transition: all var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition), opacity var(--transition);
 }
 
 .admin-image-swap-card:hover {
   border-color: var(--primary-500);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .admin-image-swap-card.selected {
   border-color: var(--primary-600);
-  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.2);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.18), var(--shadow-sm);
 }
 
 .admin-image-swap-card.dragging {
@@ -9532,6 +9563,7 @@ button.sticker-wikipedia-link {
   border-radius: var(--radius-sm);
   object-fit: cover;
   background: var(--bg-secondary);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06);
 }
 
 .admin-image-swap-global-number {
@@ -9545,24 +9577,28 @@ button.sticker-wikipedia-link {
 }
 
 .admin-image-swap-card strong {
-  min-height: 34px;
+  min-height: 38px;
   color: var(--text-heading);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 800;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .admin-image-swap-number {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 14px;
+  left: 14px;
   z-index: 1;
-  padding: 3px 7px;
+  min-width: 28px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--primary-700);
+  background: rgba(15, 23, 42, 0.92);
+  color: white;
   font-size: 12px;
   font-weight: 900;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
 }
 
 .admin-user-collection-panel {
@@ -9601,11 +9637,19 @@ button.sticker-wikipedia-link {
 .admin-user-collection-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg-secondary);
+  background: var(--bg-elevated);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+}
+
+.admin-user-collection-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
 }
 
 .admin-user-collection-card-header {
@@ -9623,7 +9667,7 @@ button.sticker-wikipedia-link {
 
 .admin-user-collection-card-header strong {
   color: var(--text-heading);
-  font-size: 14px;
+  font-size: 15px;
   overflow-wrap: anywhere;
 }
 
@@ -9635,13 +9679,16 @@ button.sticker-wikipedia-link {
 }
 
 .admin-user-collection-card-header em {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(13, 148, 136, 0.1);
   color: var(--primary-700);
   font-weight: 800;
   flex-shrink: 0;
 }
 
 .admin-user-collection-progress {
-  height: 6px;
+  height: 8px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--gray-200);
@@ -9661,9 +9708,10 @@ button.sticker-wikipedia-link {
 }
 
 .admin-user-collection-stats span {
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
   color: var(--text);
   font-size: 12px;
   font-weight: 700;
@@ -9677,11 +9725,12 @@ button.sticker-wikipedia-link {
 
 .admin-user-sticker-pill {
   max-width: 100%;
-  padding: 4px 7px;
-  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  border-radius: 999px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.2;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
 }
 
 .admin-user-sticker-pill.have {
