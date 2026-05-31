@@ -1562,7 +1562,7 @@ export default function ScannerPage({ onCollectionChange, onClose }: { onCollect
             <h2 id="scanner-help-title">Como usar o Scanner</h2>
             <ol>
               <li>Aponte a camara para o numero no verso da figurinha que deseja escanear.</li>
-              <li>Quando estiver pronto, toque em Capturar e Ler.</li>
+              <li>Quando estiver pronto, toque em Capturar imagem.</li>
               <li>A figurinha sera marcada na lista quando for identificada.</li>
               <li>Revise os itens detectados. Toque em uma figurinha detectada para remove-la, se necessario.</li>
               <li>Ao finalizar, toque em Adicionar Detectadas para enviar tudo ao seu album.</li>

@@ -4865,6 +4865,7 @@ textarea {
 }
 
 .scanner-live-capture {
+  display: none;
   border: 1px solid rgba(13, 148, 136, 0.22);
   background: var(--primary-50);
   color: var(--primary-800);
