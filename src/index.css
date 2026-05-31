@@ -314,7 +314,13 @@ textarea {
 }
 
 .btn-sm { padding: 6px 12px; font-size: 13px; }
-.btn-xs { padding: 4px 8px; font-size: 12px; border-radius: var(--radius-sm); }
+.btn-xs {
+  min-height: 28px;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 700;
+}
 .btn-icon {
   width: 28px;
   min-width: 28px;
@@ -7231,10 +7237,11 @@ button.sticker-wikipedia-link {
   align-items: end;
   gap: 10px;
   margin: 12px 0;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: rgba(248, 250, 252, 0.72);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.86), var(--bg-elevated));
+  box-shadow: var(--shadow-sm);
 }
 
 .admin-audit-cleanup label {
@@ -7246,13 +7253,20 @@ button.sticker-wikipedia-link {
 }
 
 .admin-audit-cleanup select {
-  min-height: 34px;
-  padding: 7px 9px;
+  min-height: 38px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   color: var(--text);
   font: inherit;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.admin-audit-cleanup select:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
 }
 
 .admin-audit-cleanup > span {
@@ -7266,13 +7280,17 @@ button.sticker-wikipedia-link {
   border-radius: var(--radius);
   background: var(--bg);
   overflow: hidden;
-  transition: border-color var(--transition), box-shadow var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
 }
 
 .admin-audit-group:hover,
 .admin-audit-group.open {
   border-color: rgba(13, 148, 136, 0.24);
   box-shadow: var(--shadow-sm);
+}
+
+.admin-audit-group:hover {
+  transform: translateY(-1px);
 }
 
 .admin-audit-group-trigger {
@@ -7328,20 +7346,23 @@ button.sticker-wikipedia-link {
   display: grid;
   gap: 8px;
   padding: 0 12px 12px;
+  background: linear-gradient(180deg, transparent, rgba(248, 250, 252, 0.72));
 }
 
 .admin-audit-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 4px 12px;
-  padding: 10px;
+  padding: 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
+  transition: border-color var(--transition), box-shadow var(--transition);
 }
 
 .admin-audit-row:hover {
   border-color: var(--border-hover);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
 }
 
 .admin-audit-row div {
@@ -8559,7 +8580,7 @@ button.sticker-wikipedia-link {
   font-family: var(--sans);
   text-align: left;
   cursor: pointer;
-  transition: background var(--transition), box-shadow var(--transition);
+  transition: background var(--transition), box-shadow var(--transition), transform var(--transition);
 }
 
 .admin-mailbox-row:last-child {
@@ -8568,6 +8589,7 @@ button.sticker-wikipedia-link {
 
 .admin-mailbox-row:hover {
   background: rgba(248, 250, 252, 0.92);
+  transform: translateX(2px);
 }
 
 .admin-mailbox-row.unread {
@@ -8670,15 +8692,21 @@ button.sticker-wikipedia-link {
 
 .admin-mailbox-empty {
   margin: 0;
-  padding: 14px;
+  padding: 28px 18px;
+  background:
+    linear-gradient(135deg, rgba(13, 148, 136, 0.08), transparent 42%),
+    var(--bg);
   color: var(--text-muted);
   font-size: 13px;
+  font-weight: 700;
+  text-align: center;
 }
 
 .admin-message-modal {
   width: min(840px, 100%);
   padding: 0;
   overflow: hidden;
+  border: 1px solid rgba(13, 148, 136, 0.18);
 }
 
 .admin-message-modal .admin-inbox-thread {
@@ -8688,22 +8716,26 @@ button.sticker-wikipedia-link {
 .admin-message-notice {
   margin: 0 16px 12px;
   padding: 10px 12px;
-  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
   font-size: 13px;
   font-weight: 700;
 }
 
 .admin-message-notice.info {
+  border-color: var(--border);
   background: var(--bg-secondary);
   color: var(--text-muted);
 }
 
 .admin-message-notice.success {
+  border-color: rgba(16, 185, 129, 0.2);
   background: var(--success-bg);
   color: var(--success);
 }
 
 .admin-message-notice.error {
+  border-color: rgba(239, 68, 68, 0.22);
   background: var(--error-bg);
   color: var(--error);
 }
@@ -9783,12 +9815,29 @@ button.sticker-wikipedia-link {
    ============================================ */
 
 .empty-state {
+  width: min(560px, 100%);
+  margin: 0 auto;
   text-align: center;
-  padding: 64px 24px;
+  padding: 48px 24px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgba(13, 148, 136, 0.08), transparent 46%),
+    var(--bg-elevated);
   color: var(--text-muted);
 }
 
-.empty-icon { font-size: 48px; display: block; margin-bottom: 16px; }
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  border-radius: 999px;
+  background: var(--primary-50);
+  color: var(--primary-700);
+  font-size: 34px;
+}
 
 /* ============================================
    SHARE PAGE
