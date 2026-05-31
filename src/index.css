@@ -8922,12 +8922,13 @@ button.sticker-wikipedia-link {
 .admin-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .admin-form input,
 .admin-form textarea {
   width: 100%;
+  min-height: 44px;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -8935,6 +8936,7 @@ button.sticker-wikipedia-link {
   color: var(--text);
   font-family: var(--sans);
   font-size: 14px;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
 }
 
 .admin-form textarea {
@@ -8946,6 +8948,8 @@ button.sticker-wikipedia-link {
 .admin-form textarea:focus {
   outline: none;
   border-color: var(--primary-400);
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
 }
 
 .admin-cover-preview {
@@ -8969,21 +8973,25 @@ button.sticker-wikipedia-link {
 }
 
 .admin-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  gap: 10px;
 }
 
 .admin-list-row {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
 }
 
-.admin-list-row:last-child {
-  border-bottom: none;
+.admin-list-row:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
 }
 
 .admin-list-row div {
@@ -9094,13 +9102,22 @@ button.sticker-wikipedia-link {
 
 .admin-table-input {
   width: 160px;
-  padding: 6px 8px;
+  min-height: 36px;
+  padding: 7px 9px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
   font-size: 13px;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+
+.admin-table-input:focus {
+  outline: none;
+  border-color: var(--primary-400);
+  background: var(--bg-elevated);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
 }
 
 .admin-check {
@@ -9132,6 +9149,17 @@ button.sticker-wikipedia-link {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+}
+
+.admin-user-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-user-card:has(.admin-user-card-summary.open) {
+  border-color: rgba(13, 148, 136, 0.28);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
 }
 
 .admin-user-card-summary {
@@ -9145,6 +9173,12 @@ button.sticker-wikipedia-link {
   color: var(--text);
   text-align: left;
   cursor: pointer;
+  transition: background var(--transition);
+}
+
+.admin-user-card-summary:hover,
+.admin-user-card-summary.open {
+  background: rgba(240, 253, 250, 0.58);
 }
 
 .admin-user-card-summary > svg {
@@ -9184,8 +9218,10 @@ button.sticker-wikipedia-link {
   flex-direction: column;
   gap: 12px;
   margin: 0 14px 14px;
-  padding-top: 12px;
+  padding: 14px;
   border-top: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
 }
 
 .admin-user-details-grid {
