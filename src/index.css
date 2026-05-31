@@ -3514,7 +3514,7 @@ textarea {
 
 .collection-cover-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr));
   gap: 16px;
 }
 
@@ -3528,6 +3528,7 @@ textarea {
 }
 
 .collection-cover-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -3537,7 +3538,8 @@ textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   cursor: default;
-  transition: all var(--transition);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition), opacity var(--transition);
 }
 
 .collection-cover-card:not(.inactive):hover {
@@ -3573,9 +3575,11 @@ textarea {
 
 .collection-cover-image {
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 4 / 3;
   overflow: hidden;
-  background: var(--bg-secondary);
+  background:
+    linear-gradient(135deg, rgba(13, 148, 136, 0.08), transparent 48%),
+    var(--bg-secondary);
 }
 
 .collection-cover-image img {
@@ -3583,29 +3587,37 @@ textarea {
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform var(--transition-slow);
+}
+
+.collection-cover-card:not(.inactive):hover .collection-cover-image img {
+  transform: scale(1.03);
 }
 
 .collection-cover-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px;
+  gap: 7px;
+  padding: 14px 14px 12px;
 }
 
 .collection-cover-body strong {
   color: var(--text-heading);
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 900;
   line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .collection-cover-body span {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 800;
 }
 
 .collection-cover-progress {
-  height: 5px;
-  margin-top: 4px;
+  height: 7px;
+  margin-top: 2px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--gray-200);
@@ -3615,7 +3627,7 @@ textarea {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--primary-500);
+  background: linear-gradient(90deg, var(--primary-600), var(--primary-400));
 }
 
 .collection-cover-actions {
@@ -3623,12 +3635,12 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 12px 12px;
+  padding: 0 14px 14px;
 }
 
 .collection-status-pill {
   min-width: 0;
-  padding: 4px 8px;
+  padding: 6px 9px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 800;
