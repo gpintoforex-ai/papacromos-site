@@ -6506,12 +6506,14 @@ button.sticker-wikipedia-link {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
-  transition: all var(--transition);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
 }
 
 .match-user-card:hover {
   border-color: var(--border-hover);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
 .match-user-summary {
@@ -6520,7 +6522,7 @@ button.sticker-wikipedia-link {
   justify-content: space-between;
   gap: 14px;
   width: 100%;
-  padding: 14px 16px;
+  padding: 16px;
   border: 0;
   background: transparent;
   text-align: left;
@@ -6575,8 +6577,8 @@ button.sticker-wikipedia-link {
 }
 
 .match-user-counts span {
-  padding: 5px 8px;
-  border-radius: var(--radius-sm);
+  padding: 6px 9px;
+  border-radius: 999px;
   border: 1px solid transparent;
   box-shadow: var(--shadow-sm);
 }
@@ -6619,7 +6621,8 @@ button.sticker-wikipedia-link {
   gap: 14px;
   padding: 16px;
   border-top: 1px solid var(--border);
-  background: var(--bg-secondary);
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.9), var(--bg-secondary));
 }
 
 .match-detail-tabs {
@@ -6662,10 +6665,12 @@ button.sticker-wikipedia-link {
   justify-content: space-between;
   gap: 10px;
   align-items: center;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid rgba(13, 148, 136, 0.22);
   border-radius: var(--radius);
-  background: var(--primary-50);
+  background:
+    linear-gradient(135deg, rgba(13, 148, 136, 0.12), transparent 45%),
+    var(--primary-50);
 }
 
 .match-suggestion-header strong,
@@ -6696,11 +6701,12 @@ button.sticker-wikipedia-link {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .match-suggestion-column.gives {
@@ -6752,19 +6758,20 @@ button.sticker-wikipedia-link {
 .match-sticker-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .match-sticker-option {
   position: relative;
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr) auto;
+  grid-template-columns: 60px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  padding: 8px;
+  padding: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-elevated);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .match-sticker-option.selected {
@@ -6773,8 +6780,8 @@ button.sticker-wikipedia-link {
 }
 
 .match-sticker-option img {
-  width: 54px;
-  height: 70px;
+  width: 60px;
+  height: 78px;
   object-fit: contain;
   border-radius: var(--radius-sm);
   background: var(--bg-secondary);
@@ -6800,13 +6807,15 @@ button.sticker-wikipedia-link {
 .match-sticker-option strong {
   display: block;
   color: var(--text-heading);
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 900;
   line-height: 1.25;
 }
 
 .match-sticker-option span {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .match-quantity-stepper {
@@ -6819,13 +6828,15 @@ button.sticker-wikipedia-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--primary-600);
   color: #fff;
   cursor: pointer;
+  font-weight: 900;
+  box-shadow: var(--shadow-sm);
 }
 
 .match-quantity-stepper button:disabled {
