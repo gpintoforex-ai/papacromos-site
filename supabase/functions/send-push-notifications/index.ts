@@ -206,6 +206,11 @@ Deno.serve(async () => {
       return new Response(`Missing FCM or Web Push credentials${detail}`, { status: 500 });
     }
 
+    const { error: scheduleError } = await supabase.rpc("process_due_match_alert_schedules");
+    if (scheduleError && !scheduleError.message?.toLowerCase().includes("process_due_match_alert_schedules")) {
+      return new Response(scheduleError.message, { status: 500 });
+    }
+
   const { data: notifications, error: notificationError } = await supabase
     .from("app_notifications")
     .select("id, user_id, title, body, data, attempts")

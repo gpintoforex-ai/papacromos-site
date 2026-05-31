@@ -1111,13 +1111,16 @@ export default function AdminPage() {
       if (queueError) throw queueError;
 
       const queuedCount = Number(queued || 0);
+      const recurring = matchAlertWeekdays.length > 0;
       await logAuditEvent({
         action: "admin_match_alert_scheduled",
         entityType: "push_notification",
-        metadata: { title, body_length: body.length, queued_count: queuedCount, scheduled_at: scheduledAt, weekdays: matchAlertWeekdays },
+        metadata: { title, body_length: body.length, target_count: queuedCount, scheduled_at: scheduledAt, weekdays: matchAlertWeekdays, recurring },
       });
 
-      setSuccess(`Alerta de matches agendado para ${queuedCount} utilizador(es).`);
+      setSuccess(recurring
+        ? `Agendamento recorrente guardado. Neste momento existem ${queuedCount} utilizador(es) com matches.`
+        : `Alerta de matches agendado para ${queuedCount} utilizador(es).`);
       closeMatchAlertComposer();
     } catch (err: any) {
       setError(err.message || "Erro ao agendar alertas de matches.");
@@ -2466,10 +2469,10 @@ export default function AdminPage() {
                   </label>
                 ))}
               </div>
-              <em>Se nao escolheres dias, agenda apenas para a data/hora acima. Se escolheres dias, usa a hora indicada e agenda a proxima ocorrencia de cada dia.</em>
+              <em>Se nao escolheres dias, agenda apenas para a data/hora acima. Se escolheres dias, guarda um agendamento recorrente semanal nessa hora.</em>
             </div>
             <button className="btn btn-primary btn-xs" type="button" onClick={scheduleMatchAlerts} disabled={saving}>
-              <Send size={12} /> {saving ? "A guardar..." : "Agendar alerta"}
+              <Send size={12} /> {saving ? "A guardar..." : matchAlertWeekdays.length ? "Guardar recorrencia" : "Agendar alerta"}
             </button>
           </div>
         )}
