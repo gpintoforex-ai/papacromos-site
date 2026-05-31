@@ -8957,7 +8957,9 @@ button.sticker-wikipedia-link {
   gap: 12px;
   padding: 18px;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--bg-elevated), rgba(248, 250, 252, 0.82));
+  background:
+    linear-gradient(135deg, rgba(13, 148, 136, 0.08), transparent 44%),
+    var(--bg-elevated);
 }
 
 .admin-inbox-reader-header div {
@@ -8967,34 +8969,40 @@ button.sticker-wikipedia-link {
 .admin-inbox-reader-header h3 {
   margin: 8px 0 4px;
   font-size: 18px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .admin-inbox-reader-header p {
   color: var(--text-muted);
   font-size: 12px;
+  font-weight: 700;
 }
 
 .admin-inbox-reader-actions {
   display: flex;
   flex-shrink: 0;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .admin-inbox-thread {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   overflow: auto;
   padding: 18px;
-  background: rgba(248, 250, 252, 0.58);
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.82), rgba(240, 253, 250, 0.36));
 }
 
 .admin-inbox-message {
   max-width: 78%;
-  padding: 13px;
+  padding: 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--bg);
   box-shadow: var(--shadow-sm);
 }
@@ -9002,19 +9010,22 @@ button.sticker-wikipedia-link {
 .admin-inbox-message.admin {
   align-self: flex-end;
   border-color: rgba(13, 148, 136, 0.24);
-  background: var(--primary-50);
+  background: linear-gradient(180deg, var(--primary-50), #ffffff);
 }
 
 .admin-inbox-message div {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
 }
 
 .admin-inbox-message strong {
   color: var(--text-heading);
   font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .admin-inbox-message span {
@@ -9026,7 +9037,7 @@ button.sticker-wikipedia-link {
 .admin-inbox-message p {
   margin: 0;
   color: var(--text);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -9036,19 +9047,20 @@ button.sticker-wikipedia-link {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  padding: 14px;
+  padding: 16px;
   border-top: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--bg-elevated);
 }
 
 .admin-inbox-reply textarea.admin-table-input {
   width: 100%;
-  min-height: 88px;
+  min-height: 96px;
   resize: vertical;
 }
 
 .admin-inbox-reply .btn {
   align-self: end;
+  min-height: 42px;
 }
 
 .admin-inbox-monitor-note {
@@ -9057,7 +9069,7 @@ button.sticker-wikipedia-link {
   gap: 8px;
   padding: 12px 14px;
   border-top: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--bg-secondary);
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
