@@ -9116,6 +9116,38 @@ button.sticker-wikipedia-link {
   font-weight: 600;
 }
 
+.admin-match-weekdays {
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-match-weekdays > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-match-weekdays label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 1px solid rgba(13, 148, 136, 0.22);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.admin-match-weekdays em {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+
 .status-active {
   color: var(--primary-700) !important;
 }

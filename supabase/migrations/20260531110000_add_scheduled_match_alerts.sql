@@ -43,7 +43,8 @@ $$;
 CREATE OR REPLACE FUNCTION public.admin_queue_match_alert_notifications(
   p_title text,
   p_body text,
-  p_scheduled_at timestamptz
+  p_scheduled_at timestamptz,
+  p_weekdays int[] DEFAULT NULL
 )
 RETURNS int
 LANGUAGE plpgsql
@@ -52,6 +53,7 @@ SET search_path = public
 AS $$
 DECLARE
   queued_count int;
+  target_schedules timestamptz[];
 BEGIN
   IF NOT public.current_user_is_admin() THEN
     RAISE EXCEPTION 'Admin access required';
@@ -69,6 +71,19 @@ BEGIN
     RAISE EXCEPTION 'Scheduled date is required';
   END IF;
 
+  IF p_weekdays IS NOT NULL AND EXISTS (
+    SELECT 1 FROM unnest(p_weekdays) AS weekday WHERE weekday < 0 OR weekday > 6
+  ) THEN
+    RAISE EXCEPTION 'Weekdays must be between 0 and 6';
+  END IF;
+
+  SELECT COALESCE(array_agg(scheduled_at ORDER BY scheduled_at), ARRAY[p_scheduled_at])
+  INTO target_schedules
+  FROM (
+    SELECT p_scheduled_at + (((weekday - EXTRACT(DOW FROM p_scheduled_at)::int + 7) % 7) || ' days')::interval AS scheduled_at
+    FROM unnest(COALESCE(NULLIF(p_weekdays, ARRAY[]::int[]), ARRAY[EXTRACT(DOW FROM p_scheduled_at)::int])) AS weekday
+  ) schedules;
+
   INSERT INTO app_notifications (user_id, title, body, data, scheduled_at)
   SELECT
     user_profiles.id,
@@ -76,10 +91,12 @@ BEGIN
     trim(p_body),
     jsonb_build_object(
       'type', 'match_alert',
-      'scheduled_by', auth.uid()
+      'scheduled_by', auth.uid(),
+      'weekday', EXTRACT(DOW FROM target_schedule)::int
     ),
-    p_scheduled_at
+    target_schedule
   FROM user_profiles
+  CROSS JOIN unnest(target_schedules) AS target_schedule
   WHERE COALESCE(user_profiles.is_blocked, false) = false
     AND public.user_has_trade_matches(user_profiles.id);
 
@@ -90,6 +107,8 @@ $$;
 
 REVOKE ALL ON FUNCTION public.user_has_trade_matches(uuid) FROM public;
 REVOKE ALL ON FUNCTION public.admin_queue_match_alert_notifications(text, text, timestamptz) FROM public;
+REVOKE ALL ON FUNCTION public.admin_queue_match_alert_notifications(text, text, timestamptz, int[]) FROM public;
 GRANT EXECUTE ON FUNCTION public.admin_queue_match_alert_notifications(text, text, timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_queue_match_alert_notifications(text, text, timestamptz, int[]) TO authenticated;
 
 NOTIFY pgrst, 'reload schema';

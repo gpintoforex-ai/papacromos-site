@@ -112,6 +112,16 @@ const emptyCollection = {
   total_stickers: "24",
 };
 
+const weekdayOptions = [
+  { value: 1, label: "Seg" },
+  { value: 2, label: "Ter" },
+  { value: 3, label: "Qua" },
+  { value: 4, label: "Qui" },
+  { value: 5, label: "Sex" },
+  { value: 6, label: "Sab" },
+  { value: 0, label: "Dom" },
+];
+
 const defaultStickerImage =
   "https://images.pexels.com/photos/46798/the-ball-stadion-football-the-pitch.jpg?auto=compress&cs=tinysrgb&w=400";
 
@@ -234,6 +244,7 @@ export default function AdminPage() {
   const [matchAlertTitle, setMatchAlertTitle] = useState("Trocas possiveis perto de ti");
   const [matchAlertMessage, setMatchAlertMessage] = useState("Tens matches disponiveis. Abre a app e combina uma troca.");
   const [matchAlertScheduledAt, setMatchAlertScheduledAt] = useState("");
+  const [matchAlertWeekdays, setMatchAlertWeekdays] = useState<number[]>([]);
   const [imageSwapCollection, setImageSwapCollection] = useState<Collection | null>(null);
   const [imageSwapStickers, setImageSwapStickers] = useState<Sticker[]>([]);
   const [imageSwapTeamFilter, setImageSwapTeamFilter] = useState("");
@@ -912,6 +923,7 @@ export default function AdminPage() {
     setMatchAlertTitle("Trocas possiveis perto de ti");
     setMatchAlertMessage("Tens matches disponiveis. Abre a app e combina uma troca.");
     setMatchAlertScheduledAt("");
+    setMatchAlertWeekdays([]);
     setError(null);
     setSuccess(null);
   };
@@ -921,6 +933,7 @@ export default function AdminPage() {
     setMatchAlertTitle("Trocas possiveis perto de ti");
     setMatchAlertMessage("Tens matches disponiveis. Abre a app e combina uma troca.");
     setMatchAlertScheduledAt("");
+    setMatchAlertWeekdays([]);
   };
 
   const getPushScheduledAtIso = () => {
@@ -941,6 +954,14 @@ export default function AdminPage() {
       throw new Error("Data/hora do alerta invalida.");
     }
     return date.toISOString();
+  };
+
+  const toggleMatchAlertWeekday = (weekday: number) => {
+    setMatchAlertWeekdays((current) =>
+      current.includes(weekday)
+        ? current.filter((value) => value !== weekday)
+        : [...current, weekday].sort((a, b) => a - b)
+    );
   };
 
   const sendPushMessage = async (registeredUser: RegisteredUser) => {
@@ -1085,6 +1106,7 @@ export default function AdminPage() {
         p_title: title,
         p_body: body,
         p_scheduled_at: scheduledAt,
+        p_weekdays: matchAlertWeekdays.length ? matchAlertWeekdays : null,
       });
       if (queueError) throw queueError;
 
@@ -1092,7 +1114,7 @@ export default function AdminPage() {
       await logAuditEvent({
         action: "admin_match_alert_scheduled",
         entityType: "push_notification",
-        metadata: { title, body_length: body.length, queued_count: queuedCount, scheduled_at: scheduledAt },
+        metadata: { title, body_length: body.length, queued_count: queuedCount, scheduled_at: scheduledAt, weekdays: matchAlertWeekdays },
       });
 
       setSuccess(`Alerta de matches agendado para ${queuedCount} utilizador(es).`);
@@ -2429,6 +2451,23 @@ export default function AdminPage() {
               />
               <em>Obrigatorio para nao enviar imediatamente.</em>
             </label>
+            <div className="admin-match-weekdays" role="group" aria-label="Dias da semana">
+              <span>Dias da semana</span>
+              <div>
+                {weekdayOptions.map((weekday) => (
+                  <label key={weekday.value}>
+                    <input
+                      type="checkbox"
+                      checked={matchAlertWeekdays.includes(weekday.value)}
+                      onChange={() => toggleMatchAlertWeekday(weekday.value)}
+                      disabled={saving}
+                    />
+                    {weekday.label}
+                  </label>
+                ))}
+              </div>
+              <em>Se nao escolheres dias, agenda apenas para a data/hora acima. Se escolheres dias, usa a hora indicada e agenda a proxima ocorrencia de cada dia.</em>
+            </div>
             <button className="btn btn-primary btn-xs" type="button" onClick={scheduleMatchAlerts} disabled={saving}>
               <Send size={12} /> {saving ? "A guardar..." : "Agendar alerta"}
             </button>
