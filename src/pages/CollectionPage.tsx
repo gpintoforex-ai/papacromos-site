@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { getAvatarColor, getAvatarInitial } from "../lib/avatar";
 import StickerCard from "../components/StickerCard";
-import { Search, Camera, ArrowLeft, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, ChevronDown, CircleCheck, CircleHelp, CopyPlus, Album, Images, Trophy, Trash2, X, ExternalLink, Newspaper, CalendarDays, CupSoda } from "lucide-react";
+import { Search, Camera, ArrowLeft, Mic, ClipboardCheck, Eye, EyeOff, ScanLine, ChevronLeft, ChevronRight, ChevronDown, CircleCheck, CircleHelp, CopyPlus, Album, Images, Trophy, Trash2, X, ExternalLink, Newspaper, CalendarDays, CupSoda, MapPin } from "lucide-react";
 
 interface Collection {
   id: string;
@@ -40,6 +40,7 @@ interface NeededStickerHolder {
   userId: string;
   username: string;
   avatarSeed: string;
+  city: string;
   count: number;
   sampleStickers: Sticker[];
 }
@@ -1193,7 +1194,7 @@ async function fetchNeededStickerHolders(userId: string, missingStickers: Sticke
 
   const { data: profiles, error: profilesError } = await supabase
     .from("user_profiles")
-    .select("id, username, avatar_seed")
+    .select("id, username, avatar_seed, city")
     .in("id", rankedHolders.map((holder) => holder.userId));
 
   if (profilesError) throw profilesError;
@@ -1207,6 +1208,7 @@ async function fetchNeededStickerHolders(userId: string, missingStickers: Sticke
       userId: holder.userId,
       username: profile?.username || "Colecionador",
       avatarSeed: profile?.avatar_seed || holder.userId,
+      city: profile?.city || "",
       count: holder.count,
       sampleStickers: holder.stickerIds
         .map((stickerId) => stickerById.get(stickerId))
@@ -3058,6 +3060,10 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
                     </div>
                     <div className="needed-user-copy">
                       <strong>{holder.username}</strong>
+                      <small className="needed-user-city">
+                        <MapPin size={12} aria-hidden="true" />
+                        {holder.city || "Cidade por definir"}
+                      </small>
                       <span>Tem {holder.count} {holder.count === 1 ? "cromo" : "cromos"} que precisas!</span>
                       {holder.sampleStickers.length > 0 && (
                         <small className="needed-sticker-codes">
