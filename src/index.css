@@ -7222,7 +7222,7 @@ button.sticker-wikipedia-link {
 
 .admin-audit-list {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .admin-audit-cleanup {
@@ -7231,10 +7231,10 @@ button.sticker-wikipedia-link {
   align-items: end;
   gap: 10px;
   margin: 12px 0;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: rgba(248, 250, 252, 0.72);
 }
 
 .admin-audit-cleanup label {
@@ -7266,6 +7266,13 @@ button.sticker-wikipedia-link {
   border-radius: var(--radius);
   background: var(--bg);
   overflow: hidden;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.admin-audit-group:hover,
+.admin-audit-group.open {
+  border-color: rgba(13, 148, 136, 0.24);
+  box-shadow: var(--shadow-sm);
 }
 
 .admin-audit-group-trigger {
@@ -7283,7 +7290,7 @@ button.sticker-wikipedia-link {
 }
 
 .admin-audit-group-trigger:hover {
-  background: var(--bg-soft);
+  background: rgba(240, 253, 250, 0.52);
 }
 
 .admin-audit-group-trigger div {
@@ -7297,7 +7304,7 @@ button.sticker-wikipedia-link {
 
 .admin-audit-group-trigger strong {
   color: var(--text-heading);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .admin-audit-group-trigger span,
@@ -7319,7 +7326,7 @@ button.sticker-wikipedia-link {
 
 .admin-audit-group-body {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   padding: 0 12px 12px;
 }
 
@@ -7331,6 +7338,10 @@ button.sticker-wikipedia-link {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
+}
+
+.admin-audit-row:hover {
+  border-color: var(--border-hover);
 }
 
 .admin-audit-row div {
@@ -8530,6 +8541,7 @@ button.sticker-wikipedia-link {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
+  box-shadow: var(--shadow-sm);
 }
 
 .admin-mailbox-row {
@@ -8538,8 +8550,8 @@ button.sticker-wikipedia-link {
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 48px;
-  padding: 8px 12px;
+  min-height: 56px;
+  padding: 10px 12px;
   border: 0;
   border-bottom: 1px solid var(--border);
   background: transparent;
@@ -8547,6 +8559,7 @@ button.sticker-wikipedia-link {
   font-family: var(--sans);
   text-align: left;
   cursor: pointer;
+  transition: background var(--transition), box-shadow var(--transition);
 }
 
 .admin-mailbox-row:last-child {
@@ -8554,11 +8567,11 @@ button.sticker-wikipedia-link {
 }
 
 .admin-mailbox-row:hover {
-  background: var(--bg-secondary);
+  background: rgba(248, 250, 252, 0.92);
 }
 
 .admin-mailbox-row.unread {
-  background: rgba(240, 253, 250, 0.72);
+  background: rgba(240, 253, 250, 0.86);
   box-shadow: inset 3px 0 0 var(--primary);
 }
 
@@ -8576,7 +8589,7 @@ button.sticker-wikipedia-link {
 
 .admin-mailbox-row strong {
   color: var(--text-heading);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
 }
 
@@ -8607,6 +8620,7 @@ button.sticker-wikipedia-link {
   border-radius: var(--radius-sm);
   background: var(--primary-50);
   color: var(--primary-700);
+  box-shadow: inset 0 0 0 1px rgba(13, 148, 136, 0.12);
 }
 
 .admin-mailbox-type.trade {
@@ -8664,6 +8678,7 @@ button.sticker-wikipedia-link {
 .admin-message-modal {
   width: min(840px, 100%);
   padding: 0;
+  overflow: hidden;
 }
 
 .admin-message-modal .admin-inbox-thread {
@@ -8805,8 +8820,9 @@ button.sticker-wikipedia-link {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px;
+  padding: 18px;
   border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg-elevated), rgba(248, 250, 252, 0.82));
 }
 
 .admin-inbox-reader-header div {
@@ -8835,15 +8851,17 @@ button.sticker-wikipedia-link {
   flex-direction: column;
   gap: 10px;
   overflow: auto;
-  padding: 16px;
+  padding: 18px;
+  background: rgba(248, 250, 252, 0.58);
 }
 
 .admin-inbox-message {
   max-width: 78%;
-  padding: 12px;
+  padding: 13px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg);
+  box-shadow: var(--shadow-sm);
 }
 
 .admin-inbox-message.admin {
@@ -8861,7 +8879,7 @@ button.sticker-wikipedia-link {
 
 .admin-inbox-message strong {
   color: var(--text-heading);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .admin-inbox-message span {
