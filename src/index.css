@@ -3436,6 +3436,7 @@ textarea {
   color: var(--text);
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
   transition: all var(--transition);
 }
 
@@ -3453,6 +3454,13 @@ textarea {
   object-fit: contain;
   object-position: center;
   background: var(--bg-secondary);
+}
+
+.collection-home-mini-card.album-player img {
+  object-fit: cover;
+  object-position: center top;
+  transform: scale(1.2);
+  transform-origin: center top;
 }
 
 .collection-home-mini-card.preview-watermark::after {

@@ -2962,6 +2962,12 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
       </div>
     </>
   );
+  const getHomeMiniCardClassName = (sticker: Sticker, extraClass = "") => [
+    "collection-home-mini-card",
+    extraClass,
+    isWorldAlbumSticker(sticker) ? "preview-watermark" : "",
+    isWorldAlbumSticker(sticker) && isWorldAlbumPlayerSticker(sticker) ? "album-player" : "",
+  ].filter(Boolean).join(" ");
 
   if (loading) return <div className="loading">A carregar colecao...</div>;
 
@@ -3027,7 +3033,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
             </div>
             <CollectionHomeCarousel itemCount={ownedPreviewStickers.length} emptyText="Ainda nao marcaste cromos como teus.">
               {ownedPreviewStickers.map(({ userSticker, sticker }) => (
-                <button className={`collection-home-mini-card ${isWorldAlbumSticker(sticker) ? "preview-watermark" : ""}`} key={userSticker.id} type="button" onClick={() => openStickerCollection(sticker)}>
+                <button className={getHomeMiniCardClassName(sticker)} key={userSticker.id} type="button" onClick={() => openStickerCollection(sticker)}>
                   <img src={getStickerImageSource(sticker)} alt={getStickerDisplayName(sticker)} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
                   <strong>{getStickerDisplayName(sticker)}</strong>
                   {userSticker.quantity > 1 && <em>{userSticker.quantity}</em>}
@@ -3169,7 +3175,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           </div>
           <CollectionHomeCarousel itemCount={missingPreviewStickers.length} emptyText="Sem cromos em falta nas colecoes ativas.">
             {missingPreviewStickers.map((sticker) => (
-              <button className={`collection-home-mini-card ${isWorldAlbumSticker(sticker) ? "preview-watermark" : ""}`} key={sticker.id} type="button" onClick={() => openMissingStickerCollection(sticker)}>
+              <button className={getHomeMiniCardClassName(sticker)} key={sticker.id} type="button" onClick={() => openMissingStickerCollection(sticker)}>
                 <img src={getStickerImageSource(sticker)} alt={getStickerDisplayName(sticker)} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
                 <strong>{getStickerDisplayName(sticker)}</strong>
               </button>
@@ -3184,7 +3190,7 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           </div>
           <CollectionHomeCarousel itemCount={repeatedPreviewStickers.length} emptyText="Ainda nao tens repetidos.">
             {repeatedPreviewStickers.map(({ userSticker, sticker }) => (
-              <button className={`collection-home-mini-card repeated ${isWorldAlbumSticker(sticker) ? "preview-watermark" : ""}`} key={userSticker.id} type="button" onClick={() => openRepeatedStickerCollection(sticker)}>
+              <button className={getHomeMiniCardClassName(sticker, "repeated")} key={userSticker.id} type="button" onClick={() => openRepeatedStickerCollection(sticker)}>
                 <img src={getStickerImageSource(sticker)} alt={getStickerDisplayName(sticker)} loading="lazy" onError={(event) => applyFallbackImage(event, sticker)} />
                 <strong>{getStickerDisplayName(sticker)}</strong>
                 <em>{Math.max(0, (userSticker.quantity || 0) - 1)}</em>
