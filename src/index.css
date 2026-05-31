@@ -9293,11 +9293,12 @@ button.sticker-wikipedia-link {
 .admin-push-composer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid var(--border);
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(13, 148, 136, 0.2);
   border-radius: var(--radius);
-  background: var(--bg-secondary);
+  background: linear-gradient(180deg, rgba(240, 253, 250, 0.7), var(--bg-elevated));
+  box-shadow: var(--shadow-sm);
 }
 
 .admin-push-composer-title {
@@ -9309,6 +9310,8 @@ button.sticker-wikipedia-link {
 
 .admin-push-composer-title strong {
   color: var(--text-heading);
+  font-size: 14px;
+  font-weight: 900;
 }
 
 .admin-push-composer textarea {
@@ -9319,12 +9322,16 @@ button.sticker-wikipedia-link {
 .admin-push-broadcast {
   margin-bottom: 12px;
   border-color: rgba(13, 148, 136, 0.24);
-  background: var(--primary-50);
+  background: linear-gradient(180deg, var(--primary-50), var(--bg-elevated));
 }
 
 .admin-push-schedule {
   display: grid;
-  gap: 4px;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.56);
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 800;
@@ -9339,7 +9346,11 @@ button.sticker-wikipedia-link {
 
 .admin-match-weekdays {
   display: grid;
-  gap: 6px;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.56);
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 800;
@@ -9355,11 +9366,19 @@ button.sticker-wikipedia-link {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 8px;
+  min-height: 34px;
+  padding: 6px 9px;
   border: 1px solid rgba(13, 148, 136, 0.22);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--bg-elevated);
   color: var(--text);
+  transition: border-color var(--transition), background var(--transition), color var(--transition);
+}
+
+.admin-match-weekdays label:has(input:checked) {
+  border-color: var(--primary-400);
+  background: var(--primary-50);
+  color: var(--primary-800);
 }
 
 .admin-match-weekdays em {
@@ -9381,6 +9400,8 @@ button.sticker-wikipedia-link {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  border-color: rgba(220, 38, 38, 0.22);
+  background: linear-gradient(180deg, rgba(254, 242, 242, 0.62), var(--bg-elevated));
 }
 
 .admin-maintenance-btn {
@@ -9391,6 +9412,17 @@ button.sticker-wikipedia-link {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.86), var(--bg-elevated));
+}
+
+.admin-email-panel .admin-panel-title {
+  margin-bottom: 2px;
+}
+
+.admin-email-panel .muted-text,
+.admin-maintenance-panel .muted-text {
+  max-width: 760px;
+  line-height: 1.5;
 }
 
 .admin-email-btn {
