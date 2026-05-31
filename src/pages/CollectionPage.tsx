@@ -691,7 +691,19 @@ function isGenericSeedStickerImage(imageUrl: string) {
   return imageUrl.startsWith("https://images.pexels.com/");
 }
 
+function getBundledWorldAlbumStickerImage(sticker: Sticker) {
+  if (sticker.collection_id !== WORLD_ALBUM_COLLECTION_ID) return "";
+
+  const teamName = getStickerEffectiveTeamName(sticker);
+  const localNumber = getAlbumLocalNumber(sticker);
+  if (normalizeAbbrev(teamName) !== "JAPAO" || localNumber < 1 || localNumber > 20) return "";
+
+  return `/stickers/japao/japao-${String(localNumber).padStart(2, "0")}.png?v=${stickerAssetVersion}`;
+}
+
 function getStickerImageSource(sticker: Sticker) {
+  const bundledImage = getBundledWorldAlbumStickerImage(sticker);
+  if (bundledImage) return bundledImage;
   if (!sticker.image_url) return getStickerFallbackImage(sticker);
   if (sticker.collection_id === WORLD_ALBUM_COLLECTION_ID && isGenericSeedStickerImage(sticker.image_url)) {
     return getStickerFallbackImage(sticker);
