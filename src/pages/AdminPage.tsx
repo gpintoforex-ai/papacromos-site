@@ -1687,6 +1687,7 @@ export default function AdminPage() {
     setActiveAdminCategory(category);
     if (category !== "messages") setAdminInboxModalOpen(false);
   };
+  const activeAdminCategoryInfo = adminCategories.find((category) => category.id === activeAdminCategory) || adminCategories[0];
 
   const selectedUserCollectionSummaries = collections.map((collection) => {
     const collectionEntries = selectedUserStickers.filter((entry) => entry.stickers?.collection_id === collection.id);
@@ -1776,6 +1777,14 @@ export default function AdminPage() {
           </button>
         ))}
       </nav>
+
+      <div className="admin-category-context">
+        <span>{activeAdminCategoryInfo.icon}</span>
+        <div>
+          <strong>{activeAdminCategoryInfo.label}</strong>
+          <p>{activeAdminCategoryInfo.detail}</p>
+        </div>
+      </div>
 
       <section className="admin-stats-grid" aria-label="Resumo de utilizacao">
         {adminStats.map((stat) => (
