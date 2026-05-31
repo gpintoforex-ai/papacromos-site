@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, Inbox, KeyRound, Mail, MessageSquare, PackagePlus, Pencil, RefreshCw, RotateCcw, Send, Settings, Star, Trash2, UserCheck, UserPlus, Users, X } from "lucide-react";
+import { Activity, ArrowRightLeft, Ban, BookOpen, Camera, ChevronDown, Download, Inbox, KeyRound, Mail, MessageSquare, PackagePlus, Pencil, RefreshCw, RotateCcw, Send, Settings, Star, Trash2, UserCheck, UserPlus, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { logAuditEvent } from "../lib/audit";
@@ -205,6 +205,23 @@ function isDateWithinDays(dateValue: string | null | undefined, days: number) {
   const date = new Date(dateValue);
   if (Number.isNaN(date.getTime())) return false;
   return date.getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
+}
+
+function csvField(value: unknown) {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function downloadTextFile(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 export default function AdminPage() {
@@ -1165,6 +1182,41 @@ export default function AdminPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const exportUserEmails = async () => {
+    const usersWithEmail = users.filter((registeredUser) => registeredUser.email?.trim());
+
+    if (usersWithEmail.length === 0) {
+      setError("Nao existem utilizadores com email para exportar.");
+      return;
+    }
+
+    const header = ["email", "username", "city", "status", "is_admin", "is_blocked", "created_at"];
+    const rows = usersWithEmail.map((registeredUser) => [
+      registeredUser.email,
+      registeredUser.username,
+      registeredUser.city,
+      registeredUser.status,
+      registeredUser.is_admin ? "sim" : "nao",
+      registeredUser.is_blocked ? "sim" : "nao",
+      registeredUser.created_at,
+    ]);
+    const csv = [
+      header.map(csvField).join(","),
+      ...rows.map((row) => row.map(csvField).join(",")),
+    ].join("\n");
+    const dateKey = new Date().toISOString().slice(0, 10);
+
+    downloadTextFile(`papacromos-emails-utilizadores-${dateKey}.csv`, `\ufeff${csv}`, "text/csv;charset=utf-8");
+    setError(null);
+    setSuccess(`Exportados ${usersWithEmail.length} emails de utilizadores.`);
+
+    await logAuditEvent({
+      action: "admin_user_emails_exported",
+      entityType: "user_profiles",
+      metadata: { users_with_email: usersWithEmail.length, total_users: users.length },
+    });
   };
 
   const loadUserCollection = async (registeredUser: RegisteredUser) => {
@@ -2484,9 +2536,14 @@ export default function AdminPage() {
             <Users size={18} />
             <h3>Utilizadores registados</h3>
           </span>
-          <button className="btn btn-ghost btn-xs" type="button" onClick={openBroadcastPushComposer} disabled={saving}>
-            <Send size={12} /> Push global
-          </button>
+          <div className="admin-panel-title-actions">
+            <button className="btn btn-ghost btn-xs" type="button" onClick={exportUserEmails} disabled={saving || users.length === 0}>
+              <Download size={12} /> Exportar emails
+            </button>
+            <button className="btn btn-ghost btn-xs" type="button" onClick={openBroadcastPushComposer} disabled={saving}>
+              <Send size={12} /> Push global
+            </button>
+          </div>
         </div>
 
         {broadcastPushOpen && (

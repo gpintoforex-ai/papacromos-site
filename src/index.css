@@ -8266,9 +8266,18 @@ button.sticker-wikipedia-link {
 .admin-panel-title {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   color: var(--text-heading);
   margin-bottom: 14px;
+}
+
+.admin-panel-title > span,
+.admin-panel-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .admin-panel-title h3 {
