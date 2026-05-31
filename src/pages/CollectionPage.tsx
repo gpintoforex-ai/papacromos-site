@@ -1284,9 +1284,10 @@ interface CollectionPageProps {
   homeKey: number;
   onCollectionChange?: () => void;
   onOpenSharedUser?: (userId: string) => void;
+  onOpenScanner?: () => void;
 }
 
-export default function CollectionPage({ homeKey, onCollectionChange, onOpenSharedUser }: CollectionPageProps) {
+export default function CollectionPage({ homeKey, onCollectionChange, onOpenSharedUser, onOpenScanner }: CollectionPageProps) {
   const { user, profile } = useAuth();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collectionPreferences, setCollectionPreferences] = useState<UserCollectionPreference[]>([]);
@@ -3282,7 +3283,14 @@ export default function CollectionPage({ homeKey, onCollectionChange, onOpenShar
           <button
             className="btn btn-code-toggle btn-sm"
             type="button"
-            onClick={() => setCodePanelOpen((open) => !open)}
+            onClick={() => {
+              if (onOpenScanner) {
+                onOpenScanner();
+                return;
+              }
+
+              setCodePanelOpen((open) => !open);
+            }}
           >
             <ScanLine size={14} /> Ler codigo
           </button>

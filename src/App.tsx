@@ -548,6 +548,7 @@ function AppContent() {
               setSharedUserId(userId);
               setPage("share");
             }}
+            onOpenScanner={() => setPage("scanner")}
           />
         )}
         {page === "scanner" && <ScannerPage onCollectionChange={refreshMatchCount} onClose={() => setPage("collection")} />}
