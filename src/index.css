@@ -4093,13 +4093,14 @@ textarea {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   width: min(760px, 100%);
   max-height: min(82vh, 720px);
-  padding: 12px;
+  padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg-elevated);
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.94), var(--bg-elevated));
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
   overflow: auto;
 }
@@ -4365,43 +4366,54 @@ textarea {
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
 }
 
 .scanner-review-header h3 {
   margin: 0;
   color: var(--text-heading);
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 900;
+  line-height: 1.1;
 }
 
 .scanner-review-header p {
   margin: 3px 0 0;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .scanner-review-grid {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .scanner-review-section {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--bg-secondary);
+  overflow: hidden;
 }
 
 .scanner-review-section.new {
   border-color: rgba(34, 197, 94, 0.32);
+  background:
+    linear-gradient(135deg, rgba(34, 197, 94, 0.1), transparent 48%),
+    var(--bg-elevated);
 }
 
 .scanner-review-section.repeated {
   border-color: rgba(245, 158, 11, 0.36);
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.12), transparent 48%),
+    var(--bg-elevated);
 }
 
 .scanner-review-section.repeated h3,
@@ -4412,12 +4424,15 @@ textarea {
 
 .scanner-review-section.unknown {
   border-color: rgba(148, 163, 184, 0.42);
+  background:
+    linear-gradient(135deg, rgba(148, 163, 184, 0.14), transparent 48%),
+    var(--bg-elevated);
 }
 
 .scanner-review-section h3 {
   margin: 0;
   color: var(--text-heading);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 900;
 }
 
@@ -4430,7 +4445,7 @@ textarea {
 
 .scanner-review-section ul {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -4441,9 +4456,12 @@ textarea {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  padding: 10px;
-  border-radius: var(--radius-sm);
+  min-height: 58px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   background: var(--bg);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .scanner-review-section li > div {
@@ -4459,7 +4477,7 @@ textarea {
   display: flex;
   align-items: center;
   min-width: 0;
-  gap: 7px;
+  gap: 9px;
 }
 
 .scanner-review-title-row strong {
@@ -4469,7 +4487,7 @@ textarea {
 .scanner-review-section strong {
   overflow: hidden;
   color: var(--text);
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4483,7 +4501,7 @@ textarea {
 
 .scanner-review-quantity {
   display: grid;
-  gap: 3px;
+  gap: 4px;
   justify-items: center;
   color: var(--text-muted);
   font-size: 11px;
@@ -4491,14 +4509,14 @@ textarea {
 }
 
 .scanner-review-quantity input {
-  width: 64px;
-  min-height: 42px;
+  width: 70px;
+  min-height: 46px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--bg-elevated);
   color: var(--text-heading);
   font: inherit;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 900;
   text-align: center;
   -moz-appearance: textfield;
@@ -4510,6 +4528,8 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  justify-content: flex-end;
+  padding-top: 2px;
 }
 
 .scanner-manual-panel {
