@@ -104,6 +104,7 @@ interface AdminTradeMessage {
 
 type AdminStatsPanel = "users" | "new-users" | "activity" | "logins";
 type AdminInboxFilter = "all" | "inbox" | "archived" | "reviews" | "reports" | "trades";
+type AdminCategory = "overview" | "messages" | "collections" | "users" | "communication" | "system";
 
 const emptyCollection = {
   name: "",
@@ -235,6 +236,7 @@ export default function AdminPage() {
   const [tradeOffers, setTradeOffers] = useState<AdminTradeOffer[]>([]);
   const [tradeMessages, setTradeMessages] = useState<AdminTradeMessage[]>([]);
   const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
+  const [activeAdminCategory, setActiveAdminCategory] = useState<AdminCategory>("overview");
   const [supportReply, setSupportReply] = useState("");
   const [adminInboxReadKeys, setAdminInboxReadKeys] = useState<string[]>([]);
   const [adminInboxReadItemKeys, setAdminInboxReadItemKeys] = useState<string[]>([]);
@@ -1673,6 +1675,18 @@ export default function AdminPage() {
     },
   ];
   const activeStatsTitle = adminStats.find((stat) => stat.id === activeStatsPanel)?.label || "";
+  const adminCategories = [
+    { id: "overview" as const, label: "Resumo", detail: "Indicadores", icon: <Activity size={16} /> },
+    { id: "messages" as const, label: "Mensagens", detail: `${adminUnreadInboxItems.length} por ler`, icon: <Inbox size={16} /> },
+    { id: "collections" as const, label: "Colecoes", detail: `${collections.length} ativas`, icon: <PackagePlus size={16} /> },
+    { id: "users" as const, label: "Utilizadores", detail: `${users.length} contas`, icon: <Users size={16} /> },
+    { id: "communication" as const, label: "Comunicacao", detail: "Email e push", icon: <Mail size={16} /> },
+    { id: "system" as const, label: "Sistema", detail: "Auditoria", icon: <Settings size={16} /> },
+  ];
+  const openAdminCategory = (category: AdminCategory) => {
+    setActiveAdminCategory(category);
+    if (category !== "messages") setAdminInboxModalOpen(false);
+  };
 
   const selectedUserCollectionSummaries = collections.map((collection) => {
     const collectionEntries = selectedUserStickers.filter((entry) => entry.stickers?.collection_id === collection.id);
@@ -1733,7 +1747,7 @@ export default function AdminPage() {
   if (loading) return <div className="loading">A carregar admin...</div>;
 
   return (
-    <div className="admin-page">
+    <div className={`admin-page admin-category-${activeAdminCategory}`}>
       <div className="admin-header">
         <div>
           <h2>Admin</h2>
@@ -1746,6 +1760,22 @@ export default function AdminPage() {
 
       {error && <p className="error-text">{error}</p>}
       {success && <p className="success-text">{success}</p>}
+
+      <nav className="admin-category-nav" aria-label="Categorias de administracao">
+        {adminCategories.map((category) => (
+          <button
+            className={activeAdminCategory === category.id ? "active" : ""}
+            key={category.id}
+            type="button"
+            onClick={() => openAdminCategory(category.id)}
+            aria-pressed={activeAdminCategory === category.id}
+          >
+            {category.icon}
+            <span>{category.label}</span>
+            <em>{category.detail}</em>
+          </button>
+        ))}
+      </nav>
 
       <section className="admin-stats-grid" aria-label="Resumo de utilizacao">
         {adminStats.map((stat) => (

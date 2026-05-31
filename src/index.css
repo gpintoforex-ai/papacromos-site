@@ -8113,6 +8113,77 @@ button.sticker-wikipedia-link {
   margin-top: 4px;
 }
 
+.admin-category-nav {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-category-nav button {
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 9px;
+  row-gap: 2px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--sans);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+}
+
+.admin-category-nav button:hover,
+.admin-category-nav button.active {
+  border-color: var(--primary-500);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.admin-category-nav svg {
+  grid-row: 1 / span 2;
+  color: var(--primary-600);
+}
+
+.admin-category-nav span {
+  min-width: 0;
+  color: var(--text-heading);
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-category-nav em {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-page:not(.admin-category-overview) > .admin-stats-grid,
+.admin-page:not(.admin-category-overview) > .admin-stats-results,
+.admin-page:not(.admin-category-messages) > .admin-inbox-panel,
+.admin-page:not(.admin-category-collections) > .admin-grid,
+.admin-page:not(.admin-category-collections) > .admin-image-swap-panel,
+.admin-page:not(.admin-category-users) > .admin-users-panel,
+.admin-page:not(.admin-category-users) > .admin-user-collection-panel,
+.admin-page:not(.admin-category-communication) > .admin-email-panel,
+.admin-page:not(.admin-category-system) > .admin-audit-panel,
+.admin-page:not(.admin-category-system) > .admin-maintenance-panel {
+  display: none;
+}
+
 .admin-grid {
   display: grid;
   grid-template-columns: minmax(min(100%, 280px), 420px) minmax(0, 1fr);
@@ -8266,10 +8337,18 @@ button.sticker-wikipedia-link {
 .admin-panel-title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   color: var(--text-heading);
   margin-bottom: 14px;
+}
+
+.admin-panel-title:has(> button),
+.admin-panel-title:has(> .admin-panel-title-actions),
+.admin-inbox-title,
+.admin-image-swap-title,
+.admin-user-collection-title {
+  justify-content: space-between;
 }
 
 .admin-panel-title > span,
@@ -10860,6 +10939,7 @@ button.sticker-wikipedia-link {
   .admin-header,
   .admin-grid,
   .admin-stats-grid,
+  .admin-category-nav,
   .partners-grid,
   .partner-trade-users {
     grid-template-columns: 1fr;
