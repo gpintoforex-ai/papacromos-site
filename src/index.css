@@ -7116,11 +7116,13 @@ button.sticker-wikipedia-link {
 
 .trade-card {
   position: relative;
-  background: var(--bg-elevated);
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.9), var(--bg-elevated));
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 16px 20px;
-  transition: all var(--transition);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
 }
 
 .trade-floating-message-shortcut {
@@ -7153,6 +7155,7 @@ button.sticker-wikipedia-link {
 .trade-card:hover {
   box-shadow: var(--shadow-md);
   border-color: var(--border-hover);
+  transform: translateY(-1px);
 }
 
 .trade-card-header {
@@ -7166,11 +7169,11 @@ button.sticker-wikipedia-link {
 
 .trade-status {
   font-size: 12px;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: var(--radius-sm);
+  font-weight: 900;
+  padding: 5px 10px;
+  border-radius: 999px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0;
 }
 
 .trade-unread-pill {
@@ -7653,21 +7656,22 @@ button.sticker-wikipedia-link {
 }
 
 .trade-avatar {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-weight: 600;
-  font-size: 12px;
+  font-weight: 900;
+  font-size: 13px;
+  box-shadow: var(--shadow-sm);
 }
 
 .trade-from {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text);
-  font-weight: 500;
+  font-weight: 800;
 }
 
 .trade-card-body {
@@ -7681,17 +7685,18 @@ button.sticker-wikipedia-link {
 .trade-negotiation {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 12px;
   margin-bottom: 12px;
   border-radius: var(--radius);
-  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  background: var(--bg);
 }
 
 .trade-method {
   width: fit-content;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+  border-radius: 999px;
   background: var(--primary-50);
   color: var(--primary-700);
   font-size: 12px;
@@ -7712,12 +7717,13 @@ button.sticker-wikipedia-link {
 
 .trade-sticker-group > strong {
   color: var(--text-heading);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 900;
 }
 
 .trade-sticker-list {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .trade-sticker {
@@ -7725,16 +7731,17 @@ button.sticker-wikipedia-link {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 6px;
+  padding: 9px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .trade-sticker-image-wrap {
   position: relative;
-  width: 52px;
-  height: 52px;
+  width: 60px;
+  height: 60px;
   flex-shrink: 0;
 }
 
@@ -7782,8 +7789,8 @@ button.sticker-wikipedia-link {
 }
 
 .trade-sticker > span {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 800;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -7804,8 +7811,8 @@ button.sticker-wikipedia-link {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
   border-top: 1px solid var(--border);
 }
 
