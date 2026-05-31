@@ -5172,7 +5172,7 @@ textarea {
 
 .sticker-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr));
   gap: 16px;
 }
 
@@ -5182,6 +5182,7 @@ textarea {
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   overflow: visible;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
   transition: border-color var(--transition), box-shadow var(--transition), transform 0.16s ease, background 0.16s ease;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -5667,7 +5668,7 @@ button.sticker-wikipedia-link {
 }
 
 .sticker-card-body {
-  padding: 12px;
+  padding: 13px 12px 11px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -5675,8 +5676,8 @@ button.sticker-wikipedia-link {
 }
 
 .sticker-name {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 800;
   color: var(--text-heading);
   flex: 1;
   min-width: 0;
@@ -5719,18 +5720,18 @@ button.sticker-wikipedia-link {
 
 .sticker-rarity {
   font-size: 11px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-weight: 800;
+  padding: 4px 7px;
+  border-radius: 999px;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0;
 }
 
 .sticker-quantity {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
-  font-weight: 600;
+  font-weight: 800;
 }
 
 .sticker-quantity-controls {
@@ -5738,14 +5739,15 @@ button.sticker-wikipedia-link {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 14px;
-  background: var(--bg-secondary);
+  padding: 11px 14px;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.86), var(--bg-secondary));
   border-top: 1px solid var(--border);
 }
 
 .btn-quantity {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -5755,15 +5757,18 @@ button.sticker-wikipedia-link {
   color: white;
   border: none;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 900;
   flex-shrink: 0;
-  transition: opacity var(--transition);
+  box-shadow: var(--shadow-sm);
+  transition: opacity var(--transition), transform var(--transition), box-shadow var(--transition);
 }
 
 .btn-quantity:hover:not(:disabled) {
   background: var(--primary-600);
   color: white;
   opacity: 0.88;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
 }
 
 .btn-quantity:active:not(:disabled) {
@@ -5777,17 +5782,17 @@ button.sticker-wikipedia-link {
 }
 
 .quantity-display {
-  font-weight: 700;
-  font-size: 16px;
+  font-weight: 900;
+  font-size: 18px;
   color: var(--text-heading);
   min-width: 40px;
   text-align: center;
 }
 
 .sticker-card-actions {
-  padding: 8px 12px 12px;
+  padding: 9px 12px 13px;
   display: flex;
-  gap: 6px;
+  gap: 7px;
   flex-wrap: nowrap;
   align-items: center;
   overflow-x: auto;
@@ -5800,7 +5805,9 @@ button.sticker-wikipedia-link {
 
 .sticker-card-actions .btn-photo {
   flex: 0 0 auto;
-  padding: 4px 8px;
+  min-height: 30px;
+  padding: 5px 9px;
+  font-weight: 800;
   line-height: 1.2;
 }
 
