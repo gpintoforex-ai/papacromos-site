@@ -10777,7 +10777,8 @@ button.sticker-wikipedia-link {
 }
 
 .partner-panel {
-  background: var(--bg-elevated);
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.9), var(--bg-elevated));
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 18px;
@@ -10796,18 +10797,30 @@ button.sticker-wikipedia-link {
 
 .partner-filter input {
   width: 100%;
-  padding: 10px 12px;
+  padding: 11px 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--bg);
   color: var(--text);
+  font: inherit;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.partner-filter input:focus,
+.partner-staff-form select:focus,
+.partner-staff-form input:focus,
+.partner-scan-row input:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
 }
 
 .partner-region {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg-secondary);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
 }
 
 .partner-region-header {
@@ -10815,7 +10828,7 @@ button.sticker-wikipedia-link {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 12px 14px;
+  padding: 14px;
   border: 0;
   background: var(--bg-elevated);
   color: var(--text-heading);
@@ -10854,12 +10867,13 @@ button.sticker-wikipedia-link {
 
 .partner-map {
   position: relative;
-  height: 300px;
+  height: 320px;
   margin: 16px 0;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   background: var(--bg-secondary);
+  box-shadow: var(--shadow-sm);
 }
 
 .partner-leaflet-map {
@@ -10970,15 +10984,23 @@ button.sticker-wikipedia-link {
 .partner-trade-card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px;
-  background: var(--bg-secondary);
+  padding: 15px;
+  background: var(--bg-elevated);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .partner-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   cursor: pointer;
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+}
+
+.partner-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
 }
 
 .partner-card.selected {
@@ -11013,6 +11035,7 @@ button.sticker-wikipedia-link {
 .partner-user-trade strong,
 .partner-trade-card strong {
   color: var(--text-heading);
+  font-weight: 900;
 }
 
 .partner-card span,
@@ -11028,18 +11051,22 @@ button.sticker-wikipedia-link {
 }
 
 .partner-card em {
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--primary-50);
   color: var(--primary-700);
   font-size: 13px;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .partner-staff-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 8px;
-  border-radius: var(--radius-sm);
+  gap: 4px;
+  padding: 10px;
+  border-radius: var(--radius);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
 }
@@ -11094,13 +11121,14 @@ button.sticker-wikipedia-link {
 .partner-staff-form select,
 .partner-staff-form input,
 .partner-scan-row input {
-  padding: 10px 12px;
+  padding: 11px 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--bg-elevated);
   color: var(--text);
   font-family: var(--sans);
   font-size: 14px;
+  transition: border-color var(--transition), box-shadow var(--transition);
 }
 
 .partner-user-search {
