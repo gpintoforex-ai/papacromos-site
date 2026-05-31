@@ -330,7 +330,7 @@ export default function AdminPage() {
       setUsers((usersRes.data || []) as RegisteredUser[]);
       if (profile?.is_admin) {
         const [auditLogsRes, retentionRes, supportTicketsRes, tradeOffersRes] = await Promise.all([
-          supabase.rpc("admin_list_audit_logs", { p_limit: 300 }),
+          supabase.rpc("admin_list_audit_logs", { p_limit: 1000 }),
           supabase.rpc("admin_get_audit_log_retention_days"),
           supabase
             .from("support_tickets")
