@@ -696,9 +696,9 @@ function getBundledWorldAlbumStickerImage(sticker: Sticker) {
 
   const teamName = getStickerEffectiveTeamName(sticker);
   const localNumber = getAlbumLocalNumber(sticker);
-  if (normalizeAbbrev(teamName) !== "JAPAO" || localNumber < 1 || localNumber > 20) return "";
+  if (normalizeAbbrev(teamName) !== "HOLANDA" || localNumber < 1 || localNumber > 20) return "";
 
-  return `/stickers/japao/japao-${String(localNumber).padStart(2, "0")}.png?v=${stickerAssetVersion}`;
+  return `/stickers/holanda/holanda-${String(localNumber).padStart(2, "0")}.png?v=${stickerAssetVersion}`;
 }
 
 function getStickerImageSource(sticker: Sticker) {
