@@ -8162,9 +8162,17 @@ button.sticker-wikipedia-link {
 }
 
 .admin-category-nav {
+  position: sticky;
+  top: 10px;
+  z-index: 8;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
+  margin: -6px;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  background: rgba(248, 250, 252, 0.86);
+  backdrop-filter: blur(10px);
 }
 
 .admin-category-nav button {
@@ -8184,6 +8192,12 @@ button.sticker-wikipedia-link {
   cursor: pointer;
   box-shadow: var(--shadow-sm);
   transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+}
+
+.admin-category-nav button:focus-visible {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.14), var(--shadow-sm);
 }
 
 .admin-category-nav button:hover,
@@ -8419,6 +8433,7 @@ button.sticker-wikipedia-link {
   border-radius: var(--radius-md);
   padding: 20px;
   box-shadow: var(--shadow-sm);
+  scroll-margin-top: 104px;
 }
 
 .admin-panel-title {
@@ -11211,12 +11226,32 @@ button.sticker-wikipedia-link {
   .trade-arrow { transform: translateX(-50%); }
 
   .admin-header,
-  .admin-grid,
   .admin-stats-grid,
-  .admin-category-nav,
+  .admin-grid,
   .partners-grid,
   .partner-trade-users {
     grid-template-columns: 1fr;
+  }
+
+  .admin-category-nav {
+    display: flex;
+    gap: 8px;
+    margin-inline: -12px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .admin-category-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .admin-category-nav button {
+    flex: 0 0 min(220px, 74vw);
+    min-height: 64px;
+    scroll-snap-align: start;
   }
 
   .admin-header,
@@ -11353,6 +11388,38 @@ button.sticker-wikipedia-link {
 
   .app-main {
     padding: 12px 10px 20px;
+  }
+
+  .admin-page {
+    gap: 16px;
+  }
+
+  .admin-header,
+  .admin-panel {
+    padding: 16px;
+  }
+
+  .admin-header h2 {
+    font-size: 21px;
+  }
+
+  .admin-category-context {
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .admin-category-nav {
+    top: 6px;
+  }
+
+  .admin-category-nav button {
+    flex-basis: min(190px, 78vw);
+    min-height: 60px;
+    padding: 10px;
+  }
+
+  .admin-category-nav em {
+    white-space: normal;
   }
 
   .header-inner {
