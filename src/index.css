@@ -9503,17 +9503,29 @@ button.sticker-wikipedia-link {
 }
 
 .admin-push-composer {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid rgba(13, 148, 136, 0.2);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   background: linear-gradient(180deg, rgba(240, 253, 250, 0.7), var(--bg-elevated));
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.admin-push-composer::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--primary-500);
 }
 
 .admin-push-composer-title {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -9531,22 +9543,38 @@ button.sticker-wikipedia-link {
   resize: vertical;
 }
 
+.admin-push-composer > input,
+.admin-push-composer > textarea,
+.admin-push-composer > label,
+.admin-push-composer > button,
+.admin-push-composer > .admin-match-weekdays {
+  position: relative;
+  z-index: 1;
+}
+
 .admin-push-broadcast {
   margin-bottom: 12px;
   border-color: rgba(13, 148, 136, 0.24);
-  background: linear-gradient(180deg, var(--primary-50), var(--bg-elevated));
+  background:
+    linear-gradient(135deg, rgba(13, 148, 136, 0.1), transparent 44%),
+    var(--bg-elevated);
 }
 
 .admin-push-schedule {
   display: grid;
   gap: 6px;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.56);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.68);
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.admin-push-schedule .admin-table-input,
+.admin-match-weekdays .admin-table-input {
+  width: 100%;
 }
 
 .admin-push-schedule em {
@@ -9559,10 +9587,10 @@ button.sticker-wikipedia-link {
 .admin-match-weekdays {
   display: grid;
   gap: 8px;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.56);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.68);
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 800;
@@ -9584,7 +9612,13 @@ button.sticker-wikipedia-link {
   border-radius: 999px;
   background: var(--bg-elevated);
   color: var(--text);
+  font-weight: 800;
+  cursor: pointer;
   transition: border-color var(--transition), background var(--transition), color var(--transition);
+}
+
+.admin-match-weekdays input {
+  accent-color: var(--primary-600);
 }
 
 .admin-match-weekdays label:has(input:checked) {
@@ -9613,18 +9647,37 @@ button.sticker-wikipedia-link {
   flex-direction: column;
   gap: 12px;
   border-color: rgba(220, 38, 38, 0.22);
-  background: linear-gradient(180deg, rgba(254, 242, 242, 0.62), var(--bg-elevated));
+  background:
+    linear-gradient(135deg, rgba(254, 226, 226, 0.72), transparent 44%),
+    var(--bg-elevated);
 }
 
 .admin-maintenance-btn {
   width: fit-content;
+  font-weight: 800;
 }
 
 .admin-email-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.86), var(--bg-elevated));
+  background:
+    linear-gradient(135deg, rgba(13, 148, 136, 0.06), transparent 42%),
+    var(--bg-elevated);
+  overflow: hidden;
+}
+
+.admin-email-panel::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  background: rgba(13, 148, 136, 0.07);
+  pointer-events: none;
 }
 
 .admin-email-panel .admin-panel-title {
@@ -9639,6 +9692,7 @@ button.sticker-wikipedia-link {
 
 .admin-email-btn {
   width: fit-content;
+  font-weight: 800;
 }
 
 .admin-image-swap-panel {
