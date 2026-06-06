@@ -1248,6 +1248,13 @@ textarea {
   font-weight: 800;
 }
 
+.collector-avatar-stage {
+  margin: 0;
+  color: var(--primary-700);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .collector-avatar-upload {
   width: fit-content;
 }

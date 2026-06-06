@@ -42,6 +42,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [avatarSaving, setAvatarSaving] = useState(false);
+  const [avatarStage, setAvatarStage] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -171,6 +172,28 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
     setProfileOpen(false);
   };
 
+  const drawRoundedRect = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+  ) => {
+    const safeRadius = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + safeRadius, y);
+    ctx.lineTo(x + width - safeRadius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+    ctx.lineTo(x + width, y + height - safeRadius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+    ctx.lineTo(x + safeRadius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+    ctx.lineTo(x, y + safeRadius);
+    ctx.quadraticCurveTo(x, y, x + safeRadius, y);
+    ctx.closePath();
+  };
+
   const buildCollectorAvatar = async (file: File): Promise<Blob> => {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const url = URL.createObjectURL(file);
@@ -210,8 +233,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
     const sx = (image.width - size) / 2;
     const sy = (image.height - size) / 2;
     ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(86, 118, 548, 548, 44);
+    drawRoundedRect(ctx, 86, 118, 548, 548, 44);
     ctx.clip();
     ctx.filter = "saturate(1.45) contrast(1.18) brightness(1.04)";
     ctx.drawImage(image, sx, sy, size, size, 86, 118, 548, 548);
@@ -225,7 +247,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
     ctx.strokeRect(70, 102, 580, 580);
 
     ctx.fillStyle = "rgba(255,255,255,0.94)";
-    ctx.roundRect(70, 720, 580, 188, 28);
+    drawRoundedRect(ctx, 70, 720, 580, 188, 28);
     ctx.fill();
 
     ctx.fillStyle = "#134e4a";
@@ -252,16 +274,22 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
 
   const uploadCollectorAvatar = async (file: File | null) => {
     if (!file || !user?.id) return;
-    if (!file.type.startsWith("image/")) {
+    if (file.type && !file.type.startsWith("image/")) {
       setAvatarError("Escolhe uma imagem valida.");
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setAvatarError("A fotografia deve ter menos de 20 MB.");
       return;
     }
 
     setAvatarSaving(true);
+    setAvatarStage("A preparar a fotografia...");
     setAvatarError(null);
     setAvatarSuccess(null);
     try {
       const avatarBlob = await buildCollectorAvatar(file);
+      setAvatarStage("A guardar o cromo...");
       const filePath = `${user.id}/collector-${Date.now()}.png`;
       const { error: uploadError } = await supabase.storage
         .from("collector-avatars")
@@ -273,12 +301,14 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from("collector-avatars").getPublicUrl(filePath);
+      setAvatarStage("A atualizar o perfil...");
       await updateProfileAvatar(data.publicUrl);
       setAvatarSuccess("Cromo de colecionador guardado. Ja pode sair nas saquetas virtuais.");
     } catch (err: any) {
       setAvatarError(err.message || "Nao foi possivel guardar o avatar.");
     } finally {
       setAvatarSaving(false);
+      setAvatarStage(null);
     }
   };
 
@@ -678,6 +708,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                 <p>Tira ou escolhe uma foto. A app cria um avatar/cartao divertido para sair nas saquetas virtuais dos outros colecionadores.</p>
                 {avatarError && <p className="profile-error">{avatarError}</p>}
                 {avatarSuccess && <p className="profile-success">{avatarSuccess}</p>}
+                {avatarStage && <p className="collector-avatar-stage">{avatarStage}</p>}
                 <label className="btn btn-primary btn-sm collector-avatar-upload" htmlFor="collector-avatar-input">
                   <Camera size={15} /> {avatarSaving ? "A criar..." : "Criar com foto"}
                 </label>
@@ -685,7 +716,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                   id="collector-avatar-input"
                   className="sticker-photo-input"
                   type="file"
-                  accept="image/png,image/jpeg,image/webp"
+                  accept="image/*"
                   capture="user"
                   disabled={avatarSaving}
                   onChange={(event) => {
