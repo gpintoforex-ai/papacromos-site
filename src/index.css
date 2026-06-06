@@ -12496,3 +12496,388 @@ button.sticker-wikipedia-link {
     padding: 0 9px 9px;
   }
 }
+
+.daily-pack-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.daily-pack-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
+  gap: 18px;
+  align-items: stretch;
+  padding: 22px;
+  border: 1px solid rgba(13, 148, 136, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(13, 148, 136, 0.13), rgba(245, 158, 11, 0.12)),
+    var(--surface, #ffffff);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.daily-pack-hero-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.daily-pack-hero-copy > span,
+.daily-pack-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary-700);
+  font-weight: 800;
+}
+
+.daily-pack-hero-copy h2,
+.daily-pack-section-title h3,
+.daily-pack-action-panel h3,
+.daily-pack-card-copy h3 {
+  margin: 0;
+  color: var(--gray-900);
+  letter-spacing: 0;
+}
+
+.daily-pack-hero-copy h2 {
+  font-size: clamp(26px, 3vw, 38px);
+  line-height: 1.05;
+}
+
+.daily-pack-hero-copy p,
+.daily-pack-action-panel p,
+.daily-pack-card-copy p {
+  margin: 0;
+  color: var(--gray-600);
+  line-height: 1.5;
+}
+
+.daily-pack-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.daily-pack-stats > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-height: 104px;
+  padding: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.daily-pack-stats strong {
+  color: var(--gray-900);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.daily-pack-stats span {
+  color: var(--gray-500);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.daily-pack-stage {
+  display: grid;
+  grid-template-columns: minmax(280px, 440px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.daily-pack-visual,
+.daily-pack-action-panel,
+.daily-pack-history {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  background: var(--surface, #ffffff);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
+}
+
+.daily-pack-visual {
+  display: grid;
+  place-items: center;
+  min-height: 360px;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.daily-pack-envelope {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  width: min(100%, 300px);
+  min-height: 300px;
+  padding: 28px;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.24), transparent 42%),
+    linear-gradient(135deg, var(--primary-700), var(--accent-500));
+  box-shadow: 0 24px 48px rgba(13, 148, 136, 0.24);
+  cursor: pointer;
+  isolation: isolate;
+}
+
+.daily-pack-envelope:disabled {
+  cursor: wait;
+  opacity: 0.9;
+}
+
+.daily-pack-envelope strong {
+  font-size: 20px;
+}
+
+.daily-pack-envelope em {
+  color: rgba(255, 255, 255, 0.82);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.daily-pack-shine {
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.34), transparent 65%);
+  transform: translateX(-45%) rotate(12deg);
+  animation: dailyPackShine 3.4s ease-in-out infinite;
+  z-index: -1;
+}
+
+.daily-pack-stage.opening .daily-pack-envelope {
+  animation: dailyPackPulse 0.72s ease-in-out infinite alternate;
+}
+
+.daily-pack-loader {
+  animation: spin 1s linear infinite;
+}
+
+.daily-pack-reward {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  width: min(100%, 520px);
+  padding: 18px;
+  border-radius: 8px;
+  border: 1px solid var(--rarity-common-bg);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(249, 250, 251, 0.92));
+}
+
+.daily-pack-reward.rarity-uncommon {
+  border-color: var(--rarity-uncommon-bg);
+}
+
+.daily-pack-reward.rarity-rare {
+  border-color: var(--rarity-rare-bg);
+}
+
+.daily-pack-reward.rarity-legendary {
+  border-color: rgba(245, 158, 11, 0.36);
+  box-shadow: 0 18px 36px rgba(245, 158, 11, 0.14);
+}
+
+.daily-pack-card-image {
+  display: grid;
+  place-items: center;
+  min-height: 206px;
+  border-radius: 8px;
+  background: var(--gray-100);
+}
+
+.daily-pack-card-image img {
+  width: 118px;
+  max-width: 100%;
+  max-height: 186px;
+  object-fit: contain;
+}
+
+.daily-pack-card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.daily-pack-card-copy > span,
+.daily-pack-card-copy > strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+.daily-pack-card-copy > span {
+  padding: 6px 10px;
+  color: var(--primary-800);
+  background: var(--primary-50);
+  font-size: 12px;
+}
+
+.daily-pack-card-copy > strong {
+  margin-top: 4px;
+  padding: 8px 11px;
+  color: #7c2d12;
+  background: var(--accent-100);
+}
+
+.daily-pack-action-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  padding: 22px;
+}
+
+.daily-pack-action-panel .btn {
+  width: fit-content;
+}
+
+.daily-pack-history {
+  padding: 18px;
+}
+
+.daily-pack-section-title {
+  margin-bottom: 12px;
+}
+
+.daily-pack-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.daily-pack-history-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  background: rgba(249, 250, 251, 0.68);
+}
+
+.daily-pack-history-row img {
+  width: 42px;
+  height: 54px;
+  object-fit: contain;
+}
+
+.daily-pack-history-row div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.daily-pack-history-row strong,
+.daily-pack-history-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.daily-pack-history-row strong {
+  color: var(--gray-900);
+}
+
+.daily-pack-history-row span {
+  color: var(--gray-500);
+  font-size: 13px;
+}
+
+.daily-pack-history-row em {
+  color: var(--primary-700);
+  font-style: normal;
+  font-weight: 900;
+}
+
+@keyframes dailyPackShine {
+  0%,
+  60% {
+    transform: translateX(-45%) rotate(12deg);
+  }
+  100% {
+    transform: translateX(45%) rotate(12deg);
+  }
+}
+
+@keyframes dailyPackPulse {
+  from {
+    transform: translateY(0) scale(1);
+  }
+  to {
+    transform: translateY(-4px) scale(1.02);
+  }
+}
+
+@media (max-width: 760px) {
+  .daily-pack-hero,
+  .daily-pack-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-pack-hero {
+    padding: 16px;
+  }
+
+  .daily-pack-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .daily-pack-visual {
+    min-height: 300px;
+    padding: 14px;
+  }
+
+  .daily-pack-envelope {
+    min-height: 250px;
+  }
+
+  .daily-pack-reward {
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .daily-pack-card-image {
+    min-height: 170px;
+  }
+
+  .daily-pack-card-image img {
+    width: 94px;
+    max-height: 154px;
+  }
+
+  .daily-pack-action-panel .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 430px) {
+  .daily-pack-stats,
+  .daily-pack-reward,
+  .daily-pack-history-row {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-pack-history-row img,
+  .daily-pack-card-image {
+    justify-self: center;
+  }
+
+  .daily-pack-history-row em {
+    justify-self: start;
+  }
+}

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
-import { Bell, ChevronDown, Handshake, KeyRound, LifeBuoy, LogOut, Mail, MessageCircle, Moon, QrCode, RefreshCw, ScanLine, Shield, Sun, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
+import { Bell, ChevronDown, Gift, Handshake, KeyRound, LifeBuoy, LogOut, Mail, MessageCircle, Moon, QrCode, RefreshCw, ScanLine, Shield, Sun, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
-type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
+type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "daily-pack" | "support" | "admin";
 type ThemeMode = "light" | "dark";
 
 const themeStorageKey = "papacromos:theme";
@@ -62,6 +62,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
     { page: "trades", label: "Trocas", icon: <Users size={18} />, badge: pendingTradeCount, alert: pendingTradeCount > 0 },
     { page: "share", label: "Partilhar", icon: <QrCode size={18} /> },
     { page: "partners", label: "Parceiros", icon: <Handshake size={18} /> },
+    { page: "daily-pack", label: "Saqueta", icon: <Gift size={18} /> },
     { page: "support", label: "Suporte", icon: <LifeBuoy size={18} /> },
     ...(profile?.is_admin ? [{ page: "admin" as Page, label: "Admin", icon: <Shield size={18} /> }] : []),
   ];

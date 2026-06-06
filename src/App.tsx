@@ -9,6 +9,7 @@ import PartnersPage from "./pages/PartnersPage";
 import SharePage from "./pages/SharePage";
 import SupportPage from "./pages/SupportPage";
 import ScannerPage from "./pages/ScannerPage";
+import DailyPackPage from "./pages/DailyPackPage";
 import CookieConsent from "./components/CookieConsent";
 import InstallAppPrompt from "./components/InstallAppPrompt";
 import ProfileCompletionGate from "./components/ProfileCompletionGate";
@@ -19,7 +20,7 @@ import { getPushPermissionState, setupPushNotifications } from "./lib/pushNotifi
 import { flushPushNotificationsInBackground } from "./lib/pushDelivery";
 import { checkNearbyTradeMatchAlert } from "./lib/locationMatchAlerts";
 
-type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "support" | "admin";
+type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "daily-pack" | "support" | "admin";
 
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -574,6 +575,7 @@ function AppContent() {
         )}
         {page === "share" && <SharePage sharedUserId={sharedUserId} onOpenSharedUser={setSharedUserId} />}
         {page === "partners" && <PartnersPage />}
+        {page === "daily-pack" && <DailyPackPage />}
         {page === "support" && <SupportPage />}
         {page === "admin" && <AdminPage />}
       </Layout>
