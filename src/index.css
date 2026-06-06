@@ -483,10 +483,10 @@ textarea {
   gap: 10px;
   min-width: 0;
   padding: 10px 11px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: var(--text);
+  color: var(--text-muted);
   font: inherit;
   font-weight: 750;
   text-align: left;
@@ -494,11 +494,18 @@ textarea {
 }
 
 .nav-more-menu button:hover,
+.bottom-nav-more-menu button:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--gray-100);
+}
+
 .nav-more-menu button.active,
-.bottom-nav-more-menu button:hover,
 .bottom-nav-more-menu button.active {
   color: var(--primary-700);
-  background: var(--primary-50);
+  border-color: rgba(20, 184, 166, 0.24);
+  background: linear-gradient(180deg, var(--primary-50), var(--bg-elevated));
+  box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.1);
 }
 
 .nav-more-menu button span,
@@ -526,6 +533,16 @@ textarea {
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
+}
+
+:root[data-theme="dark"] .nav-more-menu button:hover,
+:root[data-theme="dark"] .bottom-nav-more-menu button:hover {
+  background: var(--bg-secondary);
+}
+
+:root[data-theme="dark"] .nav-more-menu button.active,
+:root[data-theme="dark"] .bottom-nav-more-menu button.active {
+  background: rgba(13, 148, 136, 0.15);
 }
 
 .nav-badge {
