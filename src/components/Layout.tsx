@@ -43,6 +43,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarStage, setAvatarStage] = useState<string | null>(null);
+  const [avatarRemoving, setAvatarRemoving] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -249,6 +250,38 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
       setAvatarError(err.message || "Nao foi possivel guardar o avatar.");
     } finally {
       setAvatarSaving(false);
+      setAvatarStage(null);
+    }
+  };
+
+  const removeCollectorAvatar = async () => {
+    if (!user?.id || !profile?.avatar_image_url || avatarSaving || avatarRemoving) return;
+    if (!window.confirm("Remover o teu avatar e deixar de o disponibilizar nas novas saquetas virtuais?")) return;
+
+    setAvatarRemoving(true);
+    setAvatarError(null);
+    setAvatarSuccess(null);
+    setAvatarStage("A remover o avatar...");
+    try {
+      const marker = "/storage/v1/object/public/collector-avatars/";
+      const markerIndex = profile.avatar_image_url.indexOf(marker);
+      if (markerIndex >= 0) {
+        const encodedPath = profile.avatar_image_url.slice(markerIndex + marker.length).split("?")[0];
+        const filePath = decodeURIComponent(encodedPath);
+        if (filePath.startsWith(`${user.id}/`)) {
+          const { error: removeError } = await supabase.storage
+            .from("collector-avatars")
+            .remove([filePath]);
+          if (removeError) throw removeError;
+        }
+      }
+
+      await updateProfileAvatar(null);
+      setAvatarSuccess("Avatar removido. Podes criar outro quando quiseres.");
+    } catch (err: any) {
+      setAvatarError(err.message || "Nao foi possivel remover o avatar.");
+    } finally {
+      setAvatarRemoving(false);
       setAvatarStage(null);
     }
   };
@@ -650,16 +683,28 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                 {avatarError && <p className="profile-error">{avatarError}</p>}
                 {avatarSuccess && <p className="profile-success">{avatarSuccess}</p>}
                 {avatarStage && <p className="collector-avatar-stage">{avatarStage}</p>}
-                <label className="btn btn-primary btn-sm collector-avatar-upload" htmlFor="collector-avatar-input">
-                  <Camera size={15} /> {avatarSaving ? "A criar..." : "Criar avatar com IA"}
-                </label>
+                <div className="collector-avatar-actions">
+                  <label className="btn btn-primary btn-sm collector-avatar-upload" htmlFor="collector-avatar-input">
+                    <Camera size={15} /> {avatarSaving ? "A criar..." : profile?.avatar_image_url ? "Criar novo avatar" : "Criar avatar com IA"}
+                  </label>
+                  {profile?.avatar_image_url && (
+                    <button
+                      className="btn btn-danger-soft btn-sm"
+                      type="button"
+                      onClick={removeCollectorAvatar}
+                      disabled={avatarSaving || avatarRemoving}
+                    >
+                      <Trash2 size={15} /> {avatarRemoving ? "A remover..." : "Remover foto"}
+                    </button>
+                  )}
+                </div>
                 <input
                   id="collector-avatar-input"
                   className="sticker-photo-input"
                   type="file"
                   accept="image/*"
                   capture="user"
-                  disabled={avatarSaving}
+                  disabled={avatarSaving || avatarRemoving}
                   onChange={(event) => {
                     uploadCollectorAvatar(event.target.files?.[0] || null);
                     event.currentTarget.value = "";

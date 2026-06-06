@@ -1259,6 +1259,13 @@ textarea {
   width: fit-content;
 }
 
+.collector-avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .account-data-note strong {
   color: var(--text-heading);
   font-size: 14px;
@@ -1677,6 +1684,15 @@ textarea {
   }
 
   .collector-avatar-upload {
+    width: 100%;
+  }
+
+  .collector-avatar-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .collector-avatar-actions .btn {
     width: 100%;
   }
 

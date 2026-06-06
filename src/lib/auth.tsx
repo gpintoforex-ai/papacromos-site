@@ -11,7 +11,7 @@ interface AuthContextType {
   signInWithProvider: (provider: Provider) => Promise<void>;
   signUp: (profile: SignUpProfile) => Promise<SignUpResult>;
   updateProfileDetails: (details: ProfileDetailsUpdate) => Promise<void>;
-  updateProfileAvatar: (imageUrl: string) => Promise<void>;
+  updateProfileAvatar: (imageUrl: string | null) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -245,15 +245,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile({ ...profile, phone: cleanPhone, region: cleanRegion, city: cleanCity });
   };
 
-  const updateProfileAvatar = async (imageUrl: string) => {
+  const updateProfileAvatar = async (imageUrl: string | null) => {
     if (!user?.id || !profile) throw new Error("Sessao invalida.");
 
-    const cleanImageUrl = imageUrl.trim();
+    const cleanImageUrl = imageUrl?.trim() || null;
     const { error } = await supabase
       .from("user_profiles")
       .update({
         avatar_image_url: cleanImageUrl,
-        avatar_card_created_at: new Date().toISOString(),
+        avatar_card_created_at: cleanImageUrl ? new Date().toISOString() : null,
       })
       .eq("id", user.id);
     if (error) throw error;
