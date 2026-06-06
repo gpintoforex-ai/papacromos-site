@@ -135,3 +135,6 @@ verify_jwt = false
 
 [functions.send-email-notifications]
 verify_jwt = false
+
+[functions.generate-collector-avatar]
+verify_jwt = false

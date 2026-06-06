@@ -172,29 +172,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
     setProfileOpen(false);
   };
 
-  const drawRoundedRect = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    radius: number,
-  ) => {
-    const safeRadius = Math.min(radius, width / 2, height / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + safeRadius, y);
-    ctx.lineTo(x + width - safeRadius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
-    ctx.lineTo(x + width, y + height - safeRadius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
-    ctx.lineTo(x + safeRadius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
-    ctx.lineTo(x, y + safeRadius);
-    ctx.quadraticCurveTo(x, y, x + safeRadius, y);
-    ctx.closePath();
-  };
-
-  const buildCollectorAvatar = async (file: File): Promise<Blob> => {
+  const prepareCollectorPhoto = async (file: File): Promise<File> => {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const url = URL.createObjectURL(file);
       const img = new Image();
@@ -209,67 +187,22 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
       img.src = url;
     });
 
+    const maxDimension = 2048;
+    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
     const canvas = document.createElement("canvas");
-    canvas.width = 720;
-    canvas.height = 1000;
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Este browser nao consegue gerar o avatar.");
+    if (!ctx) throw new Error("Este browser nao consegue preparar a fotografia.");
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
 
-    const gradient = ctx.createLinearGradient(0, 0, 720, 1000);
-    gradient.addColorStop(0, "#0f766e");
-    gradient.addColorStop(0.58, "#14b8a6");
-    gradient.addColorStop(1, "#f59e0b");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 720, 1000);
-
-    ctx.fillStyle = "rgba(255,255,255,0.18)";
-    for (let i = 0; i < 10; i += 1) {
-      ctx.beginPath();
-      ctx.arc(90 + i * 74, 120 + (i % 3) * 80, 34 + (i % 2) * 16, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    const size = Math.min(image.width, image.height);
-    const sx = (image.width - size) / 2;
-    const sy = (image.height - size) / 2;
-    ctx.save();
-    drawRoundedRect(ctx, 86, 118, 548, 548, 44);
-    ctx.clip();
-    ctx.filter = "saturate(1.45) contrast(1.18) brightness(1.04)";
-    ctx.drawImage(image, sx, sy, size, size, 86, 118, 548, 548);
-    ctx.filter = "none";
-    ctx.fillStyle = "rgba(255,255,255,0.18)";
-    ctx.fillRect(86, 118, 548, 548);
-    ctx.restore();
-
-    ctx.lineWidth = 14;
-    ctx.strokeStyle = "rgba(255,255,255,0.92)";
-    ctx.strokeRect(70, 102, 580, 580);
-
-    ctx.fillStyle = "rgba(255,255,255,0.94)";
-    drawRoundedRect(ctx, 70, 720, 580, 188, 28);
-    ctx.fill();
-
-    ctx.fillStyle = "#134e4a";
-    ctx.font = "800 46px Arial, sans-serif";
-    ctx.textAlign = "center";
-    const name = displayName.slice(0, 22);
-    ctx.fillText(name || "Colecionador", 360, 790);
-
-    ctx.fillStyle = "#0d9488";
-    ctx.font = "700 28px Arial, sans-serif";
-    ctx.fillText(profile?.city || "Papa Cromos", 360, 838);
-
-    ctx.fillStyle = "#b45309";
-    ctx.font = "800 24px Arial, sans-serif";
-    ctx.fillText(profile?.status === "king_cromo" ? "KING CROMO" : "COLECIONADOR", 360, 884);
-
-    return await new Promise<Blob>((resolve, reject) => {
+    const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((blob) => {
         if (blob) resolve(blob);
-        else reject(new Error("Nao foi possivel gerar o avatar."));
-      }, "image/png", 0.92);
+        else reject(new Error("Nao foi possivel preparar a fotografia."));
+      }, "image/jpeg", 0.9);
     });
+    return new File([blob], "portrait.jpg", { type: "image/jpeg" });
   };
 
   const uploadCollectorAvatar = async (file: File | null) => {
@@ -288,22 +221,30 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
     setAvatarError(null);
     setAvatarSuccess(null);
     try {
-      const avatarBlob = await buildCollectorAvatar(file);
-      setAvatarStage("A guardar o cromo...");
-      const filePath = `${user.id}/collector-${Date.now()}.png`;
-      const { error: uploadError } = await supabase.storage
-        .from("collector-avatars")
-        .upload(filePath, avatarBlob, {
-          contentType: "image/png",
-          cacheControl: "3600",
-          upsert: true,
-        });
-      if (uploadError) throw uploadError;
+      const preparedPhoto = await prepareCollectorPhoto(file);
+      setAvatarStage("A transformar a fotografia com IA...");
+      const payload = new FormData();
+      payload.append("image", preparedPhoto);
 
-      const { data } = supabase.storage.from("collector-avatars").getPublicUrl(filePath);
+      const { data, error: functionError } = await supabase.functions.invoke("generate-collector-avatar", {
+        body: payload,
+      });
+      if (functionError) {
+        let message = functionError.message;
+        const response = (functionError as any)?.context;
+        if (response instanceof Response) {
+          const errorPayload = await response.json().catch(() => null);
+          message = errorPayload?.error || message;
+        }
+        throw new Error(message);
+      }
+
+      const imageUrl = String(data?.imageUrl || "");
+      if (!imageUrl) throw new Error("A IA nao devolveu o avatar.");
+
       setAvatarStage("A atualizar o perfil...");
-      await updateProfileAvatar(data.publicUrl);
-      setAvatarSuccess("Cromo de colecionador guardado. Ja pode sair nas saquetas virtuais.");
+      await updateProfileAvatar(imageUrl);
+      setAvatarSuccess("Avatar criado por IA. Ja pode sair nas saquetas virtuais.");
     } catch (err: any) {
       setAvatarError(err.message || "Nao foi possivel guardar o avatar.");
     } finally {
@@ -705,12 +646,12 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
               </div>
               <div className="collector-avatar-copy">
                 <strong>Cromo de colecionador</strong>
-                <p>Tira ou escolhe uma foto. A app cria um avatar/cartao divertido para sair nas saquetas virtuais dos outros colecionadores.</p>
+                <p>Tira ou escolhe uma foto. A IA cria um avatar ilustrado para sair nas saquetas virtuais dos outros colecionadores.</p>
                 {avatarError && <p className="profile-error">{avatarError}</p>}
                 {avatarSuccess && <p className="profile-success">{avatarSuccess}</p>}
                 {avatarStage && <p className="collector-avatar-stage">{avatarStage}</p>}
                 <label className="btn btn-primary btn-sm collector-avatar-upload" htmlFor="collector-avatar-input">
-                  <Camera size={15} /> {avatarSaving ? "A criar..." : "Criar com foto"}
+                  <Camera size={15} /> {avatarSaving ? "A criar..." : "Criar avatar com IA"}
                 </label>
                 <input
                   id="collector-avatar-input"
