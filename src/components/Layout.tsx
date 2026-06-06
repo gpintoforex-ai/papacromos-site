@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
-import { Bell, Camera, ChevronDown, Gift, Handshake, KeyRound, LifeBuoy, LogOut, Mail, MessageCircle, Moon, QrCode, RefreshCw, ScanLine, Shield, Sparkles, Sun, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
+import { Bell, Camera, ChevronDown, Gift, Handshake, KeyRound, LifeBuoy, LogOut, Mail, MessageCircle, Moon, MoreHorizontal, QrCode, RefreshCw, ScanLine, Shield, Sparkles, Sun, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
 type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "daily-pack" | "support" | "admin";
@@ -44,6 +44,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const displayName = profile?.username || user?.email?.split("@")[0] || "Utilizador";
   const displayEmail = profile?.email || user?.email || "-";
   const displayStatus = profile?.status === "king_cromo" ? "King Cromo" : profile?.is_admin ? "Administrador" : "Utilizador";
@@ -58,17 +59,46 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
     localStorage.setItem(themeStorageKey, theme);
   }, [theme]);
 
-  const navItems: { page: Page; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest(".nav-more, .bottom-nav-more")) {
+        setMoreMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMoreMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [moreMenuOpen]);
+
+  const primaryNavItems: { page: Page; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
     { page: "collection", label: "Colecao", icon: <Trophy size={18} /> },
     { page: "scanner", label: "Scanner", icon: <ScanLine size={18} /> },
     { page: "matches", label: "Matches", icon: <RefreshCw size={18} />, badge: matchCount },
     { page: "trades", label: "Trocas", icon: <Users size={18} />, badge: pendingTradeCount, alert: pendingTradeCount > 0 },
+    { page: "daily-pack", label: "Saqueta", icon: <Gift size={18} /> },
+  ];
+  const secondaryNavItems: { page: Page; label: string; icon: React.ReactNode }[] = [
     { page: "share", label: "Partilhar", icon: <QrCode size={18} /> },
     { page: "partners", label: "Parceiros", icon: <Handshake size={18} /> },
-    { page: "daily-pack", label: "Saqueta", icon: <Gift size={18} /> },
     { page: "support", label: "Suporte", icon: <LifeBuoy size={18} /> },
     ...(profile?.is_admin ? [{ page: "admin" as Page, label: "Admin", icon: <Shield size={18} /> }] : []),
   ];
+  const secondaryPageActive = secondaryNavItems.some((item) => item.page === currentPage);
+
+  const navigateFromMenu = (page: Page) => {
+    setMoreMenuOpen(false);
+    onNavigate(page);
+  };
 
   const deleteOwnAccount = async () => {
     if (!window.confirm("Eliminar a tua conta e todos os dados associados?")) return;
@@ -276,17 +306,47 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
             <h1>Papa Cromos</h1>
           </div>
           <nav className="header-nav">
-            {navItems.map((item) => (
+            {primaryNavItems.map((item) => (
               <button
                 key={item.page}
                 className={`nav-btn ${currentPage === item.page ? "active" : ""}`}
                 onClick={() => onNavigate(item.page)}
+                type="button"
               >
                 {item.icon}
                 <span>{item.label}</span>
                 {item.badge ? <span className={`nav-badge ${item.alert ? "alert" : ""}`}>{item.badge}</span> : null}
               </button>
             ))}
+            <div className="nav-more">
+              <button
+                className={`nav-btn nav-more-trigger ${secondaryPageActive ? "active" : ""}`}
+                type="button"
+                onClick={() => setMoreMenuOpen((open) => !open)}
+                aria-expanded={moreMenuOpen}
+                aria-haspopup="menu"
+              >
+                <MoreHorizontal size={18} />
+                <span>Mais</span>
+                <ChevronDown size={14} />
+              </button>
+              {moreMenuOpen && (
+                <div className="nav-more-menu" role="menu">
+                  {secondaryNavItems.map((item) => (
+                    <button
+                      key={item.page}
+                      className={currentPage === item.page ? "active" : ""}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => navigateFromMenu(item.page)}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </nav>
           <div className="header-actions">
             <button
@@ -678,7 +738,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
         </div>
       )}
       <nav className="bottom-nav" aria-label="Menu principal">
-        {navItems.map((item) => (
+        {primaryNavItems.map((item) => (
           <button
             key={item.page}
             className={`bottom-nav-btn ${currentPage === item.page ? "active" : ""}`}
@@ -691,6 +751,33 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
             {item.badge ? <span className={`bottom-nav-badge ${item.alert ? "alert" : ""}`}>{item.badge}</span> : null}
           </button>
         ))}
+        <div className="bottom-nav-more">
+          <button
+            className={`bottom-nav-btn ${secondaryPageActive ? "active" : ""}`}
+            type="button"
+            title="Mais"
+            aria-label="Abrir mais opcoes"
+            aria-expanded={moreMenuOpen}
+            onClick={() => setMoreMenuOpen((open) => !open)}
+          >
+            <MoreHorizontal size={20} />
+          </button>
+          {moreMenuOpen && (
+            <div className="bottom-nav-more-menu">
+              {secondaryNavItems.map((item) => (
+                <button
+                  key={item.page}
+                  className={currentPage === item.page ? "active" : ""}
+                  type="button"
+                  onClick={() => navigateFromMenu(item.page)}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </nav>
     </div>
   );
