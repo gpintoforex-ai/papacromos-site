@@ -14,7 +14,7 @@ BEGIN
       new_trade_offers.to_user_id,
       new_trade_offers.from_user_id,
       count(*) AS proposal_count,
-      min(new_trade_offers.id) AS first_trade_id,
+      (array_agg(new_trade_offers.id ORDER BY new_trade_offers.created_at, new_trade_offers.id))[1] AS first_trade_id,
       COALESCE(NULLIF(sender.username, ''), sender.email, 'Utilizador') AS sender_name
     FROM new_trade_offers
     LEFT JOIN user_profiles sender ON sender.id = new_trade_offers.from_user_id
