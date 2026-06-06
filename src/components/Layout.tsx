@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
-import { Bell, ChevronDown, Gift, Handshake, KeyRound, LifeBuoy, LogOut, Mail, MessageCircle, Moon, QrCode, RefreshCw, ScanLine, Shield, Sun, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
+import { Bell, Camera, ChevronDown, Gift, Handshake, KeyRound, LifeBuoy, LogOut, Mail, MessageCircle, Moon, QrCode, RefreshCw, ScanLine, Shield, Sparkles, Sun, Trash2, Trophy, UserRound, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
 type Page = "collection" | "scanner" | "matches" | "trades" | "share" | "partners" | "daily-pack" | "support" | "admin";
@@ -24,7 +24,7 @@ interface LayoutProps {
 }
 
 export default function Layout({ currentPage, onNavigate, matchCount, pendingTradeCount, unreadMessageCount, onMessagesChange, children }: LayoutProps) {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, updateProfileAvatar, signOut } = useAuth();
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileActionsOpen, setProfileActionsOpen] = useState(false);
@@ -41,6 +41,9 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
   const [recentMessages, setRecentMessages] = useState<any[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [avatarSuccess, setAvatarSuccess] = useState<string | null>(null);
   const displayName = profile?.username || user?.email?.split("@")[0] || "Utilizador";
   const displayEmail = profile?.email || user?.email || "-";
   const displayStatus = profile?.status === "king_cromo" ? "King Cromo" : profile?.is_admin ? "Administrador" : "Utilizador";
@@ -121,6 +124,117 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
     setProfileOpen(false);
   };
 
+  const buildCollectorAvatar = async (file: File): Promise<Blob> => {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(img);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Nao foi possivel ler a imagem."));
+      };
+      img.src = url;
+    });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 720;
+    canvas.height = 1000;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Este browser nao consegue gerar o avatar.");
+
+    const gradient = ctx.createLinearGradient(0, 0, 720, 1000);
+    gradient.addColorStop(0, "#0f766e");
+    gradient.addColorStop(0.58, "#14b8a6");
+    gradient.addColorStop(1, "#f59e0b");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 720, 1000);
+
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    for (let i = 0; i < 10; i += 1) {
+      ctx.beginPath();
+      ctx.arc(90 + i * 74, 120 + (i % 3) * 80, 34 + (i % 2) * 16, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const size = Math.min(image.width, image.height);
+    const sx = (image.width - size) / 2;
+    const sy = (image.height - size) / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(86, 118, 548, 548, 44);
+    ctx.clip();
+    ctx.filter = "saturate(1.45) contrast(1.18) brightness(1.04)";
+    ctx.drawImage(image, sx, sy, size, size, 86, 118, 548, 548);
+    ctx.filter = "none";
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillRect(86, 118, 548, 548);
+    ctx.restore();
+
+    ctx.lineWidth = 14;
+    ctx.strokeStyle = "rgba(255,255,255,0.92)";
+    ctx.strokeRect(70, 102, 580, 580);
+
+    ctx.fillStyle = "rgba(255,255,255,0.94)";
+    ctx.roundRect(70, 720, 580, 188, 28);
+    ctx.fill();
+
+    ctx.fillStyle = "#134e4a";
+    ctx.font = "800 46px Arial, sans-serif";
+    ctx.textAlign = "center";
+    const name = displayName.slice(0, 22);
+    ctx.fillText(name || "Colecionador", 360, 790);
+
+    ctx.fillStyle = "#0d9488";
+    ctx.font = "700 28px Arial, sans-serif";
+    ctx.fillText(profile?.city || "Papa Cromos", 360, 838);
+
+    ctx.fillStyle = "#b45309";
+    ctx.font = "800 24px Arial, sans-serif";
+    ctx.fillText(profile?.status === "king_cromo" ? "KING CROMO" : "COLECIONADOR", 360, 884);
+
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Nao foi possivel gerar o avatar."));
+      }, "image/png", 0.92);
+    });
+  };
+
+  const uploadCollectorAvatar = async (file: File | null) => {
+    if (!file || !user?.id) return;
+    if (!file.type.startsWith("image/")) {
+      setAvatarError("Escolhe uma imagem valida.");
+      return;
+    }
+
+    setAvatarSaving(true);
+    setAvatarError(null);
+    setAvatarSuccess(null);
+    try {
+      const avatarBlob = await buildCollectorAvatar(file);
+      const filePath = `${user.id}/collector-${Date.now()}.png`;
+      const { error: uploadError } = await supabase.storage
+        .from("collector-avatars")
+        .upload(filePath, avatarBlob, {
+          contentType: "image/png",
+          cacheControl: "3600",
+          upsert: true,
+        });
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from("collector-avatars").getPublicUrl(filePath);
+      await updateProfileAvatar(data.publicUrl);
+      setAvatarSuccess("Cromo de colecionador guardado. Ja pode sair nas saquetas virtuais.");
+    } catch (err: any) {
+      setAvatarError(err.message || "Nao foi possivel guardar o avatar.");
+    } finally {
+      setAvatarSaving(false);
+    }
+  };
+
   const changePassword = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const cleanPassword = newPassword.trim();
@@ -197,7 +311,11 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                 <span className="user-menu-name">{displayName}</span>
                 <ChevronDown className="user-menu-chevron" size={14} />
                 <span className="user-menu-avatar">
-                  <UserRound size={15} />
+                  {profile?.avatar_image_url ? (
+                    <img src={profile.avatar_image_url} alt="" />
+                  ) : (
+                    <UserRound size={15} />
+                  )}
                 </span>
               </button>
               {profileOpen && (
@@ -461,6 +579,41 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                 <dd className="profile-account-id">{user?.id || "-"}</dd>
               </div>
             </dl>
+
+            <div className="collector-avatar-panel">
+              <div className="collector-avatar-preview">
+                {profile?.avatar_image_url ? (
+                  <img src={profile.avatar_image_url} alt="Cromo de colecionador" />
+                ) : (
+                  <div>
+                    <UserRound size={42} />
+                    <span>Sem cromo</span>
+                  </div>
+                )}
+              </div>
+              <div className="collector-avatar-copy">
+                <strong>Cromo de colecionador</strong>
+                <p>Tira ou escolhe uma foto. A app cria um avatar/cartao divertido para sair nas saquetas virtuais dos outros colecionadores.</p>
+                {avatarError && <p className="profile-error">{avatarError}</p>}
+                {avatarSuccess && <p className="profile-success">{avatarSuccess}</p>}
+                <label className="btn btn-primary btn-sm collector-avatar-upload" htmlFor="collector-avatar-input">
+                  <Camera size={15} /> {avatarSaving ? "A criar..." : "Criar com foto"}
+                </label>
+                <input
+                  id="collector-avatar-input"
+                  className="sticker-photo-input"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  capture="user"
+                  disabled={avatarSaving}
+                  onChange={(event) => {
+                    uploadCollectorAvatar(event.target.files?.[0] || null);
+                    event.currentTarget.value = "";
+                  }}
+                />
+                <span><Sparkles size={14} /> O avatar fica publico apenas como cromo virtual.</span>
+              </div>
+            </div>
 
             <div className="account-data-note">
               <strong>Dados de utilizacao</strong>

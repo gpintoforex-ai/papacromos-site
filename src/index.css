@@ -627,6 +627,13 @@ textarea {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32);
 }
 
+.user-menu-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
 .user-menu-name {
   min-width: 0;
   max-width: 180px;
@@ -1075,6 +1082,77 @@ textarea {
   background: var(--bg-secondary);
 }
 
+.collector-avatar-panel {
+  display: grid;
+  grid-template-columns: 146px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid rgba(13, 148, 136, 0.18);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.08), rgba(245, 158, 11, 0.08));
+}
+
+.collector-avatar-preview {
+  display: grid;
+  place-items: center;
+  min-height: 190px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  overflow: hidden;
+}
+
+.collector-avatar-preview img {
+  width: 118px;
+  max-height: 172px;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.12);
+}
+
+.collector-avatar-preview > div,
+.collector-avatar-copy {
+  display: flex;
+  flex-direction: column;
+}
+
+.collector-avatar-preview > div {
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.collector-avatar-copy {
+  gap: 8px;
+  min-width: 0;
+}
+
+.collector-avatar-copy strong {
+  color: var(--text-heading);
+}
+
+.collector-avatar-copy p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.collector-avatar-copy > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--primary-700);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.collector-avatar-upload {
+  width: fit-content;
+}
+
 .account-data-note strong {
   color: var(--text-heading);
   font-size: 14px;
@@ -1448,6 +1526,14 @@ textarea {
   .account-data-list div {
     grid-template-columns: 1fr;
     gap: 2px;
+  }
+
+  .collector-avatar-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .collector-avatar-upload {
+    width: 100%;
   }
 
   .share-header,

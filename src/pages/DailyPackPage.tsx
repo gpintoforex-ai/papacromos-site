@@ -6,12 +6,18 @@ import { useAuth } from "../lib/auth";
 type PackReward = {
   pack_id: string;
   reward_date: string;
+  reward_type: "sticker" | "collector";
   sticker_id: string | null;
   sticker_number: number | null;
   sticker_name: string | null;
   sticker_image_url: string | null;
   sticker_rarity: string | null;
   collection_name: string | null;
+  collector_user_id: string | null;
+  collector_username: string | null;
+  collector_avatar_image_url: string | null;
+  collector_city: string | null;
+  collector_status: string | null;
   points: number;
   already_opened: boolean;
   created_at: string;
@@ -20,6 +26,7 @@ type PackReward = {
 type PackHistoryRow = {
   id: string;
   reward_date: string;
+  reward_type: "sticker" | "collector";
   points: number;
   created_at: string;
   stickers: {
@@ -30,6 +37,12 @@ type PackHistoryRow = {
     collections: {
       name: string;
     } | null;
+  } | null;
+  collector: {
+    username: string;
+    avatar_image_url: string | null;
+    city: string | null;
+    status: string | null;
   } | null;
 };
 
@@ -86,7 +99,7 @@ export default function DailyPackPage() {
     try {
       const { data, error: historyError } = await supabase
         .from("user_virtual_packs")
-        .select("id, reward_date, points, created_at, stickers(number, name, image_url, rarity, collections(name))")
+        .select("id, reward_date, reward_type, points, created_at, stickers(number, name, image_url, rarity, collections(name)), collector:user_profiles!user_virtual_packs_collector_user_id_fkey(username, avatar_image_url, city, status)")
         .eq("user_id", user.id)
         .order("reward_date", { ascending: false })
         .limit(12);
@@ -101,12 +114,18 @@ export default function DailyPackPage() {
         setTodayReward({
           pack_id: todayRow.id,
           reward_date: todayRow.reward_date,
+          reward_type: todayRow.reward_type || "sticker",
           sticker_id: null,
           sticker_number: todayRow.stickers?.number || null,
           sticker_name: todayRow.stickers?.name || null,
           sticker_image_url: todayRow.stickers?.image_url || null,
           sticker_rarity: todayRow.stickers?.rarity || null,
           collection_name: todayRow.stickers?.collections?.name || null,
+          collector_user_id: null,
+          collector_username: todayRow.collector?.username || null,
+          collector_avatar_image_url: todayRow.collector?.avatar_image_url || null,
+          collector_city: todayRow.collector?.city || null,
+          collector_status: todayRow.collector?.status || null,
           points: todayRow.points,
           already_opened: true,
           created_at: todayRow.created_at,
@@ -153,7 +172,9 @@ export default function DailyPackPage() {
     }
   };
 
-  const rarity = todayReward?.sticker_rarity || "common";
+  const rarity = todayReward?.reward_type === "collector"
+    ? (todayReward.collector_status === "king_cromo" ? "legendary" : "rare")
+    : todayReward?.sticker_rarity || "common";
 
   if (loading) {
     return <div className="loading">A carregar saqueta...</div>;
@@ -195,18 +216,24 @@ export default function DailyPackPage() {
             <article className={`daily-pack-reward rarity-${rarity}`}>
               <div className="daily-pack-card-image">
                 <img
-                  src={getStickerPreviewImageUrl(todayReward.sticker_image_url)}
-                  alt={todayReward.sticker_name || "Cromo virtual"}
+                  src={todayReward.reward_type === "collector"
+                    ? todayReward.collector_avatar_image_url || "/logo.png"
+                    : getStickerPreviewImageUrl(todayReward.sticker_image_url)}
+                  alt={todayReward.reward_type === "collector"
+                    ? todayReward.collector_username || "Colecionador"
+                    : todayReward.sticker_name || "Cromo virtual"}
                   onError={(event) => {
                     event.currentTarget.src = "/logo.png";
                   }}
                 />
               </div>
               <div className="daily-pack-card-copy">
-                <span><Sparkles size={15} /> {rarityLabels[rarity] || rarity}</span>
-                <h3>{todayReward.sticker_name || "Cromo virtual"}</h3>
+                <span><Sparkles size={15} /> {todayReward.reward_type === "collector" ? "Colecionador" : rarityLabels[rarity] || rarity}</span>
+                <h3>{todayReward.reward_type === "collector" ? todayReward.collector_username || "Colecionador" : todayReward.sticker_name || "Cromo virtual"}</h3>
                 <p>
-                  #{todayReward.sticker_number || "-"} - {todayReward.collection_name || "Colecao"}
+                  {todayReward.reward_type === "collector"
+                    ? `${todayReward.collector_city || "Papa Cromos"} - Album de Colecionadores`
+                    : `#${todayReward.sticker_number || "-"} - ${todayReward.collection_name || "Colecao"}`}
                 </p>
                 <strong><Trophy size={16} /> +{todayReward.points} pontos</strong>
               </div>
@@ -236,15 +263,19 @@ export default function DailyPackPage() {
           {history.map((row) => (
             <article className="daily-pack-history-row" key={row.id}>
               <img
-                src={getStickerPreviewImageUrl(row.stickers?.image_url)}
-                alt={row.stickers?.name || "Cromo virtual"}
+                src={row.reward_type === "collector" ? row.collector?.avatar_image_url || "/logo.png" : getStickerPreviewImageUrl(row.stickers?.image_url)}
+                alt={row.reward_type === "collector" ? row.collector?.username || "Colecionador" : row.stickers?.name || "Cromo virtual"}
                 onError={(event) => {
                   event.currentTarget.src = "/logo.png";
                 }}
               />
               <div>
-                <strong>{row.stickers?.name || "Cromo virtual"}</strong>
-                <span>{formatPackDate(row.reward_date)} - {row.stickers?.collections?.name || "Colecao"}</span>
+                <strong>{row.reward_type === "collector" ? row.collector?.username || "Colecionador" : row.stickers?.name || "Cromo virtual"}</strong>
+                <span>
+                  {formatPackDate(row.reward_date)} - {row.reward_type === "collector"
+                    ? "Album de Colecionadores"
+                    : row.stickers?.collections?.name || "Colecao"}
+                </span>
               </div>
               <em>+{row.points}</em>
             </article>

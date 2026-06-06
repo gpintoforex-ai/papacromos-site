@@ -11,6 +11,7 @@ interface AuthContextType {
   signInWithProvider: (provider: Provider) => Promise<void>;
   signUp: (profile: SignUpProfile) => Promise<SignUpResult>;
   updateProfileDetails: (details: ProfileDetailsUpdate) => Promise<void>;
+  updateProfileAvatar: (imageUrl: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -23,6 +24,7 @@ interface UserProfile {
   region: string | null;
   city: string | null;
   avatar_seed: string;
+  avatar_image_url: string | null;
   status: "member" | "king_cromo";
   is_admin: boolean;
   is_blocked: boolean;
@@ -62,6 +64,7 @@ const AuthContext = createContext<AuthContextType>({
   signInWithProvider: async () => {},
   signUp: async () => ({ needsEmailConfirmation: false }),
   updateProfileDetails: async () => {},
+  updateProfileAvatar: async () => {},
   signOut: async () => {},
 });
 
@@ -242,6 +245,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile({ ...profile, phone: cleanPhone, region: cleanRegion, city: cleanCity });
   };
 
+  const updateProfileAvatar = async (imageUrl: string) => {
+    if (!user?.id || !profile) throw new Error("Sessao invalida.");
+
+    const cleanImageUrl = imageUrl.trim();
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({
+        avatar_image_url: cleanImageUrl,
+        avatar_card_created_at: new Date().toISOString(),
+      })
+      .eq("id", user.id);
+    if (error) throw error;
+
+    setProfile({ ...profile, avatar_image_url: cleanImageUrl });
+  };
+
   const createOrUpdateProfile = async (currentUser: User): Promise<UserProfile> => {
     const userId = currentUser.id;
     const metadata = currentUser.user_metadata || {};
@@ -250,10 +269,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let supportsNameFields = true;
     let supportsRegionField = true;
     let supportsStatusField = true;
+    let supportsAvatarImageField = true;
     let existing: any = null;
     const { data: selectedProfile, error: profileSelectError } = await supabase
       .from("user_profiles")
-      .select("id, first_name, last_name, username, email, phone, region, city, avatar_seed, status, is_admin, is_blocked, created_at")
+      .select("id, first_name, last_name, username, email, phone, region, city, avatar_seed, avatar_image_url, status, is_admin, is_blocked, created_at")
       .eq("id", userId)
       .maybeSingle();
     existing = selectedProfile;
@@ -261,12 +281,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (profileSelectError) {
       const message = String(profileSelectError.message || "").toLowerCase();
       const unknownColumnMissing = profileSelectError.code === "42703" || profileSelectError.code === "PGRST204";
-      const optionalFieldMissing = unknownColumnMissing || message.includes("first_name") || message.includes("last_name") || message.includes("region") || message.includes("status");
+      const optionalFieldMissing = unknownColumnMissing || message.includes("first_name") || message.includes("last_name") || message.includes("region") || message.includes("status") || message.includes("avatar_image_url");
       if (!optionalFieldMissing) throw profileSelectError;
 
       supportsNameFields = !unknownColumnMissing && !message.includes("first_name") && !message.includes("last_name");
       supportsRegionField = !unknownColumnMissing && !message.includes("region");
       supportsStatusField = !unknownColumnMissing && !message.includes("status");
+      supportsAvatarImageField = !unknownColumnMissing && !message.includes("avatar_image_url");
       const fallbackFields = [
         "id",
         ...(supportsNameFields ? ["first_name", "last_name"] : []),
@@ -276,6 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...(supportsRegionField ? ["region"] : []),
         "city",
         "avatar_seed",
+        ...(supportsAvatarImageField ? ["avatar_image_url"] : []),
         ...(supportsStatusField ? ["status"] : []),
         "is_admin",
         "is_blocked",
@@ -319,6 +341,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         is_blocked: false,
       };
 
+      if (supportsAvatarImageField) {
+        insertProfile.avatar_image_url = null;
+      }
+
       if (supportsRegionField) {
         insertProfile.region = region;
       }
@@ -346,6 +372,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         region,
         city,
         avatar_seed: avatarSeed,
+        avatar_image_url: null,
         status: "member",
         is_admin: isAdmin,
         is_blocked: false,
@@ -385,6 +412,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       region,
       city,
       avatar_seed: existing.avatar_seed || avatarSeed,
+      avatar_image_url: supportsAvatarImageField ? existing.avatar_image_url || null : null,
       status,
       is_admin: isAdmin,
       is_blocked: isBlocked,
@@ -393,7 +421,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signInWithProvider, signUp, updateProfileDetails, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signInWithProvider, signUp, updateProfileDetails, updateProfileAvatar, signOut }}>
       {children}
     </AuthContext.Provider>
   );
