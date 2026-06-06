@@ -87,13 +87,30 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
     { page: "trades", label: "Trocas", icon: <Users size={18} />, badge: pendingTradeCount, alert: pendingTradeCount > 0 },
     { page: "daily-pack", label: "Saqueta", icon: <Gift size={18} /> },
   ];
-  const secondaryNavItems: { page: Page; label: string; icon: React.ReactNode }[] = [
-    { page: "share", label: "Partilhar", icon: <QrCode size={18} /> },
-    { page: "partners", label: "Parceiros", icon: <Handshake size={18} /> },
-    { page: "support", label: "Suporte", icon: <LifeBuoy size={18} /> },
-    ...(profile?.is_admin ? [{ page: "admin" as Page, label: "Admin", icon: <Shield size={18} /> }] : []),
+  const secondaryNavGroups: { label: string; items: { page: Page; label: string; icon: React.ReactNode }[] }[] = [
+    {
+      label: "Comunidade",
+      items: [
+        { page: "share", label: "Partilhar", icon: <QrCode size={18} /> },
+        { page: "partners", label: "Parceiros", icon: <Handshake size={18} /> },
+      ],
+    },
+    {
+      label: "Ajuda",
+      items: [
+        { page: "support", label: "Suporte", icon: <LifeBuoy size={18} /> },
+      ],
+    },
+    ...(profile?.is_admin ? [{
+      label: "Gestao",
+      items: [
+        { page: "admin" as Page, label: "Administracao", icon: <Shield size={18} /> },
+      ],
+    }] : []),
   ];
+  const secondaryNavItems = secondaryNavGroups.flatMap((group) => group.items);
   const secondaryPageActive = secondaryNavItems.some((item) => item.page === currentPage);
+  const secondaryActiveItem = secondaryNavItems.find((item) => item.page === currentPage);
 
   const navigateFromMenu = (page: Page) => {
     setMoreMenuOpen(false);
@@ -327,22 +344,27 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
                 aria-haspopup="menu"
               >
                 <MoreHorizontal size={18} />
-                <span>Mais</span>
+                <span>{secondaryActiveItem?.label || "Mais"}</span>
                 <ChevronDown size={14} />
               </button>
               {moreMenuOpen && (
                 <div className="nav-more-menu" role="menu">
-                  {secondaryNavItems.map((item) => (
-                    <button
-                      key={item.page}
-                      className={currentPage === item.page ? "active" : ""}
-                      type="button"
-                      role="menuitem"
-                      onClick={() => navigateFromMenu(item.page)}
-                    >
-                      {item.icon}
-                      <span>{item.label}</span>
-                    </button>
+                  {secondaryNavGroups.map((group) => (
+                    <div className="nav-more-group" key={group.label} role="group" aria-label={group.label}>
+                      <span className="nav-more-group-label">{group.label}</span>
+                      {group.items.map((item) => (
+                        <button
+                          key={item.page}
+                          className={currentPage === item.page ? "active" : ""}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => navigateFromMenu(item.page)}
+                        >
+                          {item.icon}
+                          <span>{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}
@@ -756,7 +778,7 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
             className={`bottom-nav-btn ${secondaryPageActive ? "active" : ""}`}
             type="button"
             title="Mais"
-            aria-label="Abrir mais opcoes"
+            aria-label={secondaryActiveItem ? `${secondaryActiveItem.label}. Abrir mais opcoes` : "Abrir mais opcoes"}
             aria-expanded={moreMenuOpen}
             onClick={() => setMoreMenuOpen((open) => !open)}
           >
@@ -764,16 +786,21 @@ export default function Layout({ currentPage, onNavigate, matchCount, pendingTra
           </button>
           {moreMenuOpen && (
             <div className="bottom-nav-more-menu">
-              {secondaryNavItems.map((item) => (
-                <button
-                  key={item.page}
-                  className={currentPage === item.page ? "active" : ""}
-                  type="button"
-                  onClick={() => navigateFromMenu(item.page)}
-                >
-                  {item.icon}
-                  <span>{item.label}</span>
-                </button>
+              {secondaryNavGroups.map((group) => (
+                <div className="nav-more-group" key={group.label}>
+                  <span className="nav-more-group-label">{group.label}</span>
+                  {group.items.map((item) => (
+                    <button
+                      key={item.page}
+                      className={currentPage === item.page ? "active" : ""}
+                      type="button"
+                      onClick={() => navigateFromMenu(item.page)}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           )}
