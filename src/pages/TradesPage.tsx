@@ -5,6 +5,7 @@ import TradeCard from "../components/TradeCard";
 import { RefreshCw } from "lucide-react";
 import type { DeliveryMethod } from "../lib/trades";
 import { flushPushNotificationsInBackground } from "../lib/pushDelivery";
+import { flushEmailNotificationsInBackground } from "../lib/emailDelivery";
 
 interface TradesPageProps {
   onPendingTradeCountChange?: (count: number) => void;
@@ -321,6 +322,7 @@ export default function TradesPage({ onPendingTradeCountChange, onMessagesChange
       return;
     }
     flushPushNotificationsInBackground();
+    flushEmailNotificationsInBackground();
     await loadTrades();
     onMessagesChange?.();
   };

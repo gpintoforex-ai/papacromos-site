@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { logAuditEvent } from "../lib/audit";
 import { flushPushNotificationsInBackground } from "../lib/pushDelivery";
+import { flushEmailNotificationsInBackground } from "../lib/emailDelivery";
 
 interface SupportTicket {
   id: string;
@@ -203,6 +204,7 @@ export default function SupportPage() {
       });
       if (messageError) throw messageError;
       flushPushNotificationsInBackground();
+      flushEmailNotificationsInBackground();
       await logAuditEvent({
         action: cleanSubject.toLowerCase().includes("reportar") ? "support_user_report_created" : "support_ticket_created",
         entityType: "support_ticket",
@@ -243,6 +245,7 @@ export default function SupportPage() {
       });
       if (messageError) throw messageError;
       flushPushNotificationsInBackground();
+      flushEmailNotificationsInBackground();
 
       const nextStatus: SupportTicket["status"] = isAdmin ? "answered" : "open";
       const { error: ticketError } = await supabase

@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import nodemailer from "npm:nodemailer@6.9.16";
 
 type UserProfile = {
   id: string;
@@ -31,11 +32,26 @@ type RepeatedStickerItem = {
   availableQuantity: number;
 };
 
+type EmailConfig = {
+  resendApiKey: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPass: string;
+  smtpSecure: boolean;
+  emailFrom: string;
+};
+
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const resendApiKey = Deno.env.get("RESEND_API_KEY") || "";
-const emailFrom = Deno.env.get("EMAIL_FROM") || "Papa Cromos <noreply@papacromos.pt>";
+const smtpHost = Deno.env.get("SMTP_HOST") || "";
+const smtpPort = Number(Deno.env.get("SMTP_PORT") || "587");
+const smtpUser = Deno.env.get("SMTP_USER") || "";
+const smtpPass = Deno.env.get("SMTP_PASS") || "";
+const smtpSecure = Deno.env.get("SMTP_SECURE") === "true";
+const emailFrom = Deno.env.get("EMAIL_FROM") || smtpUser || "Papa Cromos <noreply@papacromos.pt>";
 const appPublicUrl = Deno.env.get("APP_PUBLIC_URL") || "https://papacromos.pt";
 
 const corsHeaders = {
@@ -86,6 +102,35 @@ function groupRepeatedByCollection(items: RepeatedStickerItem[]) {
     groups.set(item.collectionName, current);
     return groups;
   }, new Map<string, RepeatedStickerItem[]>());
+}
+
+async function getEmailConfig(supabase: ReturnType<typeof createClient>): Promise<EmailConfig> {
+  const config: EmailConfig = {
+    resendApiKey,
+    smtpHost,
+    smtpPort,
+    smtpUser,
+    smtpPass,
+    smtpSecure,
+    emailFrom,
+  };
+
+  const { data } = await supabase
+    .from("email_settings")
+    .select("smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, email_from")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (data) {
+    config.smtpHost = String(data.smtp_host || config.smtpHost);
+    config.smtpPort = Number(data.smtp_port || config.smtpPort || 587);
+    config.smtpUser = String(data.smtp_user || config.smtpUser);
+    config.smtpPass = String(data.smtp_pass || config.smtpPass);
+    config.smtpSecure = Boolean(data.smtp_secure);
+    config.emailFrom = String(data.email_from || config.emailFrom || config.smtpUser);
+  }
+
+  return config;
 }
 
 function buildEmailHtml(recipient: UserProfile, repeatedItems: RepeatedStickerItem[]) {
@@ -173,15 +218,44 @@ function buildEmailText(recipient: UserProfile, repeatedItems: RepeatedStickerIt
   return lines.join("\n");
 }
 
-async function sendEmail(to: string, subject: string, html: string, text: string) {
+async function sendEmail(config: EmailConfig, to: string, subject: string, html: string, text: string) {
+  if (!config.resendApiKey) {
+    if (!config.smtpHost || !config.smtpUser || !config.smtpPass || !config.emailFrom) {
+      throw new Error("Missing email configuration. Configure RESEND_API_KEY or SMTP_HOST, SMTP_USER and SMTP_PASS.");
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: config.smtpHost,
+      port: config.smtpPort,
+      secure: config.smtpSecure,
+      auth: {
+        user: config.smtpUser,
+        pass: config.smtpPass,
+      },
+    });
+
+    try {
+      await transporter.sendMail({
+        from: config.emailFrom,
+        to,
+        subject,
+        html,
+        text,
+      });
+    } catch (error) {
+      throw new Error(getEmailDeliveryErrorMessage(error));
+    }
+    return;
+  }
+
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${resendApiKey}`,
+      Authorization: `Bearer ${config.resendApiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: emailFrom,
+      from: config.emailFrom,
       to,
       subject,
       html,
@@ -192,6 +266,25 @@ async function sendEmail(to: string, subject: string, html: string, text: string
   if (!response.ok) {
     throw new Error(await response.text());
   }
+}
+
+function getEmailDeliveryErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes("invalidcontenttype") || lowerMessage.includes("corrupt message")) {
+    return "Erro SMTP de TLS/porta. Para a porta 587 deixa SSL/TLS direto desligado. Para a porta 465 liga SSL/TLS direto.";
+  }
+
+  if (lowerMessage.includes("authentication") || lowerMessage.includes("auth") || lowerMessage.includes("535")) {
+    return "Erro de autenticacao SMTP. Confirma o utilizador e a password/app password.";
+  }
+
+  if (lowerMessage.includes("econnrefused") || lowerMessage.includes("etimedout") || lowerMessage.includes("enotfound")) {
+    return "Nao foi possivel ligar ao servidor SMTP. Confirma o servidor, porta e firewall do fornecedor.";
+  }
+
+  return message || "Erro ao enviar email por SMTP.";
 }
 
 Deno.serve(async (request) => {
@@ -208,13 +301,10 @@ Deno.serve(async (request) => {
       return new Response("Missing Supabase environment variables", { status: 500, headers: corsHeaders });
     }
 
-    if (!resendApiKey) {
-      return new Response("Missing RESEND_API_KEY environment variable", { status: 500, headers: corsHeaders });
-    }
-
     await assertAdmin(request);
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const emailConfig = await getEmailConfig(supabase);
     const { data: profiles, error: profilesError } = await supabase
       .from("user_profiles")
       .select("id, username, email, city, is_blocked")
@@ -265,6 +355,7 @@ Deno.serve(async (request) => {
       if (!recipient.email) continue;
       try {
         await sendEmail(
+          emailConfig,
           recipient.email,
           `Papa Cromos: ${repeatedItems.length} repetidos a circular`,
           buildEmailHtml(recipient, repeatedItems),

@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import { BookOpen, Copy, ExternalLink, Phone, QrCode, RefreshCw, Send, Share2, Trash2, UserPlus, X } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { supabase } from "../lib/supabase";
+import { flushEmailNotificationsInBackground } from "../lib/emailDelivery";
 
 interface SharePageProps {
   sharedUserId?: string | null;
@@ -898,6 +899,7 @@ export default function SharePage({ sharedUserId, onOpenSharedUser }: SharePageP
         status: "pending",
       });
       if (tradeError) throw tradeError;
+      flushEmailNotificationsInBackground();
       setMessage("Proposta enviada.");
     } catch (err: any) {
       setError(err.message || "Erro ao enviar proposta.");

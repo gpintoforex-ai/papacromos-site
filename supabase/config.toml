@@ -129,3 +129,9 @@ backend = "postgres"
 
 [functions.send-push-notifications]
 verify_jwt = false
+
+[functions.send-pending-trades-email]
+verify_jwt = false
+
+[functions.send-email-notifications]
+verify_jwt = false

@@ -6,6 +6,7 @@ import { ArrowRightLeft, ChevronDown, MapPin, MessageCircle, Minus, Plus, Refres
 import { countUniqueRequestedStickers, findUserMatches, type Match } from "../lib/matches";
 import type { DeliveryMethod } from "../lib/trades";
 import { flushPushNotificationsInBackground } from "../lib/pushDelivery";
+import { flushEmailNotificationsInBackground } from "../lib/emailDelivery";
 
 interface MatchesPageProps {
   onMatchesChange?: (count: number) => void;
@@ -328,6 +329,7 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
       }
 
       flushPushNotificationsInBackground();
+      flushEmailNotificationsInBackground();
       setSentTradeKeys((prev) => new Set(prev).add(tradeKey));
       const successMessage = `${payloads.length} proposta${payloads.length === 1 ? "" : "s"} enviada${payloads.length === 1 ? "" : "s"} para ${group.otherUsername}.`;
       setSuccess(successMessage);

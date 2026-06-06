@@ -8420,6 +8420,7 @@ button.sticker-wikipedia-link {
 .admin-page:not(.admin-category-users) > .admin-users-panel,
 .admin-page:not(.admin-category-users) > .admin-user-collection-panel,
 .admin-page:not(.admin-category-communication) > .admin-email-panel,
+.admin-page:not(.admin-category-configuration) > .admin-config-panel,
 .admin-page:not(.admin-category-system) > .admin-audit-panel,
 .admin-page:not(.admin-category-system) > .admin-maintenance-panel {
   display: none;
@@ -9729,9 +9730,84 @@ button.sticker-wikipedia-link {
 .admin-push-composer > textarea,
 .admin-push-composer > label,
 .admin-push-composer > button,
+.admin-push-composer > .admin-inline-fields,
 .admin-push-composer > .admin-match-weekdays {
   position: relative;
   z-index: 1;
+}
+
+.admin-inline-fields {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-smtp-panel .admin-push-composer {
+  max-width: 760px;
+}
+
+.admin-smtp-panel .admin-table-input {
+  width: 100%;
+}
+
+.admin-smtp-panel .admin-panel-title-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.admin-smtp-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0 14px;
+}
+
+.admin-smtp-summary div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+}
+
+.admin-smtp-summary span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-smtp-summary strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text-heading);
+  font-size: 13px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-smtp-hint {
+  position: relative;
+  z-index: 1;
+  margin: -4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (max-width: 720px) {
+  .admin-smtp-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-inline-fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 .admin-push-broadcast {

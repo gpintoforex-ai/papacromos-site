@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { logAuditEvent } from "../lib/audit";
 import { flushPushNotificationsInBackground } from "../lib/pushDelivery";
+import { flushEmailNotificationsInBackground } from "../lib/emailDelivery";
 
 interface Collection {
   id: string;
@@ -102,9 +103,28 @@ interface AdminTradeMessage {
   is_read?: boolean;
 }
 
+interface EmailSettings {
+  smtp_host: string;
+  smtp_port: number;
+  smtp_user: string;
+  smtp_secure: boolean;
+  email_from: string;
+  smtp_pass_configured: boolean;
+  updated_at: string | null;
+}
+
+interface EmailSettingsDraft {
+  smtp_host: string;
+  smtp_port: string;
+  smtp_user: string;
+  smtp_pass: string;
+  smtp_secure: boolean;
+  email_from: string;
+}
+
 type AdminStatsPanel = "users" | "new-users" | "activity" | "logins";
 type AdminInboxFilter = "all" | "inbox" | "archived" | "reviews" | "reports" | "trades";
-type AdminCategory = "overview" | "messages" | "collections" | "users" | "communication" | "system";
+type AdminCategory = "overview" | "messages" | "collections" | "users" | "communication" | "configuration" | "system";
 
 const emptyCollection = {
   name: "",
@@ -208,6 +228,34 @@ function isDateWithinDays(dateValue: string | null | undefined, days: number) {
   return date.getTime() >= Date.now() - days * 24 * 60 * 60 * 1000;
 }
 
+function getEmailSettingsErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (message.includes("email_settings") || message.includes("schema cache")) {
+    return "A tabela de configuracao de email ainda nao existe na Supabase. Aplica as migrations antes de guardar/testar SMTP.";
+  }
+  return message || "Erro na configuracao de email.";
+}
+
+async function getFunctionErrorMessage(error: any, fallback: string) {
+  const context = error?.context;
+  if (context && typeof context.clone === "function") {
+    try {
+      const payload = await context.clone().json();
+      if (payload?.error) return String(payload.error);
+      if (payload?.message) return String(payload.message);
+    } catch {
+      try {
+        const text = await context.clone().text();
+        if (text) return text;
+      } catch {
+        // keep the original fallback below
+      }
+    }
+  }
+
+  return error?.message || fallback;
+}
+
 function csvField(value: unknown) {
   const text = String(value ?? "");
   return `"${text.replace(/"/g, '""')}"`;
@@ -264,6 +312,15 @@ export default function AdminPage() {
   const [matchAlertMessage, setMatchAlertMessage] = useState("Tens matches disponiveis. Abre a app e combina uma troca.");
   const [matchAlertScheduledAt, setMatchAlertScheduledAt] = useState("");
   const [matchAlertWeekdays, setMatchAlertWeekdays] = useState<number[]>([]);
+  const [emailSettings, setEmailSettings] = useState<EmailSettings | null>(null);
+  const [emailDraft, setEmailDraft] = useState<EmailSettingsDraft>({
+    smtp_host: "",
+    smtp_port: "587",
+    smtp_user: "",
+    smtp_pass: "",
+    smtp_secure: false,
+    email_from: "",
+  });
   const [imageSwapCollection, setImageSwapCollection] = useState<Collection | null>(null);
   const [imageSwapStickers, setImageSwapStickers] = useState<Sticker[]>([]);
   const [imageSwapTeamFilter, setImageSwapTeamFilter] = useState("");
@@ -329,7 +386,7 @@ export default function AdminPage() {
       setCollections((collectionsRes.data || []) as Collection[]);
       setUsers((usersRes.data || []) as RegisteredUser[]);
       if (profile?.is_admin) {
-        const [auditLogsRes, retentionRes, supportTicketsRes, tradeOffersRes] = await Promise.all([
+        const [auditLogsRes, retentionRes, supportTicketsRes, tradeOffersRes, emailSettingsRes] = await Promise.all([
           supabase.rpc("admin_list_audit_logs", { p_limit: 1000 }),
           supabase.rpc("admin_get_audit_log_retention_days"),
           supabase
@@ -340,15 +397,33 @@ export default function AdminPage() {
             .from("trade_offers")
             .select("id, from_user_id, to_user_id, status, note, created_at, offered_sticker:stickers!trade_offers_offered_sticker_id_fkey(name, number), requested_sticker:stickers!trade_offers_requested_sticker_id_fkey(name, number)")
             .order("created_at", { ascending: false }),
+          supabase
+            .from("email_settings")
+            .select("smtp_host, smtp_port, smtp_user, smtp_secure, email_from, smtp_pass_configured, updated_at")
+            .eq("id", true)
+            .maybeSingle(),
         ]);
 
         if (auditLogsRes.error) throw auditLogsRes.error;
         if (retentionRes.error) throw retentionRes.error;
         if (supportTicketsRes.error) throw supportTicketsRes.error;
         if (tradeOffersRes.error) throw tradeOffersRes.error;
+        if (emailSettingsRes.error && !emailSettingsRes.error.message?.toLowerCase().includes("email_settings")) throw emailSettingsRes.error;
 
         setAuditLogs((auditLogsRes.data || []) as AuditLog[]);
         setAuditRetentionDays(Number(retentionRes.data) || 180);
+        const loadedEmailSettings = (emailSettingsRes.data || null) as EmailSettings | null;
+        setEmailSettings(loadedEmailSettings);
+        if (loadedEmailSettings) {
+          setEmailDraft({
+            smtp_host: loadedEmailSettings.smtp_host || "",
+            smtp_port: String(loadedEmailSettings.smtp_port || 587),
+            smtp_user: loadedEmailSettings.smtp_user || "",
+            smtp_pass: "",
+            smtp_secure: Boolean(loadedEmailSettings.smtp_secure),
+            email_from: loadedEmailSettings.email_from || "",
+          });
+        }
 
         const loadedSupportTickets = (supportTicketsRes.data || []) as SupportTicket[];
         const loadedTradeOffers = ((tradeOffersRes.data || []) as Array<Omit<AdminTradeOffer, "offered_sticker" | "requested_sticker"> & {
@@ -1177,9 +1252,225 @@ export default function AdminPage() {
           : `Emails enviados para ${sent} utilizadores com ${repeatedStickers} repetidos listados.`
       );
     } catch (err: any) {
-      const message = err?.context?.error || err?.message || "Erro ao enviar emails dos repetidos.";
-      setError(String(message).includes("RESEND_API_KEY")
-        ? "Falta configurar RESEND_API_KEY na Edge Function para enviar emails."
+      const message = await getFunctionErrorMessage(err, "Erro ao enviar emails dos repetidos.");
+      setError(String(message).includes("email configuration") || String(message).includes("RESEND_API_KEY")
+        ? "Falta configurar o envio de email na Edge Function: RESEND_API_KEY ou SMTP_HOST, SMTP_USER e SMTP_PASS."
+        : message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveEmailSettings = async () => {
+    const smtpHostValue = emailDraft.smtp_host.trim();
+    const smtpPortValue = Number(emailDraft.smtp_port);
+    const smtpUserValue = emailDraft.smtp_user.trim();
+    const emailFromValue = emailDraft.email_from.trim();
+
+    if (!smtpHostValue) {
+      setError("Indica o servidor SMTP.");
+      return;
+    }
+
+    if (!Number.isInteger(smtpPortValue) || smtpPortValue <= 0 || smtpPortValue > 65535) {
+      setError("Indica uma porta SMTP valida.");
+      return;
+    }
+
+    if (!smtpUserValue) {
+      setError("Indica o utilizador SMTP.");
+      return;
+    }
+
+    if (!emailSettings?.smtp_pass_configured && !emailDraft.smtp_pass.trim()) {
+      setError("Indica a password SMTP.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const settingsPayload: Record<string, unknown> = {
+        id: true,
+        smtp_host: smtpHostValue,
+        smtp_port: smtpPortValue,
+        smtp_user: smtpUserValue,
+        smtp_secure: emailDraft.smtp_secure,
+        email_from: emailFromValue,
+        smtp_pass_configured: Boolean(emailDraft.smtp_pass.trim() || emailSettings?.smtp_pass_configured),
+        updated_by: user?.id || null,
+        updated_at: new Date().toISOString(),
+      };
+      if (emailDraft.smtp_pass.trim()) {
+        settingsPayload.smtp_pass = emailDraft.smtp_pass;
+      }
+
+      const { error: saveError } = emailSettings
+        ? await supabase.from("email_settings").update(settingsPayload).eq("id", true)
+        : await supabase.from("email_settings").upsert(settingsPayload, { onConflict: "id" });
+      if (saveError) throw saveError;
+
+      await logAuditEvent({
+        action: "admin_email_settings_updated",
+        entityType: "email",
+        metadata: {
+          smtp_host: smtpHostValue,
+          smtp_port: smtpPortValue,
+          smtp_user: smtpUserValue,
+          smtp_secure: emailDraft.smtp_secure,
+          email_from: emailFromValue,
+          smtp_pass_changed: Boolean(emailDraft.smtp_pass.trim()),
+        },
+      });
+
+      const updatedSettings: EmailSettings = {
+        smtp_host: smtpHostValue,
+        smtp_port: smtpPortValue,
+        smtp_user: smtpUserValue,
+        smtp_secure: emailDraft.smtp_secure,
+        email_from: emailFromValue,
+        smtp_pass_configured: true,
+        updated_at: new Date().toISOString(),
+      };
+      setEmailSettings(updatedSettings);
+      setEmailDraft((current) => ({ ...current, smtp_pass: "" }));
+      setSuccess("Configuracao SMTP guardada.");
+    } catch (err: any) {
+      setError(getEmailSettingsErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const testEmailSettings = async () => {
+    const testRecipient = profile?.email || user?.email || "";
+    const smtpHostValue = emailDraft.smtp_host.trim();
+    const smtpPortValue = Number(emailDraft.smtp_port);
+    const smtpUserValue = emailDraft.smtp_user.trim();
+    const emailFromValue = emailDraft.email_from.trim();
+
+    if (!testRecipient) {
+      setError("A tua conta admin nao tem email para receber o teste.");
+      return;
+    }
+
+    if (!smtpHostValue) {
+      setError("Indica o servidor SMTP.");
+      return;
+    }
+
+    if (!Number.isInteger(smtpPortValue) || smtpPortValue <= 0 || smtpPortValue > 65535) {
+      setError("Indica uma porta SMTP valida.");
+      return;
+    }
+
+    if (!smtpUserValue) {
+      setError("Indica o utilizador SMTP.");
+      return;
+    }
+
+    if (!emailSettings?.smtp_pass_configured && !emailDraft.smtp_pass.trim()) {
+      setError("Indica a password SMTP.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const settingsPayload: Record<string, unknown> = {
+        id: true,
+        smtp_host: smtpHostValue,
+        smtp_port: smtpPortValue,
+        smtp_user: smtpUserValue,
+        smtp_secure: emailDraft.smtp_secure,
+        email_from: emailFromValue,
+        smtp_pass_configured: Boolean(emailDraft.smtp_pass.trim() || emailSettings?.smtp_pass_configured),
+        updated_by: user?.id || null,
+        updated_at: new Date().toISOString(),
+      };
+      if (emailDraft.smtp_pass.trim()) {
+        settingsPayload.smtp_pass = emailDraft.smtp_pass;
+      }
+
+      const { error: saveError } = emailSettings
+        ? await supabase.from("email_settings").update(settingsPayload).eq("id", true)
+        : await supabase.from("email_settings").upsert(settingsPayload, { onConflict: "id" });
+      if (saveError) throw saveError;
+
+      const { data, error: invokeError } = await supabase.functions.invoke("send-pending-trades-email", {
+        body: {
+          test: true,
+          to: testRecipient,
+        },
+      });
+      if (invokeError) throw invokeError;
+
+      await logAuditEvent({
+        action: "admin_email_settings_test_sent",
+        entityType: "email",
+        metadata: {
+          to: testRecipient,
+          sent: Boolean(data?.sent),
+          smtp_host: smtpHostValue,
+          smtp_port: smtpPortValue,
+        },
+      });
+
+      setEmailSettings({
+        smtp_host: smtpHostValue,
+        smtp_port: smtpPortValue,
+        smtp_user: smtpUserValue,
+        smtp_secure: emailDraft.smtp_secure,
+        email_from: emailFromValue,
+        smtp_pass_configured: true,
+        updated_at: new Date().toISOString(),
+      });
+      setEmailDraft((current) => ({ ...current, smtp_pass: "" }));
+      setSuccess(`Email de teste enviado para ${testRecipient}.`);
+    } catch (err: any) {
+      const message = await getFunctionErrorMessage(err, "Erro ao testar SMTP.");
+      setError(String(message).includes("email configuration") || String(message).includes("RESEND_API_KEY")
+        ? "Falta configurar o SMTP no menu Configuracao."
+        : getEmailSettingsErrorMessage(message));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendPendingTradesEmail = async () => {
+    if (!window.confirm("Enviar lembretes por email aos utilizadores com propostas de troca pendentes?")) return;
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("send-pending-trades-email", {
+        body: { force: true },
+      });
+      if (invokeError) throw invokeError;
+
+      const sent = Number(data?.sent || 0);
+      const recipients = Number(data?.recipients || 0);
+      const pendingTrades = Number(data?.pending_trades || 0);
+      const failed = Number(data?.failed || 0);
+
+      await logAuditEvent({
+        action: "admin_pending_trades_email_sent",
+        entityType: "email",
+        metadata: { sent, recipients, pending_trades: pendingTrades, failed },
+      });
+
+      setSuccess(
+        failed > 0
+          ? `Lembretes enviados para ${sent} de ${recipients} utilizadores. ${failed} falharam.`
+          : `Lembretes enviados para ${sent} utilizador(es) com ${pendingTrades} proposta(s) pendente(s).`
+      );
+    } catch (err: any) {
+      const message = await getFunctionErrorMessage(err, "Erro ao enviar emails de propostas pendentes.");
+      setError(String(message).includes("email configuration") || String(message).includes("RESEND_API_KEY")
+        ? "Falta configurar o envio de email na Edge Function: RESEND_API_KEY ou SMTP_HOST, SMTP_USER e SMTP_PASS."
         : message);
     } finally {
       setSaving(false);
@@ -1359,6 +1650,7 @@ export default function AdminPage() {
       });
       if (messageError) throw messageError;
       flushPushNotificationsInBackground();
+      flushEmailNotificationsInBackground();
 
       const { error: ticketError } = await supabase
         .from("support_tickets")
@@ -1681,6 +1973,7 @@ export default function AdminPage() {
     { id: "collections" as const, label: "Colecoes", detail: `${collections.length} ativas`, icon: <PackagePlus size={16} /> },
     { id: "users" as const, label: "Utilizadores", detail: `${users.length} contas`, icon: <Users size={16} /> },
     { id: "communication" as const, label: "Comunicacao", detail: "Email e push", icon: <Mail size={16} /> },
+    { id: "configuration" as const, label: "Configuracao", detail: "SMTP e app", icon: <Settings size={16} /> },
     { id: "system" as const, label: "Sistema", detail: "Auditoria", icon: <Settings size={16} /> },
   ];
   const openAdminCategory = (category: AdminCategory) => {
@@ -2484,6 +2777,111 @@ export default function AdminPage() {
         </button>
       </section>
 
+      <section className="admin-panel admin-config-panel admin-smtp-panel">
+        <div className="admin-panel-title">
+          <Mail size={18} />
+          <h3>Configuracao SMTP</h3>
+        </div>
+        <p className="muted-text">
+          Define a conta de email usada pelas Edge Functions para enviar lembretes e comunicacoes automaticas.
+        </p>
+        <div className="admin-smtp-summary">
+          <div>
+            <span>Servidor</span>
+            <strong>{emailSettings?.smtp_host || "Nao configurado"}</strong>
+          </div>
+          <div>
+            <span>Porta</span>
+            <strong>{emailSettings?.smtp_port || "-"}</strong>
+          </div>
+          <div>
+            <span>Utilizador</span>
+            <strong>{emailSettings?.smtp_user || "-"}</strong>
+          </div>
+          <div>
+            <span>Remetente</span>
+            <strong>{emailSettings?.email_from || "-"}</strong>
+          </div>
+          <div>
+            <span>Seguranca</span>
+            <strong>{emailSettings?.smtp_secure ? "SSL/TLS direto" : "STARTTLS/normal"}</strong>
+          </div>
+          <div>
+            <span>Password</span>
+            <strong>{emailSettings?.smtp_pass_configured ? "Configurada" : "Por configurar"}</strong>
+          </div>
+        </div>
+        <div className="admin-push-composer admin-push-broadcast">
+          <input
+            className="admin-table-input"
+            type="text"
+            value={emailDraft.smtp_host}
+            onChange={(event) => setEmailDraft((current) => ({ ...current, smtp_host: event.target.value }))}
+            placeholder="Servidor SMTP, ex: smtp.gmail.com"
+            disabled={saving}
+          />
+          <div className="admin-inline-fields">
+            <input
+              className="admin-table-input"
+              type="number"
+              min="1"
+              max="65535"
+              value={emailDraft.smtp_port}
+              onChange={(event) => setEmailDraft((current) => ({ ...current, smtp_port: event.target.value }))}
+              placeholder="Porta"
+              disabled={saving}
+            />
+            <label className="admin-check">
+              <input
+                type="checkbox"
+                checked={emailDraft.smtp_secure}
+                onChange={(event) => setEmailDraft((current) => ({ ...current, smtp_secure: event.target.checked }))}
+                disabled={saving}
+              />
+              SSL/TLS direto
+            </label>
+          </div>
+          <p className="admin-smtp-hint">
+            Porta 587: deixa SSL/TLS direto desligado. Porta 465: liga SSL/TLS direto.
+          </p>
+          <input
+            className="admin-table-input"
+            type="text"
+            value={emailDraft.smtp_user}
+            onChange={(event) => setEmailDraft((current) => ({ ...current, smtp_user: event.target.value }))}
+            placeholder="Utilizador SMTP"
+            disabled={saving}
+          />
+          <input
+            className="admin-table-input"
+            type="password"
+            value={emailDraft.smtp_pass}
+            onChange={(event) => setEmailDraft((current) => ({ ...current, smtp_pass: event.target.value }))}
+            placeholder={emailSettings?.smtp_pass_configured ? "Nova password SMTP (deixa vazio para manter)" : "Password SMTP"}
+            disabled={saving}
+          />
+          <input
+            className="admin-table-input"
+            type="text"
+            value={emailDraft.email_from}
+            onChange={(event) => setEmailDraft((current) => ({ ...current, email_from: event.target.value }))}
+            placeholder="Remetente, ex: Papa Cromos <email@dominio.pt>"
+            disabled={saving}
+          />
+          <div className="admin-panel-title-actions">
+            <span className="muted-text">
+              {emailSettings?.smtp_pass_configured ? "Password configurada" : "Password por configurar"}
+            </span>
+            <button className="btn btn-primary btn-xs" type="button" onClick={saveEmailSettings} disabled={saving}>
+              <Settings size={12} /> {saving ? "A guardar..." : "Guardar SMTP"}
+            </button>
+            <button className="btn btn-ghost btn-xs" type="button" onClick={testEmailSettings} disabled={saving}>
+              <Send size={12} /> {saving ? "A testar..." : "Testar SMTP"}
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section className="admin-panel admin-email-panel">
         <div className="admin-panel-title">
           <Mail size={18} />
@@ -2494,6 +2892,19 @@ export default function AdminPage() {
         </p>
         <button className="btn btn-primary admin-email-btn" type="button" onClick={sendRepeatedStickersEmail} disabled={saving}>
           <Mail size={16} /> {saving ? "A enviar..." : "Enviar lista de repetidos"}
+        </button>
+      </section>
+
+      <section className="admin-panel admin-email-panel">
+        <div className="admin-panel-title">
+          <Mail size={18} />
+          <h3>Email de propostas pendentes</h3>
+        </div>
+        <p className="muted-text">
+          Envia um resumo aos utilizadores que tenham propostas de troca em aberto, com o contacto de quem fez a proposta e os cromos envolvidos.
+        </p>
+        <button className="btn btn-primary admin-email-btn" type="button" onClick={sendPendingTradesEmail} disabled={saving}>
+          <Mail size={16} /> {saving ? "A enviar..." : "Enviar lembretes de propostas"}
         </button>
       </section>
 
