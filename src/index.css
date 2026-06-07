@@ -6899,6 +6899,24 @@ button.sticker-wikipedia-link {
     linear-gradient(180deg, rgba(248, 250, 252, 0.9), var(--bg-secondary));
 }
 
+.match-proposal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-whatsapp {
+  border-color: #16a34a;
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.btn-whatsapp:hover:not(:disabled) {
+  border-color: #15803d;
+  background: #15803d;
+}
+
 .match-detail-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -12532,6 +12550,16 @@ button.sticker-wikipedia-link {
 
   .match-detail-tabs {
     grid-template-columns: 1fr;
+  }
+
+  .match-proposal-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .match-proposal-actions .btn {
+    justify-content: center;
+    width: 100%;
   }
 
   .match-suggestion-header {

@@ -2,7 +2,7 @@
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
 import { getAvatarColor, getAvatarInitial } from "../lib/avatar";
-import { ArrowRightLeft, ChevronDown, MapPin, MessageCircle, Minus, Plus, RefreshCw } from "lucide-react";
+import { ArrowRightLeft, ChevronDown, MapPin, MessageCircle, Minus, Plus, RefreshCw, Share2 } from "lucide-react";
 import { countUniqueRequestedStickers, findUserMatches, type Match } from "../lib/matches";
 import type { DeliveryMethod } from "../lib/trades";
 import { flushPushNotificationsInBackground } from "../lib/pushDelivery";
@@ -217,6 +217,48 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
     const qty = quantities[quantityKey(group.otherUserId, sticker.id)] || 0;
     return Array.from({ length: qty }, () => sticker);
   });
+
+  const formatSharedSticker = (sticker: MatchSticker) =>
+    `${sticker.name} #${String(sticker.number).padStart(3, "0")}`;
+
+  const formatSharedStickerList = (stickers: MatchSticker[]) => {
+    const quantities = new Map<string, { sticker: MatchSticker; quantity: number }>();
+    stickers.forEach((sticker) => {
+      const current = quantities.get(sticker.id);
+      quantities.set(sticker.id, {
+        sticker,
+        quantity: (current?.quantity || 0) + 1,
+      });
+    });
+
+    return Array.from(quantities.values())
+      .map(({ sticker, quantity }) => `- ${formatSharedSticker(sticker)}${quantity > 1 ? ` (${quantity}x)` : ""}`)
+      .join("\n");
+  };
+
+  const shareMatchOnWhatsApp = (group: MatchUserGroup) => {
+    const selectedOffers = expandSelectedStickers(group, offeredQuantities, group.offeredStickers);
+    const selectedRequests = expandSelectedStickers(group, requestedQuantities, group.requestedStickers);
+    const offers = selectedOffers.length > 0 ? selectedOffers : group.offeredStickers;
+    const requests = selectedRequests.length > 0 ? selectedRequests : group.requestedStickers;
+    const shareUrl = new URL(window.location.href);
+    shareUrl.search = "";
+    shareUrl.hash = "";
+    if (user?.id) shareUrl.searchParams.set("share", user.id);
+
+    const message = [
+      [
+        `Troca de cromos com ${group.otherUsername} no Papa Cromos`,
+        group.otherCity || group.otherRegion ? `Localidade: ${group.otherCity || group.otherRegion}` : "",
+      ].filter(Boolean).join("\n"),
+      `Posso dar:\n${formatSharedStickerList(offers)}`,
+      `Quero receber:\n${formatSharedStickerList(requests)}`,
+      tradeNotes[group.otherUserId]?.trim() ? `Mensagem: ${tradeNotes[group.otherUserId].trim()}` : "",
+      `Ver a minha caderneta: ${shareUrl.toString()}`,
+    ].filter(Boolean).join("\n\n");
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+  };
 
   const countSuggestedUnits = (stickers: MatchSticker[]) => stickers.length;
 
@@ -605,20 +647,29 @@ export default function MatchesPage({ onMatchesChange }: MatchesPageProps) {
                       </div>
                     )}
 
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={() => proposeUserTrade(group)}
-                      disabled={proposing === tradeKey || sentTradeKeys.has(tradeKey)}
-                    >
-                      <ArrowRightLeft size={14} /> {
-                        proposing === tradeKey
-                          ? "A enviar..."
-                          : sentTradeKeys.has(tradeKey)
-                            ? "Proposta enviada"
-                            : "Propor troca"
-                      }
-                    </button>
+                    <div className="match-proposal-actions">
+                      <button
+                        type="button"
+                        className="btn btn-whatsapp btn-sm"
+                        onClick={() => shareMatchOnWhatsApp(group)}
+                      >
+                        <Share2 size={14} /> Partilhar por WhatsApp
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={() => proposeUserTrade(group)}
+                        disabled={proposing === tradeKey || sentTradeKeys.has(tradeKey)}
+                      >
+                        <ArrowRightLeft size={14} /> {
+                          proposing === tradeKey
+                            ? "A enviar..."
+                            : sentTradeKeys.has(tradeKey)
+                              ? "Proposta enviada"
+                              : "Propor troca"
+                        }
+                      </button>
+                    </div>
                     {tradeSuccesses[tradeKey] && <p className="match-inline-success">{tradeSuccesses[tradeKey]}</p>}
                     {tradeErrors[tradeKey] && <p className="match-inline-error">{tradeErrors[tradeKey]}</p>}
                   </div>
